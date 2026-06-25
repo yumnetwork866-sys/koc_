@@ -5,8 +5,16 @@ const {
   getReportById,
   createReport,
   updateReport,
-  deleteReport
+  deleteReport,
+  getKpis,
+  generateWeeklyReport
 } = require('../controllers/reportController');
+
+// GET /api/reports/kpis
+router.get('/kpis', getKpis);
+
+// POST /api/reports/generate
+router.post('/generate', generateWeeklyReport);
 
 // GET /api/reports
 router.get('/', getReports);

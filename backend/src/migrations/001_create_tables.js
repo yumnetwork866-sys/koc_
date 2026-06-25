@@ -9,6 +9,7 @@ const createTables = async () => {
     console.log('Database & tables created successfully!');
   } catch (error) {
     console.error('Error creating tables:', error);
+    throw error;
   }
 };
 
@@ -21,6 +22,7 @@ module.exports = {
       console.log('Tables dropped successfully!');
     } catch (error) {
       console.error('Error dropping tables:', error);
+      throw error;
     }
   }
 };

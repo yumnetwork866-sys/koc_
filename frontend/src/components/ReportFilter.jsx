@@ -1,18 +1,31 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { fetchReports, fetchTeams, fetchUsers } from '../lib/api';
+import { fetchReports, generateWeeklyReport } from '../lib/api';
+
+const getMonday = () => {
+  const date = new Date();
+  const day = date.getDay() || 7;
+  date.setDate(date.getDate() - day + 1);
+  return date.toISOString().slice(0, 10);
+};
+
+const addDays = (dateText, days) => {
+  const date = new Date(dateText);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+};
 
 const ReportFilter = ({ heroTitle, heroSubtitle }) => {
-  const [filter, setFilter] = useState({
-    team: '',
-    startDate: '',
-    endDate: '',
-  });
   const [reports, setReports] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [teams, setTeams] = useState([]);
+  const [weekStart, setWeekStart] = useState(getMonday());
+  const [weekEnd, setWeekEnd] = useState(addDays(getMonday(), 6));
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
-  const [appliedFilter, setAppliedFilter] = useState(filter);
+
+  const loadReports = async (signal) => {
+    const loadedReports = await fetchReports(signal);
+    setReports(loadedReports);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -21,15 +34,7 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
       try {
         setLoading(true);
         setError('');
-        const [loadedReports, loadedUsers, loadedTeams] = await Promise.all([
-          fetchReports(controller.signal),
-          fetchUsers(controller.signal),
-          fetchTeams(controller.signal),
-        ]);
-
-        setReports(loadedReports);
-        setUsers(loadedUsers);
-        setTeams(loadedTeams);
+        await loadReports(controller.signal);
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Failed to load reports');
@@ -46,155 +51,80 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
     return () => controller.abort();
   }, []);
 
-  const teamNames = useMemo(() => {
-    return new Map(teams.map((team) => [team.id, team.name]));
-  }, [teams]);
+  const latestReport = useMemo(() => reports[0] || null, [reports]);
 
-  const teamOptions = useMemo(() => {
-    return teams.length ? teams : [];
-  }, [teams]);
+  const handleGenerate = async (event) => {
+    event.preventDefault();
 
-  const filteredReports = useMemo(() => {
-    return reports.filter((report) => {
-      const reportUser = users.find((user) => user.id === report.user_id);
-      const reportTeamName = reportUser ? teamNames.get(reportUser.team_id) || '' : '';
-      const reportDate = report.report_date ? new Date(report.report_date) : null;
-
-      if (appliedFilter.team && reportTeamName !== appliedFilter.team) {
-        return false;
-      }
-
-      if (appliedFilter.startDate && reportDate && reportDate < new Date(appliedFilter.startDate)) {
-        return false;
-      }
-
-      if (appliedFilter.endDate && reportDate) {
-        const end = new Date(appliedFilter.endDate);
-        end.setHours(23, 59, 59, 999);
-        if (reportDate > end) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [reports, users, teamNames, appliedFilter]);
-
-  const totals = useMemo(() => {
-    return filteredReports.reduce(
-      (acc, report) => {
-        acc.totalVideos += Number(report.total_videos || 0);
-        acc.totalViews += Number(report.total_views || 0);
-        acc.totalRevenue += Number(report.total_revenue || 0);
-        return acc;
-      },
-      {
-        totalVideos: 0,
-        totalViews: 0,
-        totalRevenue: 0,
-      },
-    );
-  }, [filteredReports]);
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFilter((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setAppliedFilter(filter);
+    try {
+      setGenerating(true);
+      setError('');
+      await generateWeeklyReport({
+        week_start: weekStart,
+        week_end: weekEnd,
+      });
+      await loadReports();
+    } catch (err) {
+      setError(err.message || 'Không generate được báo cáo');
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
     <div className="page">
       <section className="page__hero">
-        <span className="page__eyebrow">Reports</span>
+        <span className="page__eyebrow">Báo cáo tuần</span>
         <h1 className="page__title">{heroTitle}</h1>
         <p className="page__subtitle">{heroSubtitle}</p>
+        <div className="page__stats">
+          <article className="stat-card">
+            <p className="stat-card__label">Reports</p>
+            <p className="stat-card__value">{reports.length}</p>
+          </article>
+          <article className="stat-card">
+            <p className="stat-card__label">Latest start</p>
+            <p className="stat-card__value stat-card__value--small">{latestReport?.week_start || '-'}</p>
+          </article>
+          <article className="stat-card">
+            <p className="stat-card__label">Latest end</p>
+            <p className="stat-card__value stat-card__value--small">{latestReport?.week_end || '-'}</p>
+          </article>
+        </div>
       </section>
 
-      {error ? (
-        <section className="section-card empty-state">
-          <div>Không tải được báo cáo.</div>
-          <div className="section-card__meta">{error}</div>
-        </section>
-      ) : null}
+      {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
 
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Filter reports</h2>
-            <p className="section-card__meta">Lọc dữ liệu thực từ `/api/reports` theo team và ngày.</p>
+            <h2 className="section-card__title">Generate weekly report</h2>
+            <p className="section-card__meta">Backend tổng hợp video trong tuần và sinh nội dung báo cáo mẫu.</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="filter-panel">
+        <form className="filter-panel" onSubmit={handleGenerate}>
           <div className="field">
-            <label htmlFor="team">Team</label>
-            <select id="team" name="team" value={filter.team} onChange={handleInputChange}>
-              <option value="">All teams</option>
-              {teamOptions.map((team) => (
-                <option key={team.id} value={team.name}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
+            <label htmlFor="week_start">Week start</label>
+            <input id="week_start" type="date" value={weekStart} onChange={(event) => setWeekStart(event.target.value)} />
           </div>
-
           <div className="field">
-            <label htmlFor="startDate">Start date</label>
-            <input
-              id="startDate"
-              type="date"
-              name="startDate"
-              value={filter.startDate}
-              onChange={handleInputChange}
-            />
+            <label htmlFor="week_end">Week end</label>
+            <input id="week_end" type="date" value={weekEnd} onChange={(event) => setWeekEnd(event.target.value)} />
           </div>
-
-          <div className="field">
-            <label htmlFor="endDate">End date</label>
-            <input
-              id="endDate"
-              type="date"
-              name="endDate"
-              value={filter.endDate}
-              onChange={handleInputChange}
-            />
-          </div>
-
-          <div className="actions" style={{ gridColumn: '1 / -1' }}>
-            <button type="submit" className="button">
-              Apply filters
+          <div className="actions">
+            <button className="button" type="submit" disabled={generating}>
+              {generating ? 'Đang generate' : 'Generate report'}
             </button>
           </div>
         </form>
       </section>
 
-      <section className="page__stats">
-        <article className="stat-card">
-          <p className="stat-card__label">Filtered reports</p>
-          <p className="stat-card__value">{filteredReports.length}</p>
-        </article>
-        <article className="stat-card">
-          <p className="stat-card__label">Total views</p>
-          <p className="stat-card__value">{totals.totalViews.toLocaleString()}</p>
-        </article>
-        <article className="stat-card">
-          <p className="stat-card__label">Total revenue</p>
-          <p className="stat-card__value">{totals.totalRevenue.toFixed(2)}</p>
-        </article>
-      </section>
-
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Detailed report</h2>
-            <p className="section-card__meta">Danh sách báo cáo đã áp dụng bộ lọc hiện tại.</p>
+            <h2 className="section-card__title">Danh sách báo cáo</h2>
+            <p className="section-card__meta">Nội dung lưu trong bảng weekly_reports.</p>
           </div>
         </div>
 
@@ -203,37 +133,20 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
             <div className="loading-dot" />
             <div>Đang tải báo cáo</div>
           </div>
-        ) : filteredReports.length ? (
+        ) : reports.length ? (
           <div className="metric-list">
-            {filteredReports.map((report) => {
-              const reportUser = users.find((user) => user.id === report.user_id);
-              const reportTeamName = reportUser ? teamNames.get(reportUser.team_id) || 'Unassigned' : 'Unknown';
-
-              return (
-                <article className="metric-item" key={report.id}>
-                  <div className="metric-item__head">
-                    <span>
-                      {reportUser ? reportUser.name : `User ${report.user_id}`} - {reportTeamName}
-                    </span>
-                    <span className="chip chip--blue">
-                      {new Date(report.report_date).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="row-subtitle">
-                    Videos: {report.total_videos} | Views: {report.total_views} | Revenue:{' '}
-                    {Number(report.total_revenue || 0).toFixed(2)}
-                  </div>
-                </article>
-              );
-            })}
+            {reports.map((report) => (
+              <article className="metric-item report-block" key={report.id}>
+                <div className="metric-item__head">
+                  <span>{report.week_start} - {report.week_end}</span>
+                  <span className="chip chip--blue">AI weekly report</span>
+                </div>
+                <pre className="report-content">{report.generated_content}</pre>
+              </article>
+            ))}
           </div>
         ) : (
-          <div className="empty-state">
-            <div>Không có báo cáo phù hợp với bộ lọc hiện tại.</div>
-            <div className="section-card__meta">
-              {reports.length ? 'Đã tải dữ liệu, nhưng không có kết quả khớp.' : 'Chưa có dữ liệu báo cáo trong hệ thống.'}
-            </div>
-          </div>
+          <div className="empty-state">Chưa có báo cáo tuần.</div>
         )}
       </section>
     </div>

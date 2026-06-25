@@ -1,7 +1,22 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db/config');
 
-// User model
+const Team = sequelize.define('Team', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+}, {
+  tableName: 'teams',
+  timestamps: false,
+});
+
 const User = sequelize.define('User', {
   id: {
     type: DataTypes.INTEGER,
@@ -16,58 +31,119 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: false,
     unique: true,
-  },
-  role: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    validate: {
+      isEmail: true,
+    },
   },
   team_id: {
     type: DataTypes.INTEGER,
     allowNull: true,
+  },
+  role: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'member',
+    validate: {
+      isIn: [['admin', 'leader', 'member']],
+    },
   },
 }, {
   tableName: 'users',
   timestamps: false,
 });
 
-// Team model
-const Team = sequelize.define('Team', {
+const TikTokChannel = sequelize.define('TikTokChannel', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true,
   },
-  name: {
+  platform: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'tiktok',
+    validate: {
+      isIn: [['tiktok', 'youtube', 'facebook']],
+    },
+  },
+  tiktok_open_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true,
+  },
+  username: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  display_name: {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  avatar_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  profile_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  access_token_encrypted: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  refresh_token_encrypted: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  token_expires_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  sync_source: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'import',
+    validate: {
+      isIn: [['oauth', 'import', 'crawler']],
+    },
+  },
 }, {
-  tableName: 'teams',
+  tableName: 'tiktok_channels',
   timestamps: false,
 });
 
-// Video model
 const Video = sequelize.define('Video', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true,
   },
+  platform: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'tiktok',
+  },
+  platform_video_id: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+  channel_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
   title: {
     type: DataTypes.STRING,
     allowNull: false,
   },
-  creator_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
+  video_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
   },
-  team_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  type: {
-    type: DataTypes.STRING,
-    allowNull: false,
+  thumbnail_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
   },
   published_at: {
     type: DataTypes.DATE,
@@ -77,64 +153,196 @@ const Video = sequelize.define('Video', {
     type: DataTypes.INTEGER,
     defaultValue: 0,
   },
-  revenue: {
-    type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 0.00,
+  likes: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  comments: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  shares: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  duration: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  campaign: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  content_type: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  last_synced_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
   },
 }, {
   tableName: 'videos',
   timestamps: false,
 });
 
-// Report model
-const Report = sequelize.define('Report', {
+const VideoAssignment = sequelize.define('VideoAssignment', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     autoIncrement: true,
   },
+  video_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
   user_id: {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
-  total_videos: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-  },
-  total_views: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-  },
-  total_revenue: {
-    type: DataTypes.DECIMAL(10, 2),
-    defaultValue: 0.00,
-  },
-  report_date: {
-    type: DataTypes.DATE,
+  assignment_role: {
+    type: DataTypes.STRING,
     allowNull: false,
+    validate: {
+      isIn: [['script', 'editor', 'uploader', 'actor', 'ai_creator']],
+    },
   },
 }, {
-  tableName: 'reports',
+  tableName: 'video_assignments',
+  timestamps: false,
+  indexes: [
+    {
+      unique: true,
+      fields: ['video_id', 'user_id', 'assignment_role'],
+    },
+  ],
+});
+
+const Product = sequelize.define('Product', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+  },
+}, {
+  tableName: 'products',
   timestamps: false,
 });
 
-// Define relationships
-User.belongsTo(Team, { foreignKey: 'team_id' });
-Team.hasMany(User, { foreignKey: 'team_id' });
+const VideoProduct = sequelize.define('VideoProduct', {
+  video_id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+  },
+  product_id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+  },
+}, {
+  tableName: 'video_products',
+  timestamps: false,
+});
 
-Video.belongsTo(User, { foreignKey: 'creator_id' });
-User.hasMany(Video, { foreignKey: 'creator_id' });
+const VideoDailyStats = sequelize.define('VideoDailyStats', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  video_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  date: {
+    type: DataTypes.DATEONLY,
+    allowNull: false,
+  },
+  views: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  likes: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  comments: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+  shares: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
+}, {
+  tableName: 'video_daily_stats',
+  timestamps: false,
+});
 
-Video.belongsTo(Team, { foreignKey: 'team_id' });
-Team.hasMany(Video, { foreignKey: 'team_id' });
+const WeeklyReport = sequelize.define('WeeklyReport', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  week_start: {
+    type: DataTypes.DATEONLY,
+    allowNull: false,
+  },
+  week_end: {
+    type: DataTypes.DATEONLY,
+    allowNull: false,
+  },
+  generated_content: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+}, {
+  tableName: 'weekly_reports',
+  timestamps: false,
+});
 
-Report.belongsTo(User, { foreignKey: 'user_id' });
-User.hasMany(Report, { foreignKey: 'user_id' });
+User.belongsTo(Team, { foreignKey: 'team_id', as: 'team' });
+Team.hasMany(User, { foreignKey: 'team_id', as: 'users' });
+
+TikTokChannel.hasMany(Video, { foreignKey: 'channel_id', as: 'videos' });
+Video.belongsTo(TikTokChannel, { foreignKey: 'channel_id', as: 'channel' });
+
+Video.hasMany(VideoAssignment, { foreignKey: 'video_id', as: 'assignments' });
+VideoAssignment.belongsTo(Video, { foreignKey: 'video_id', as: 'video' });
+User.hasMany(VideoAssignment, { foreignKey: 'user_id', as: 'assignments' });
+VideoAssignment.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+Video.belongsToMany(Product, {
+  through: VideoProduct,
+  foreignKey: 'video_id',
+  otherKey: 'product_id',
+  as: 'products',
+});
+Product.belongsToMany(Video, {
+  through: VideoProduct,
+  foreignKey: 'product_id',
+  otherKey: 'video_id',
+  as: 'videos',
+});
+
+Video.hasMany(VideoDailyStats, { foreignKey: 'video_id', as: 'daily_stats' });
+VideoDailyStats.belongsTo(Video, { foreignKey: 'video_id', as: 'video' });
 
 module.exports = {
   User,
   Team,
+  TikTokChannel,
   Video,
-  Report,
+  VideoAssignment,
+  Product,
+  VideoProduct,
+  VideoDailyStats,
+  WeeklyReport,
+  Report: WeeklyReport,
   sequelize,
 };

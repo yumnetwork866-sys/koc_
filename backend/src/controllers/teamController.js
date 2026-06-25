@@ -1,9 +1,12 @@
-const { Team } = require('../models');
+const { Team, User } = require('../models');
 
 // Get all teams
 const getTeams = async (req, res) => {
   try {
-    const teams = await Team.findAll();
+    const teams = await Team.findAll({
+      include: [{ model: User, as: 'users' }],
+      order: [['id', 'ASC']],
+    });
     res.json(teams);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -13,7 +16,9 @@ const getTeams = async (req, res) => {
 // Get team by ID
 const getTeamById = async (req, res) => {
   try {
-    const team = await Team.findByPk(req.params.id);
+    const team = await Team.findByPk(req.params.id, {
+      include: [{ model: User, as: 'users' }],
+    });
     if (!team) {
       return res.status(404).json({ message: 'Team not found' });
     }

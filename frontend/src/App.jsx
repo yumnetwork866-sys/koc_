@@ -5,6 +5,11 @@ import EmployeeTable from './components/EmployeeTable';
 import VideoTable from './components/VideoTable';
 import ReportFilter from './components/ReportFilter';
 import Header from './components/Header';
+import TeamManagement from './components/TeamManagement';
+import ChannelManagement from './components/ChannelManagement';
+import AssignmentManagement from './components/AssignmentManagement';
+import PlatformImport from './components/PlatformImport';
+import Login from './components/Login';
 import './App.css';
 
 function App() {
@@ -14,21 +19,40 @@ function App() {
         <Header />
         <main className="app-shell__content">
           <Routes>
+            <Route path="/login" element={<Login />} />
             <Route
               path="/"
               element={
                 <Dashboard
-                  heroTitle="Operational dashboard for the content team"
-                  heroSubtitle="Track employee capacity, video performance, and team reporting from a single surface designed for fast scanning."
+                  heroTitle="Content performance dashboard"
+                  heroSubtitle="Theo dõi KPI theo team, user, sản phẩm và nền tảng từ dữ liệu OAuth, import hoặc crawler."
                 />
               }
             />
             <Route
-              path="/employees"
+              path="/teams"
+              element={
+                <TeamManagement
+                  heroTitle="Team management"
+                  heroSubtitle="Tạo và kiểm soát các team Content MKT, Content AI, Tin tức để dashboard tính KPI đúng ownership."
+                />
+              }
+            />
+            <Route
+              path="/users"
               element={
                 <EmployeeTable
-                  heroTitle="Employee directory"
-                  heroSubtitle="Review team assignment, role, and contact information in a cleaner, more readable table layout."
+                  heroTitle="User management"
+                  heroSubtitle="Quản lý admin, leader và member trước khi leader gắn video cho từng người."
+                />
+              }
+            />
+            <Route
+              path="/channels"
+              element={
+                <ChannelManagement
+                  heroTitle="Channel management"
+                  heroSubtitle="Thêm kênh bằng OAuth, import file hoặc crawler public theo username."
                 />
               }
             />
@@ -37,7 +61,25 @@ function App() {
               element={
                 <VideoTable
                   heroTitle="Video library"
-                  heroSubtitle="Inspect content performance with clearer hierarchy, stronger spacing, and compact metrics."
+                  heroSubtitle="Kiểm tra toàn bộ video, metric nền tảng, sản phẩm, campaign và content type."
+                />
+              }
+            />
+            <Route
+              path="/assignments"
+              element={
+                <AssignmentManagement
+                  heroTitle="Assign video ownership"
+                  heroSubtitle="Leader gắn video cho script, editor, uploader, actor hoặc AI creator để tính KPI theo user/team."
+                />
+              }
+            />
+            <Route
+              path="/import"
+              element={
+                <PlatformImport
+                  heroTitle="Import data"
+                  heroSubtitle="Nhập dữ liệu đã parse từ Excel/CSV để đồng bộ channel, video và product vào database."
                 />
               }
             />
@@ -45,8 +87,8 @@ function App() {
               path="/reports"
               element={
                 <ReportFilter
-                  heroTitle="Performance reports"
-                  heroSubtitle="Filter by team and date range, then scan the summary cards and detailed report blocks with less visual noise."
+                  heroTitle="AI weekly report"
+                  heroSubtitle="Sinh báo cáo tuần từ video trong khoảng ngày, lưu vào weekly_reports để leader/admin xem lại."
                 />
               }
             />

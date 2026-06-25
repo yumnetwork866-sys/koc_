@@ -8,15 +8,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchReports, fetchTeams, fetchUsers, fetchVideos } from '../lib/api';
+import { fetchKpis } from '../lib/api';
+import { PLATFORMS } from '../lib/platforms';
+
+const formatNumber = (value) => Number(value || 0).toLocaleString();
 
 const Dashboard = ({ heroTitle, heroSubtitle }) => {
-  const [data, setData] = useState({
-    users: [],
-    teams: [],
-    videos: [],
-    reports: [],
-  });
+  const [kpis, setKpis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -27,19 +25,8 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
       try {
         setLoading(true);
         setError('');
-        const [users, teams, videos, reports] = await Promise.all([
-          fetchUsers(controller.signal),
-          fetchTeams(controller.signal),
-          fetchVideos(controller.signal),
-          fetchReports(controller.signal),
-        ]);
-
-        setData({
-          users,
-          teams,
-          videos,
-          reports,
-        });
+        const loadedKpis = await fetchKpis(controller.signal);
+        setKpis(loadedKpis);
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Failed to load dashboard data');
@@ -56,79 +43,48 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
     return () => controller.abort();
   }, []);
 
-  const teamStats = useMemo(() => {
-    const teamById = new Map(data.teams.map((team) => [team.id, team.name]));
-    const stats = data.teams.map((team) => ({
-      id: team.id,
-      name: team.name,
-      memberCount: data.users.filter((user) => user.team_id === team.id).length,
-      videoCount: data.videos.filter((video) => video.team_id === team.id).length,
-    }));
+  const topUsers = useMemo(() => {
+    return [...(kpis?.users || [])]
+      .sort((a, b) => Number(b.totalViews || 0) - Number(a.totalViews || 0))
+      .slice(0, 5);
+  }, [kpis]);
 
-    if (!stats.length && data.videos.length) {
-      const fallbackStats = new Map();
-      data.videos.forEach((video) => {
-        const name = teamById.get(video.team_id) || `Team ${video.team_id}`;
-        const current = fallbackStats.get(name) || { name, memberCount: 0, videoCount: 0 };
-        current.videoCount += 1;
-        fallbackStats.set(name, current);
-      });
-      return Array.from(fallbackStats.values());
-    }
-
-    return stats;
-  }, [data.teams, data.users, data.videos]);
-
-  const reportSummary = useMemo(() => {
-    if (!data.reports.length) {
-      return null;
-    }
-
-    return [...data.reports].sort(
-      (a, b) => new Date(b.report_date).getTime() - new Date(a.report_date).getTime(),
-    )[0];
-  }, [data.reports]);
-
-  const chartData = teamStats.map((team) => ({
+  const chartData = (kpis?.teams || []).map((team) => ({
     name: team.name,
-    videos: team.videoCount,
+    views: team.totalViews,
+    videos: team.totalVideos,
   }));
-
-  const totalRevenue = data.reports.reduce(
-    (sum, report) => sum + Number(report.total_revenue || 0),
-    0,
-  );
-
-  const averageVideosPerTeam = teamStats.length
-    ? Math.round(data.videos.length / teamStats.length)
-    : 0;
 
   return (
     <div className="page">
       <section className="page__hero">
-        <span className="page__eyebrow">Dashboard</span>
+        <span className="page__eyebrow">Dashboard tổng</span>
         <h1 className="page__title">{heroTitle}</h1>
         <p className="page__subtitle">{heroSubtitle}</p>
 
-        <div className="page__stats">
+        <div className="page__stats page__stats--four">
           <article className="stat-card">
-            <p className="stat-card__label">Total employees</p>
-            <p className="stat-card__value">{data.users.length}</p>
+            <p className="stat-card__label">Tổng video</p>
+            <p className="stat-card__value">{formatNumber(kpis?.overview?.totalVideos)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Total videos</p>
-            <p className="stat-card__value">{data.videos.length}</p>
+            <p className="stat-card__label">Tổng view</p>
+            <p className="stat-card__value">{formatNumber(kpis?.overview?.totalViews)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Total reports</p>
-            <p className="stat-card__value">{data.reports.length}</p>
+            <p className="stat-card__label">Tổng like</p>
+            <p className="stat-card__value">{formatNumber(kpis?.overview?.totalLikes)}</p>
+          </article>
+          <article className="stat-card">
+            <p className="stat-card__label">Tổng share</p>
+            <p className="stat-card__value">{formatNumber(kpis?.overview?.totalShares)}</p>
           </article>
         </div>
       </section>
 
       {error ? (
         <section className="section-card empty-state">
-          <div>Không tải được dữ liệu dashboard.</div>
+          <div>Không tải được dashboard.</div>
           <div className="section-card__meta">{error}</div>
         </section>
       ) : null}
@@ -136,127 +92,116 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Team output</h2>
-            <p className="section-card__meta">Biểu đồ lấy trực tiếp từ dữ liệu videos theo team.</p>
+            <h2 className="section-card__title">Platform overview</h2>
+            <p className="section-card__meta">TikTok đang active, YouTube và Facebook chỉ ở trạng thái placeholder.</p>
           </div>
-          <div className="chip-row">
-            <span className="chip chip--blue">Teams: {teamStats.length}</span>
-            <span className="chip chip--positive">Avg videos/team: {averageVideosPerTeam}</span>
-            <span className="chip chip--amber">Revenue: {totalRevenue.toFixed(2)}</span>
+        </div>
+
+        <div className="platform-grid">
+          {PLATFORMS.map((platform) => (
+            <article className={`platform-card platform-card--${platform.status}`} key={platform.key}>
+              <div className="metric-item__head">
+                <span>{platform.label}</span>
+                <span className={`chip ${platform.status === 'active' ? 'chip--positive' : 'chip--amber'}`}>
+                  {platform.status}
+                </span>
+              </div>
+              <div className="row-subtitle">{platform.description}</div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="section-card">
+        <div className="section-card__header">
+          <div>
+            <h2 className="section-card__title">KPI theo team</h2>
+            <p className="section-card__meta">Tổng video, view, like, comment, share và avg view/video.</p>
           </div>
         </div>
 
         {loading ? (
           <div className="empty-state">
             <div className="loading-dot" />
-            <div>Đang tải dữ liệu dashboard</div>
+            <div>Đang tải KPI</div>
           </div>
         ) : chartData.length ? (
           <div style={{ height: '320px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} barSize={38}>
+              <BarChart data={chartData} barSize={36}>
                 <CartesianGrid strokeDasharray="4 4" stroke="rgba(148,163,184,0.25)" />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
                 <Tooltip
-                  cursor={{ fill: 'rgba(37, 99, 235, 0.06)' }}
+                  cursor={{ fill: 'rgba(20, 184, 166, 0.08)' }}
                   contentStyle={{
-                    borderRadius: '14px',
+                    borderRadius: '8px',
                     border: '1px solid rgba(15, 23, 42, 0.08)',
                     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.12)',
                   }}
                 />
-                <Bar dataKey="videos" fill="url(#performanceGradient)" radius={[14, 14, 8, 8]} />
-                <defs>
-                  <linearGradient id="performanceGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2563eb" />
-                    <stop offset="100%" stopColor="#22c55e" />
-                  </linearGradient>
-                </defs>
+                <Bar dataKey="views" fill="#14b8a6" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         ) : (
           <div className="empty-state">
-            <div>Chưa có dữ liệu video để vẽ biểu đồ.</div>
+            <div>Chưa có dữ liệu team.</div>
           </div>
         )}
       </section>
 
-      <section className="section-card">
-        <div className="section-card__header">
-          <div>
-            <h2 className="section-card__title">Recent activity</h2>
-            <p className="section-card__meta">Hiển thị từ videos và reports thực tế.</p>
+      <section className="grid-two">
+        <article className="section-card">
+          <div className="section-card__header">
+            <div>
+              <h2 className="section-card__title">Top user</h2>
+              <p className="section-card__meta">Xếp theo tổng view video đã được gắn.</p>
+            </div>
           </div>
-        </div>
-
-        {data.videos.length || data.reports.length ? (
           <div className="metric-list">
-            {data.videos.slice(0, 3).map((video) => (
-              <div className="metric-item" key={`video-${video.id}`}>
+            {topUsers.map((user) => (
+              <div className="metric-item" key={user.id}>
                 <div className="metric-item__head">
-                  <span>{video.title}</span>
-                  <span className="chip chip--blue">Video #{video.id}</span>
+                  <span>{user.name}</span>
+                  <span>{formatNumber(user.totalViews)} views</span>
+                </div>
+                <div className="row-subtitle">
+                  {user.videoCount} video | Avg {formatNumber(user.avgViewsPerVideo)} | {user.over10kRate}% &gt;10k
                 </div>
               </div>
             ))}
-            {reportSummary ? (
-              <div className="metric-item">
-                <div className="metric-item__head">
-                  <span>Latest report</span>
-                  <span className="chip chip--positive">
-                    {new Date(reportSummary.report_date).toLocaleDateString()}
-                  </span>
-                </div>
-                <div className="row-subtitle">
-                  Videos: {reportSummary.total_videos} | Views: {reportSummary.total_views} | Revenue:{' '}
-                  {Number(reportSummary.total_revenue || 0).toFixed(2)}
-                </div>
-              </div>
-            ) : null}
+            {!topUsers.length && <div className="empty-state empty-state--compact">Chưa có dữ liệu user.</div>}
           </div>
-        ) : (
-          <div className="empty-state">
-            <div>Chưa có hoạt động gần đây.</div>
-          </div>
-        )}
-      </section>
+        </article>
 
-      <section className="section-card">
-        <div className="section-card__header">
-          <div>
-            <h2 className="section-card__title">Team statistics</h2>
-            <p className="section-card__meta">Số lượng members và videos theo team.</p>
+        <article className="section-card">
+          <div className="section-card__header">
+            <div>
+              <h2 className="section-card__title">KPI theo sản phẩm</h2>
+              <p className="section-card__meta">Sẹo, Rạn, Follicas, Lumilab, Mụn.</p>
+            </div>
           </div>
-        </div>
-
-        {teamStats.length ? (
           <div className="metric-list">
-            {teamStats.map((team) => (
-              <div className="metric-item" key={team.id || team.name}>
+            {(kpis?.products || []).map((product) => (
+              <div className="metric-item" key={product.id}>
                 <div className="metric-item__head">
-                  <span>{team.name}</span>
-                  <span>
-                    {team.memberCount} members | {team.videoCount} videos
-                  </span>
+                  <span>{product.name}</span>
+                  <span>{formatNumber(product.totalViews)} views</span>
                 </div>
                 <div className="progress">
                   <div
-                    className="progress__bar"
-                    style={{
-                      width: `${Math.min(100, Math.max(team.videoCount * 20, 12))}%`,
-                    }}
+                    className="progress__bar progress__bar--teal"
+                    style={{ width: `${Math.min(100, Math.max(product.avgViewsPerVideo / 500, 8))}%` }}
                   />
+                </div>
+                <div className="row-subtitle">
+                  {product.totalVideos} video | Avg {formatNumber(product.avgViewsPerVideo)}
                 </div>
               </div>
             ))}
           </div>
-        ) : (
-          <div className="empty-state">
-            <div>Chưa có team nào trong hệ thống.</div>
-          </div>
-        )}
+        </article>
       </section>
     </div>
   );

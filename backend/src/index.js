@@ -12,6 +12,11 @@ const userRoutes = require('./routes/userRoutes');
 const teamRoutes = require('./routes/teamRoutes');
 const videoRoutes = require('./routes/videoRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const channelRoutes = require('./routes/channelRoutes');
+const productRoutes = require('./routes/productRoutes');
+const assignmentRoutes = require('./routes/assignmentRoutes');
+const importRoutes = require('./routes/importRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 // Middleware
 app.use(helmet());
@@ -21,7 +26,7 @@ app.use(express.json());
 
 // Routes
 app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to Employee Performance Reporting API' });
+  res.json({ message: 'Welcome to Content Performance Reporting API' });
 });
 
 // API routes
@@ -29,6 +34,11 @@ app.use('/api/users', userRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/videos', videoRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/channels', channelRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/assignments', assignmentRoutes);
+app.use('/api/import', importRoutes);
+app.use('/api/auth', authRoutes);
 
 // Start server
 app.listen(PORT, () => {

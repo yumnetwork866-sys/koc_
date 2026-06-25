@@ -1,9 +1,12 @@
-const { User } = require('../models');
+const { Team, User } = require('../models');
 
 // Get all users
 const getUsers = async (req, res) => {
   try {
-    const users = await User.findAll();
+    const users = await User.findAll({
+      include: [{ model: Team, as: 'team' }],
+      order: [['id', 'ASC']],
+    });
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -13,7 +16,9 @@ const getUsers = async (req, res) => {
 // Get user by ID
 const getUserById = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findByPk(req.params.id, {
+      include: [{ model: Team, as: 'team' }],
+    });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }

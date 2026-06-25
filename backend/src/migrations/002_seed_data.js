@@ -1,53 +1,216 @@
-// Add seed data to database
-const { User, Team, Video, Report } = require('../models');
+const {
+  Product,
+  Team,
+  TikTokChannel,
+  User,
+  Video,
+  VideoAssignment,
+  WeeklyReport,
+} = require('../models');
+
+const products = ['Sẹo', 'Rạn', 'Follicas', 'Lumilab', 'Mụn'];
 
 const seedDatabase = async () => {
   try {
-    // Create default teams
-    const team1 = await Team.findOrCreate({
-      where: { name: 'Marketing' },
-      defaults: { name: 'Marketing' }
-    });
+    const [contentMkt] = await Team.findOrCreate({ where: { name: 'Content MKT' } });
+    const [contentAi] = await Team.findOrCreate({ where: { name: 'Content AI' } });
+    const [news] = await Team.findOrCreate({ where: { name: 'Tin tức' } });
 
-    const team2 = await Team.findOrCreate({
-      where: { name: 'Content AI' },
-      defaults: { name: 'Content AI' }
-    });
-
-    const team3 = await Team.findOrCreate({
-      where: { name: 'News Team' },
-      defaults: { name: 'News Team' }
-    });
-
-    console.log('Default teams created');
-
-    // Create default users
-    const user1 = await User.findOrCreate({
+    const [admin] = await User.findOrCreate({
       where: { email: 'admin@company.com' },
       defaults: {
         name: 'Admin User',
         email: 'admin@company.com',
         role: 'admin',
-        team_id: null
-      }
+        team_id: null,
+      },
     });
 
-    const user2 = await User.findOrCreate({
-      where: { email: 'john@company.com' },
+    const [leader] = await User.findOrCreate({
+      where: { email: 'leader@company.com' },
       defaults: {
-        name: 'John Doe',
-        email: 'john@company.com',
-        role: 'employee',
-        team_id: team1[0].id
-      }
+        name: 'Mai Leader',
+        email: 'leader@company.com',
+        role: 'leader',
+        team_id: contentMkt.id,
+      },
     });
 
-    console.log('Default users created');
+    const [scriptWriter] = await User.findOrCreate({
+      where: { email: 'script@company.com' },
+      defaults: {
+        name: 'Nam Script',
+        email: 'script@company.com',
+        role: 'member',
+        team_id: contentMkt.id,
+      },
+    });
 
-    // Create sample data - This is for demonstration only
-    console.log('Database seeding completed');
+    const [aiCreator] = await User.findOrCreate({
+      where: { email: 'ai@company.com' },
+      defaults: {
+        name: 'Linh AI',
+        email: 'ai@company.com',
+        role: 'member',
+        team_id: contentAi.id,
+      },
+    });
+
+    const [editor] = await User.findOrCreate({
+      where: { email: 'news@company.com' },
+      defaults: {
+        name: 'Quân Editor',
+        email: 'news@company.com',
+        role: 'member',
+        team_id: news.id,
+      },
+    });
+
+    const productRows = [];
+    for (const name of products) {
+      const [product] = await Product.findOrCreate({ where: { name } });
+      productRows.push(product);
+    }
+
+    const [channel] = await TikTokChannel.findOrCreate({
+      where: { username: 'brandclinic.vn' },
+      defaults: {
+        platform: 'tiktok',
+        tiktok_open_id: 'open_brandclinic_vn',
+        username: 'brandclinic.vn',
+        display_name: 'Brand Clinic',
+        avatar_url: null,
+        profile_url: 'https://www.tiktok.com/@brandclinic.vn',
+        sync_source: 'import',
+      },
+    });
+
+    const samples = [
+      {
+        platform_video_id: 'tt_001',
+        title: 'Cách xử lý sẹo sau mụn trong 30 ngày',
+        views: 48500,
+        likes: 3900,
+        comments: 228,
+        shares: 320,
+        content_type: 'education',
+        campaign: 'Q2 Skin Recovery',
+        products: ['Sẹo', 'Mụn'],
+        assignments: [
+          [scriptWriter.id, 'script'],
+          [editor.id, 'editor'],
+          [leader.id, 'uploader'],
+        ],
+      },
+      {
+        platform_video_id: 'tt_002',
+        title: 'Routine Follicas cho tóc yếu',
+        views: 21400,
+        likes: 1600,
+        comments: 91,
+        shares: 140,
+        content_type: 'review',
+        campaign: 'Follicas Always On',
+        products: ['Follicas'],
+        assignments: [
+          [aiCreator.id, 'ai_creator'],
+          [leader.id, 'uploader'],
+        ],
+      },
+      {
+        platform_video_id: 'tt_003',
+        title: 'Hiểu đúng về rạn da sau sinh',
+        views: 8800,
+        likes: 580,
+        comments: 54,
+        shares: 73,
+        content_type: 'explain',
+        campaign: 'Body Care',
+        products: ['Rạn'],
+        assignments: [
+          [scriptWriter.id, 'script'],
+          [editor.id, 'actor'],
+        ],
+      },
+      {
+        platform_video_id: 'tt_004',
+        title: 'Lumilab và thói quen chống xỉn màu da',
+        views: 12600,
+        likes: 970,
+        comments: 61,
+        shares: 88,
+        content_type: 'tips',
+        campaign: 'Lumilab Glow',
+        products: ['Lumilab'],
+        assignments: [
+          [aiCreator.id, 'ai_creator'],
+          [editor.id, 'editor'],
+        ],
+      },
+    ];
+
+    for (const [index, sample] of samples.entries()) {
+      const publishedAt = new Date();
+      publishedAt.setDate(publishedAt.getDate() - index);
+
+      const [video] = await Video.findOrCreate({
+        where: { platform_video_id: sample.platform_video_id },
+        defaults: {
+          platform: 'tiktok',
+          platform_video_id: sample.platform_video_id,
+          channel_id: channel.id,
+          title: sample.title,
+          video_url: `${channel.profile_url}/video/${sample.platform_video_id}`,
+          thumbnail_url: null,
+          published_at: publishedAt,
+          views: sample.views,
+          likes: sample.likes,
+          comments: sample.comments,
+          shares: sample.shares,
+          duration: 42 + index * 7,
+          content_type: sample.content_type,
+          campaign: sample.campaign,
+          last_synced_at: new Date(),
+        },
+      });
+
+      const linkedProducts = productRows.filter((product) => sample.products.includes(product.name));
+      await video.setProducts(linkedProducts);
+
+      for (const [userId, assignmentRole] of sample.assignments) {
+        await VideoAssignment.findOrCreate({
+          where: {
+            video_id: video.id,
+            user_id: userId,
+            assignment_role: assignmentRole,
+          },
+          defaults: {
+            video_id: video.id,
+            user_id: userId,
+            assignment_role: assignmentRole,
+          },
+        });
+      }
+    }
+
+    await WeeklyReport.findOrCreate({
+      where: {
+        week_start: '2026-06-22',
+        week_end: '2026-06-28',
+      },
+      defaults: {
+        week_start: '2026-06-22',
+        week_end: '2026-06-28',
+        generated_content:
+          'Báo cáo tuần 2026-06-22 - 2026-06-28\n\nTổng quan: nhóm Content MKT đang dẫn về view nhờ các video Sẹo và Mụn. Follicas có hiệu suất ổn định, cần thêm biến thể hook để tăng tỷ lệ video vượt 10k view.',
+      },
+    });
+
+    console.log('TikTok performance seed data created');
+    void admin;
   } catch (error) {
     console.error('Error seeding database:', error);
+    throw error;
   }
 };
 
@@ -55,14 +218,17 @@ module.exports = {
   up: seedDatabase,
   down: async () => {
     try {
-      // Clear all tables
+      await WeeklyReport.destroy({ where: {} });
+      await VideoAssignment.destroy({ where: {} });
+      await Video.destroy({ where: {} });
+      await TikTokChannel.destroy({ where: {} });
+      await Product.destroy({ where: {} });
       await User.destroy({ where: {} });
       await Team.destroy({ where: {} });
-      await Video.destroy({ where: {} });
-      await Report.destroy({ where: {} });
       console.log('Database cleared');
     } catch (error) {
       console.error('Error clearing database:', error);
+      throw error;
     }
-  }
+  },
 };

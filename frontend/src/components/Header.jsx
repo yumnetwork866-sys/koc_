@@ -3,8 +3,12 @@ import { NavLink } from 'react-router-dom';
 
 const navItems = [
   { to: '/', label: 'Dashboard' },
-  { to: '/employees', label: 'Employees' },
+  { to: '/teams', label: 'Teams' },
+  { to: '/users', label: 'Users' },
+  { to: '/channels', label: 'Platforms' },
   { to: '/videos', label: 'Videos' },
+  { to: '/assignments', label: 'Assign' },
+  { to: '/import', label: 'Import' },
   { to: '/reports', label: 'Reports' },
 ];
 
@@ -13,10 +17,9 @@ const Header = () => {
     <header className="topbar">
       <div className="topbar__inner">
         <div className="brand">
-          <div className="brand__mark">EP</div>
+          <div className="brand__mark">TK</div>
           <div>
-            <div className="brand__name">Employee Performance</div>
-            <div className="brand__tagline">Marketing, Content AI, and News Team</div>
+            <div className="brand__name">Content Performance Report</div>
           </div>
         </div>
 
@@ -37,7 +40,7 @@ const Header = () => {
 
         <div className="topbar__status">
           <span className="status-dot" />
-          Live insights
+          Ready
         </div>
       </div>
     </header>
