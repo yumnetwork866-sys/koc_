@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const {
+  startTiktokOauth,
+  handleTiktokOauthCallback,
+  handleTiktokWebhook,
   getChannels,
   getChannelById,
   createChannel,
@@ -8,6 +11,10 @@ const {
   deleteChannel,
 } = require('../controllers/channelController');
 
+router.get('/oauth/tiktok/start', startTiktokOauth);
+router.get('/oauth/tiktok/callback', handleTiktokOauthCallback);
+router.get('/webhook/tiktok', handleTiktokWebhook);
+router.post('/webhook/tiktok', handleTiktokWebhook);
 router.get('/', getChannels);
 router.get('/:id', getChannelById);
 router.post('/', createChannel);

@@ -1,21 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createChannel, fetchChannels } from '../lib/api';
+import { useLocation } from 'react-router-dom';
+import { fetchChannels } from '../lib/api';
 import { PLATFORMS, getPlatformLabel } from '../lib/platforms';
 
-const initialForm = {
-  username: '',
-  display_name: '',
-  profile_url: '',
-  sync_source: 'import',
-  platform: 'tiktok',
-};
-
 const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
+  const location = useLocation();
   const [channels, setChannels] = useState([]);
-  const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [isOauthOpen, setIsOauthOpen] = useState(false);
+  const [toast, setToast] = useState(null);
+  const tiktokOauthUrl = '/api/channels/oauth/tiktok/start';
+  const oauthParams = new URLSearchParams(location.search);
+  const oauthStatus = oauthParams.get('oauth_status');
+  const oauthMessage = oauthParams.get('oauth_message');
 
   const loadChannels = async (signal) => {
     const loadedChannels = await fetchChannels(signal);
@@ -44,7 +42,25 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
     load();
 
     return () => controller.abort();
-  }, []);
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!oauthStatus) {
+      setToast(null);
+      return undefined;
+    }
+
+    setToast({
+      status: oauthStatus,
+      message: oauthMessage || (oauthStatus === 'success' ? 'TikTok channel connected' : 'TikTok OAuth failed'),
+    });
+
+    const timeoutId = window.setTimeout(() => {
+      setToast(null);
+    }, 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [oauthStatus, oauthMessage]);
 
   const sourceCounts = useMemo(() => {
     return channels.reduce((acc, channel) => {
@@ -53,35 +69,18 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
     }, {});
   }, [channels]);
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-    setForm((current) => ({ ...current, [name]: value }));
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    try {
-      setSaving(true);
-      setError('');
-      const username = form.username.replace(/^@/, '').trim();
-      await createChannel({
-        ...form,
-        username,
-        display_name: form.display_name || username,
-        profile_url: form.profile_url || '',
-      });
-      setForm(initialForm);
-      await loadChannels();
-    } catch (err) {
-      setError(err.message || 'Không tạo được kênh');
-    } finally {
-      setSaving(false);
-    }
+  const startOauth = () => {
+    window.location.assign(tiktokOauthUrl);
   };
 
   return (
     <div className="page">
+      {toast ? (
+        <div className={`toast ${toast.status === 'success' ? 'toast--success' : 'toast--error'}`} role="status" aria-live="polite">
+          {toast.message}
+        </div>
+      ) : null}
+
       <section className="page__hero">
         <span className="page__eyebrow">Kênh</span>
         <h1 className="page__title">{heroTitle}</h1>
@@ -118,47 +117,22 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Thêm kênh</h2>
-            <p className="section-card__meta">OAuth lưu token mã hóa; import/crawler theo dõi dữ liệu public hoặc file xuất từ nền tảng.</p>
-          </div>
-        </div>
-
-        <form className="filter-panel" onSubmit={handleSubmit}>
-          <div className="field">
-            <label htmlFor="platform">Platform</label>
-            <select id="platform" name="platform" value={form.platform} onChange={handleChange}>
-              {PLATFORMS.map((platform) => (
-                <option key={platform.key} value={platform.key}>
-                  {platform.label}{platform.status === 'placeholder' ? ' (placeholder)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="username">Username</label>
-            <input id="username" name="username" value={form.username} onChange={handleChange} placeholder="@brand" required />
-          </div>
-          <div className="field">
-            <label htmlFor="display_name">Display name</label>
-            <input id="display_name" name="display_name" value={form.display_name} onChange={handleChange} />
-          </div>
-          <div className="field">
-            <label htmlFor="sync_source">Nguồn sync</label>
-            <select id="sync_source" name="sync_source" value={form.sync_source} onChange={handleChange}>
-              <option value="oauth">oauth</option>
-              <option value="import">import</option>
-              <option value="crawler">crawler</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="profile_url">Profile URL</label>
-            <input id="profile_url" name="profile_url" value={form.profile_url} onChange={handleChange} />
           </div>
           <div className="actions">
-            <button className="button" type="submit" disabled={saving}>
-              {saving ? 'Đang thêm' : 'Thêm kênh'}
+            <button
+              className="button"
+              type="button"
+              onClick={() => setIsOauthOpen(true)}
+            >
+              Thêm kênh
             </button>
           </div>
-        </form>
+        </div>
+        <div className="oauth-cta">
+          <div className="oauth-cta__copy">
+            <p className="oauth-cta__subtitle">Kết nối kênh bằng OAuth để đồng bộ dữ liệu tự động.</p>
+          </div>
+        </div>
       </section>
 
       <section className="section-card">
@@ -203,6 +177,35 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
           </div>
         )}
       </section>
+
+      {isOauthOpen ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setIsOauthOpen(false)}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="oauth-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="section-card__header">
+              <div>
+                <h2 className="section-card__title" id="oauth-title">Kết nối TikTok</h2>
+                <p className="section-card__meta">
+                  Bạn sẽ được chuyển sang TikTok để đăng nhập và cấp quyền cho web.
+                </p>
+              </div>
+            </div>
+            <div className="modal-card__actions">
+              <button className="button" type="button" onClick={startOauth}>
+                Tiếp tục với TikTok
+              </button>
+              <button className="button button--ghost" type="button" onClick={() => setIsOauthOpen(false)}>
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

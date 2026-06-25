@@ -6,6 +6,7 @@ async function apiRequest(path, options = {}) {
     : options.body;
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       ...(options.headers || {}),
@@ -78,6 +79,13 @@ export function createTeam(payload) {
 export function createUser(payload) {
   return apiRequest('/users', {
     method: 'POST',
+    body: payload,
+  });
+}
+
+export function updateUser(userId, payload) {
+  return apiRequest(`/users/${userId}`, {
+    method: 'PUT',
     body: payload,
   });
 }

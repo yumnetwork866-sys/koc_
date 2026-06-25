@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createUser, deleteUser, fetchTeams, fetchUsers } from '../lib/api';
+import { createUser, deleteUser, fetchTeams, fetchUsers, updateUser } from '../lib/api';
 
 const initialForm = {
   name: '',
@@ -15,6 +15,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [updatingRoleId, setUpdatingRoleId] = useState(null);
   const [error, setError] = useState('');
 
   const loadData = async (signal) => {
@@ -104,6 +105,21 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       setError(err.message || 'Không xóa được user');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleRoleChange = async (user, role) => {
+    try {
+      setUpdatingRoleId(user.id);
+      setError('');
+      const updatedUser = await updateUser(user.id, { role });
+      setUsers((current) =>
+        current.map((item) => (item.id === user.id ? { ...item, role: updatedUser.role } : item))
+      );
+    } catch (err) {
+      setError(err.message || 'Không cập nhật được role');
+    } finally {
+      setUpdatingRoleId(null);
     }
   };
 
@@ -197,7 +213,18 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                   <tr key={user.id}>
                     <td><span className="row-title">{user.name}</span></td>
                     <td>{user.email}</td>
-                    <td><span className="chip">{user.role}</span></td>
+                    <td>
+                      <select
+                        className="table-select"
+                        value={user.role}
+                        onChange={(event) => handleRoleChange(user, event.target.value)}
+                        disabled={updatingRoleId === user.id}
+                      >
+                        <option value="member">member</option>
+                        <option value="leader">leader</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </td>
                     <td>{user.teamName}</td>
                     <td>
                       <button
