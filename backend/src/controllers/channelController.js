@@ -1,10 +1,23 @@
 const crypto = require('crypto');
-const { TikTokChannel, Video } = require('../models');
+const { Op } = require('sequelize');
+const {
+  TikTokChannel,
+  Video,
+  VideoAssignment,
+  VideoProduct,
+  VideoDailyStats,
+  sequelize,
+} = require('../models');
 
 const TIKTOK_TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
 const TIKTOK_USER_INFO_URL = 'https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name';
+const TIKTOK_VIDEO_LIST_URL = 'https://open.tiktokapis.com/v2/video/list/';
 const DEFAULT_FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const DEFAULT_OAUTH_RETURN_PATH = process.env.TIKTOK_OAUTH_RETURN_PATH || '/manage/channels';
+const TIKTOK_VIDEO_LIST_FIELDS = process.env.TIKTOK_VIDEO_LIST_FIELDS
+  || 'id,title,create_time,cover_image_url,share_url,video_description,duration';
+const TIKTOK_VIDEO_SYNC_LIMIT = Number(process.env.TIKTOK_VIDEO_SYNC_LIMIT || 20);
+const TIKTOK_VIDEO_SYNC_MAX_PAGES = Number(process.env.TIKTOK_VIDEO_SYNC_MAX_PAGES || 10);
 
 const buildTiktokOauthUrl = () => {
   const clientKey = process.env.TIKTOK_CLIENT_KEY;
@@ -167,6 +180,182 @@ const fetchTiktokUserInfo = async (accessToken) => {
   return payload;
 };
 
+const fetchTiktokVideoList = async (accessToken, cursor) => {
+  const url = new URL(TIKTOK_VIDEO_LIST_URL);
+  url.searchParams.set('fields', TIKTOK_VIDEO_LIST_FIELDS);
+  url.searchParams.set('max_count', String(Number.isFinite(TIKTOK_VIDEO_SYNC_LIMIT) && TIKTOK_VIDEO_SYNC_LIMIT > 0
+    ? TIKTOK_VIDEO_SYNC_LIMIT
+    : 20));
+  if (cursor !== null && cursor !== undefined && String(cursor).trim()) {
+    url.searchParams.set('cursor', String(cursor));
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const payload = await parseResponseJson(response);
+  const payloadErrorCode = payload?.error?.code || payload?.error?.error_code || payload?.error?.status;
+
+  if (!response.ok || (payload?.error && payloadErrorCode !== 'ok')) {
+    const errorMessage = buildTikTokErrorMessage(
+      payload,
+      `TikTok video list fetch failed with status ${response.status} ${response.statusText}`.trim(),
+    );
+    console.error('[TikTok OAuth] Video list error response', {
+      status: response.status,
+      statusText: response.statusText,
+      payload,
+    });
+    throw new Error(errorMessage);
+  }
+
+  return payload;
+};
+
+const normalizeTiktokVideoItems = (payload) => {
+  const data = payload?.data || payload;
+  const items = data?.videos || data?.items || data?.list || payload?.videos || payload?.items || payload?.list || [];
+
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items
+    .map((item) => {
+      const platformVideoId = String(
+        item?.id
+        || item?.video_id
+        || item?.platform_video_id
+        || '',
+      ).trim();
+
+      if (!platformVideoId) {
+        return null;
+      }
+
+      const title = String(item?.title || item?.video_description || `TikTok video ${platformVideoId}`).trim();
+      const videoUrl = item?.share_url || item?.video_url || item?.embed_link || null;
+      const thumbnailUrl = item?.cover_image_url || item?.thumbnail_url || item?.cover_url || null;
+      const publishedAtRaw = item?.create_time || item?.published_at || item?.created_at || null;
+      const publishedAt = publishedAtRaw
+        ? new Date(Number.isFinite(Number(publishedAtRaw)) ? Number(publishedAtRaw) * 1000 : publishedAtRaw)
+        : null;
+
+      return {
+        platform: 'tiktok',
+        platform_video_id: platformVideoId,
+        title,
+        video_url: videoUrl,
+        thumbnail_url: thumbnailUrl,
+        published_at: Number.isNaN(publishedAt?.getTime?.()) ? null : publishedAt,
+        views: Number(item?.view_count || item?.views || 0),
+        likes: Number(item?.like_count || item?.likes || 0),
+        comments: Number(item?.comment_count || item?.comments || 0),
+        shares: Number(item?.share_count || item?.shares || 0),
+        duration: item?.duration != null ? Number(item.duration) : null,
+      };
+    })
+    .filter(Boolean);
+};
+
+const extractTiktokCursor = (payload) => {
+  const data = payload?.data || payload;
+  return data?.cursor ?? data?.next_cursor ?? payload?.cursor ?? payload?.next_cursor ?? null;
+};
+
+const extractTiktokHasMore = (payload) => {
+  const data = payload?.data || payload;
+  const value = data?.has_more ?? payload?.has_more ?? data?.more ?? payload?.more;
+
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (value === 1 || value === '1') {
+    return true;
+  }
+
+  if (value === 0 || value === '0') {
+    return false;
+  }
+
+  return null;
+};
+
+const syncTiktokVideosForChannel = async (channel, accessToken) => {
+  let cursor = null;
+  let pageCount = 0;
+  let created = 0;
+  let updated = 0;
+  let total = 0;
+
+  while (pageCount < (Number.isFinite(TIKTOK_VIDEO_SYNC_MAX_PAGES) && TIKTOK_VIDEO_SYNC_MAX_PAGES > 0
+    ? TIKTOK_VIDEO_SYNC_MAX_PAGES
+    : 10)) {
+    pageCount += 1;
+    const payload = await fetchTiktokVideoList(accessToken, cursor);
+    const items = normalizeTiktokVideoItems(payload);
+
+    if (!items.length) {
+      break;
+    }
+
+    for (const item of items) {
+      const [video, wasCreated] = await Video.findOrCreate({
+        where: { platform_video_id: item.platform_video_id },
+        defaults: {
+          ...item,
+          channel_id: channel.id,
+          last_synced_at: new Date(),
+        },
+      });
+
+      if (!wasCreated) {
+        await video.update({
+          ...item,
+          channel_id: channel.id,
+          last_synced_at: new Date(),
+        });
+      }
+
+      if (wasCreated) {
+        created += 1;
+      } else {
+        updated += 1;
+      }
+    }
+
+    total += items.length;
+
+    const nextCursor = extractTiktokCursor(payload);
+    const hasMore = extractTiktokHasMore(payload);
+
+    if (nextCursor === null || nextCursor === undefined || String(nextCursor).trim() === '') {
+      if (hasMore === true) {
+        console.info('[TikTok OAuth] Video list has_more=true but no cursor was returned, stopping pagination');
+      }
+      break;
+    }
+
+    cursor = nextCursor;
+
+    if (hasMore === false) {
+      break;
+    }
+  }
+
+  return {
+    created,
+    updated,
+    total,
+    pages: pageCount,
+  };
+};
+
 const handleTiktokOauthCallback = async (req, res) => {
   let stage = 'callback_received';
   try {
@@ -259,8 +448,34 @@ const handleTiktokOauthCallback = async (req, res) => {
       syncSource: channel.sync_source,
     });
 
+    let videoSyncSummary = null;
+    try {
+      stage = 'sync_videos';
+      console.info('[TikTok OAuth] Syncing videos for channel', {
+        channelId: channel.id,
+        openId: openId || null,
+      });
+      videoSyncSummary = await syncTiktokVideosForChannel(channel, tokenData.access_token);
+      console.info('[TikTok OAuth] Video sync completed', {
+        channelId: channel.id,
+        ...videoSyncSummary,
+      });
+    } catch (syncError) {
+      console.error('[TikTok OAuth] Video sync failed', {
+        channelId: channel.id,
+        stage,
+        message: syncError?.message || String(syncError),
+      });
+      console.error(syncError);
+    }
+
     return res.redirect(
-      buildFrontendRedirectUrl('success', created ? 'TikTok channel connected' : 'TikTok channel updated'),
+      buildFrontendRedirectUrl(
+        'success',
+        videoSyncSummary
+          ? `TikTok channel connected. Synced ${videoSyncSummary.total} videos`
+          : (created ? 'TikTok channel connected' : 'TikTok channel updated'),
+      ),
     );
   } catch (error) {
     console.error('[TikTok OAuth] Callback failed', {
@@ -345,14 +560,67 @@ const updateChannel = async (req, res) => {
   }
 };
 
-const deleteChannel = async (req, res) => {
+const syncChannelVideos = async (req, res) => {
   try {
-    const deleted = await TikTokChannel.destroy({
-      where: { id: req.params.id },
-    });
-    if (!deleted) {
+    const channel = await TikTokChannel.findByPk(req.params.id);
+
+    if (!channel) {
       return res.status(404).json({ message: 'Channel not found' });
     }
+
+    if (!channel.access_token_encrypted) {
+      return res.status(400).json({ message: 'Channel does not have an OAuth access token to sync videos' });
+    }
+
+    const summary = await syncTiktokVideosForChannel(channel, channel.access_token_encrypted);
+
+    return res.json({
+      message: `Synced ${summary.total} videos`,
+      summary,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+const deleteChannel = async (req, res) => {
+  try {
+    const channelId = req.params.id;
+    const channel = await TikTokChannel.findByPk(channelId);
+
+    if (!channel) {
+      return res.status(404).json({ message: 'Channel not found' });
+    }
+
+    await sequelize.transaction(async (transaction) => {
+      const videos = await Video.findAll({
+        where: { channel_id: channelId },
+        attributes: ['id'],
+        transaction,
+      });
+      const videoIds = videos.map((video) => video.id);
+
+      if (videoIds.length) {
+        await VideoAssignment.destroy({
+          where: { video_id: { [Op.in]: videoIds } },
+          transaction,
+        });
+        await VideoProduct.destroy({
+          where: { video_id: { [Op.in]: videoIds } },
+          transaction,
+        });
+        await VideoDailyStats.destroy({
+          where: { video_id: { [Op.in]: videoIds } },
+          transaction,
+        });
+        await Video.destroy({
+          where: { id: { [Op.in]: videoIds } },
+          transaction,
+        });
+      }
+
+      await channel.destroy({ transaction });
+    });
 
     res.json({ message: 'Channel deleted successfully' });
   } catch (error) {
@@ -368,5 +636,6 @@ module.exports = {
   getChannelById,
   createChannel,
   updateChannel,
+  syncChannelVideos,
   deleteChannel,
 };

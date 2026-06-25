@@ -61,6 +61,18 @@ export function fetchChannels(signal) {
   return apiRequest('/channels', { signal });
 }
 
+export function deleteChannel(channelId) {
+  return apiRequest(`/channels/${channelId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function syncChannelVideos(channelId) {
+  return apiRequest(`/channels/${channelId}/sync-videos`, {
+    method: 'POST',
+  });
+}
+
 export function fetchProducts(signal) {
   return apiRequest('/products', { signal });
 }
