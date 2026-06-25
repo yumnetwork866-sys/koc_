@@ -181,20 +181,27 @@ const fetchTiktokUserInfo = async (accessToken) => {
 };
 
 const fetchTiktokVideoList = async (accessToken, cursor) => {
+  const maxCount = Number.isFinite(TIKTOK_VIDEO_SYNC_LIMIT) && TIKTOK_VIDEO_SYNC_LIMIT > 0
+    ? TIKTOK_VIDEO_SYNC_LIMIT
+    : 20;
   const url = new URL(TIKTOK_VIDEO_LIST_URL);
   url.searchParams.set('fields', TIKTOK_VIDEO_LIST_FIELDS);
-  url.searchParams.set('max_count', String(Number.isFinite(TIKTOK_VIDEO_SYNC_LIMIT) && TIKTOK_VIDEO_SYNC_LIMIT > 0
-    ? TIKTOK_VIDEO_SYNC_LIMIT
-    : 20));
+
+  const body = new URLSearchParams({
+    max_count: String(maxCount),
+  });
+
   if (cursor !== null && cursor !== undefined && String(cursor).trim()) {
-    url.searchParams.set('cursor', String(cursor));
+    body.set('cursor', String(cursor));
   }
 
   const response = await fetch(url.toString(), {
-    method: 'GET',
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
+    body: body.toString(),
   });
 
   const payload = await parseResponseJson(response);
@@ -208,6 +215,11 @@ const fetchTiktokVideoList = async (accessToken, cursor) => {
     console.error('[TikTok OAuth] Video list error response', {
       status: response.status,
       statusText: response.statusText,
+      request: {
+        fields: TIKTOK_VIDEO_LIST_FIELDS,
+        max_count: maxCount,
+        cursor: cursor || null,
+      },
       payload,
     });
     throw new Error(errorMessage);
@@ -563,6 +575,12 @@ const updateChannel = async (req, res) => {
 const syncChannelVideos = async (req, res) => {
   try {
     const channel = await TikTokChannel.findByPk(req.params.id);
+
+    console.info('[TikTok Sync] Sync requested', {
+      channelId: req.params.id,
+      hasChannel: Boolean(channel),
+      hasAccessToken: Boolean(channel?.access_token_encrypted),
+    });
 
     if (!channel) {
       return res.status(404).json({ message: 'Channel not found' });
