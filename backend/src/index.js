@@ -17,6 +17,7 @@ const productRoutes = require('./routes/productRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
 const importRoutes = require('./routes/importRoutes');
 const authRoutes = require('./routes/authRoutes');
+const { sequelize } = require('./models');
 
 // Middleware
 app.use(helmet());
@@ -40,9 +41,18 @@ app.use('/api/assignments', assignmentRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/auth', authRoutes);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+const startServer = async () => {
+  try {
+    await sequelize.sync({ alter: true });
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to initialize database schema:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 module.exports = app;

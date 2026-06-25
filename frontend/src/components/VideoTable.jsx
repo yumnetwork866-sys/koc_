@@ -1,21 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createVideo, fetchChannels, fetchProducts, fetchVideos } from '../lib/api';
-import { PLATFORMS, getPlatformLabel } from '../lib/platforms';
-
-const initialForm = {
-  title: '',
-  platform_video_id: '',
-  channel_id: '',
-  platform: 'tiktok',
-  published_at: '',
-  views: 0,
-  likes: 0,
-  comments: 0,
-  shares: 0,
-  campaign: '',
-  content_type: '',
-  product_ids: [],
-};
+import { fetchChannels, fetchProducts, fetchVideos } from '../lib/api';
+import { getPlatformLabel } from '../lib/platforms';
 
 const formatNumber = (value) => Number(value || 0).toLocaleString();
 
@@ -23,10 +8,10 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
   const [videos, setVideos] = useState([]);
   const [channels, setChannels] = useState([]);
   const [products, setProducts] = useState([]);
-  const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [selectedChannelId, setSelectedChannelId] = useState('all');
+  const [isChannelDropdownOpen, setIsChannelDropdownOpen] = useState(false);
 
   const loadData = async (signal) => {
     const [loadedVideos, loadedChannels, loadedProducts] = await Promise.all([
@@ -64,6 +49,17 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.channel-picker')) {
+        setIsChannelDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   const totals = useMemo(() => {
     return videos.reduce((acc, video) => {
       acc.views += Number(video.views || 0);
@@ -74,40 +70,35 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
     }, { views: 0, likes: 0, comments: 0, shares: 0 });
   }, [videos]);
 
-  const handleChange = (event) => {
-    const { name, value, selectedOptions } = event.target;
-    setForm((current) => ({
-      ...current,
-      [name]: name === 'product_ids'
-        ? Array.from(selectedOptions).map((option) => Number(option.value))
-        : value,
-    }));
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    try {
-      setSaving(true);
-      setError('');
-      await createVideo({
-        ...form,
-        platform: form.platform,
-        channel_id: Number(form.channel_id),
-        views: Number(form.views || 0),
-        likes: Number(form.likes || 0),
-        comments: Number(form.comments || 0),
-        shares: Number(form.shares || 0),
-        published_at: form.published_at || null,
-      });
-      setForm(initialForm);
-      await loadData();
-    } catch (err) {
-      setError(err.message || 'Không tạo được video');
-    } finally {
-      setSaving(false);
+  const filteredVideos = useMemo(() => {
+    if (selectedChannelId === 'all') {
+      return videos;
     }
-  };
+
+    return videos.filter((video) => String(video.channel_id) === selectedChannelId);
+  }, [videos, selectedChannelId]);
+
+  const filteredTotals = useMemo(() => {
+    return filteredVideos.reduce((acc, video) => {
+      acc.views += Number(video.views || 0);
+      acc.likes += Number(video.likes || 0);
+      acc.comments += Number(video.comments || 0);
+      acc.shares += Number(video.shares || 0);
+      return acc;
+    }, { views: 0, likes: 0, comments: 0, shares: 0 });
+  }, [filteredVideos]);
+
+  const selectedChannel = useMemo(() => {
+    if (selectedChannelId === 'all') {
+      return null;
+    }
+
+    return channels.find((channel) => String(channel.id) === selectedChannelId) || null;
+  }, [channels, selectedChannelId]);
+
+  const selectedChannelLabel = selectedChannel
+    ? selectedChannel.display_name || selectedChannel.username || 'Channel'
+    : 'All channels';
 
   return (
     <div className="page">
@@ -118,19 +109,19 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
         <div className="page__stats page__stats--four">
           <article className="stat-card">
             <p className="stat-card__label">Videos</p>
-            <p className="stat-card__value">{videos.length}</p>
+            <p className="stat-card__value">{filteredVideos.length}</p>
           </article>
           <article className="stat-card">
             <p className="stat-card__label">Views</p>
-            <p className="stat-card__value">{formatNumber(totals.views)}</p>
+            <p className="stat-card__value">{formatNumber(filteredTotals.views)}</p>
           </article>
           <article className="stat-card">
             <p className="stat-card__label">Likes</p>
-            <p className="stat-card__value">{formatNumber(totals.likes)}</p>
+            <p className="stat-card__value">{formatNumber(filteredTotals.likes)}</p>
           </article>
           <article className="stat-card">
             <p className="stat-card__label">Shares</p>
-            <p className="stat-card__value">{formatNumber(totals.shares)}</p>
+            <p className="stat-card__value">{formatNumber(filteredTotals.shares)}</p>
           </article>
         </div>
       </section>
@@ -139,93 +130,108 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
 
       <section className="section-card">
         <div className="section-card__header">
-          <div>
-            <h2 className="section-card__title">Thêm video thủ công</h2>
-            <p className="section-card__meta">Dùng khi chưa import file hoặc chưa có OAuth/crawler.</p>
-          </div>
-        </div>
-
-        <form className="filter-panel" onSubmit={handleSubmit}>
-          <div className="field">
-            <label htmlFor="platform">Platform</label>
-            <select id="platform" name="platform" value={form.platform} onChange={handleChange}>
-              {PLATFORMS.map((platform) => (
-                <option key={platform.key} value={platform.key}>
-                  {platform.label}{platform.status === 'placeholder' ? ' (placeholder)' : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="title">Title</label>
-            <input id="title" name="title" value={form.title} onChange={handleChange} required />
-          </div>
-          <div className="field">
-            <label htmlFor="platform_video_id">Platform video ID</label>
-            <input id="platform_video_id" name="platform_video_id" value={form.platform_video_id} onChange={handleChange} required />
-          </div>
-          <div className="field">
-            <label htmlFor="channel_id">Channel</label>
-            <select id="channel_id" name="channel_id" value={form.channel_id} onChange={handleChange} required>
-              <option value="">Chọn channel</option>
-              {channels.map((channel) => (
-                <option key={channel.id} value={channel.id}>@{channel.username}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="published_at">Published at</label>
-            <input id="published_at" name="published_at" type="date" value={form.published_at} onChange={handleChange} />
-          </div>
-          <div className="field">
-            <label htmlFor="views">Views</label>
-            <input id="views" name="views" type="number" min="0" value={form.views} onChange={handleChange} />
-          </div>
-          <div className="field">
-            <label htmlFor="likes">Likes</label>
-            <input id="likes" name="likes" type="number" min="0" value={form.likes} onChange={handleChange} />
-          </div>
-          <div className="field">
-            <label htmlFor="comments">Comments</label>
-            <input id="comments" name="comments" type="number" min="0" value={form.comments} onChange={handleChange} />
-          </div>
-          <div className="field">
-            <label htmlFor="shares">Shares</label>
-            <input id="shares" name="shares" type="number" min="0" value={form.shares} onChange={handleChange} />
-          </div>
-          <div className="field">
-            <label htmlFor="campaign">Campaign</label>
-            <input id="campaign" name="campaign" value={form.campaign} onChange={handleChange} />
-          </div>
-          <div className="field">
-            <label htmlFor="content_type">Content type</label>
-            <input id="content_type" name="content_type" value={form.content_type} onChange={handleChange} />
-          </div>
-          <div className="field">
-            <label htmlFor="product_ids">Products</label>
-            <select id="product_ids" name="product_ids" value={form.product_ids.map(String)} onChange={handleChange} multiple>
-              {products.map((product) => (
-                <option key={product.id} value={product.id}>{product.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="actions">
-            <button className="button" type="submit" disabled={saving || !channels.length}>
-              {saving ? 'Đang lưu' : 'Thêm video'}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="section-card">
-        <div className="section-card__header">
-          <div>
-            <h2 className="section-card__title">Danh sách video</h2>
-            <p className="section-card__meta">Video từ OAuth, import hoặc crawler sẽ hiển thị chung ở đây.</p>
-          </div>
           <div className="chip-row">
             <span className="chip chip--blue">Channels: {channels.length}</span>
             <span className="chip chip--positive">Products: {products.length}</span>
+          </div>
+        </div>
+
+        <div className="filter-panel filter-panel--compact">
+          <div className="field">
+            <label htmlFor="channel-filter">Channel</label>
+            <div className="channel-picker">
+              <button
+                className="channel-picker__trigger"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={isChannelDropdownOpen}
+                onClick={() => setIsChannelDropdownOpen((current) => !current)}
+              >
+                <span className="channel-picker__current">
+                  {selectedChannel?.avatar_url ? (
+                    <img
+                      className="channel-picker__avatar"
+                      src={selectedChannel.avatar_url}
+                      alt={selectedChannelLabel}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="channel-picker__avatar channel-picker__avatar--empty" aria-hidden="true">
+                      CH
+                    </span>
+                  )}
+                  <span className="channel-picker__label">{selectedChannelLabel}</span>
+                </span>
+                <span className={`sidebar__chevron channel-picker__chevron ${isChannelDropdownOpen ? 'sidebar__chevron--open' : ''}`} aria-hidden="true" />
+              </button>
+
+              {isChannelDropdownOpen ? (
+                <div className="channel-picker__menu" role="listbox">
+                  <button
+                    className={`channel-picker__option ${selectedChannelId === 'all' ? 'channel-picker__option--active' : ''}`}
+                    type="button"
+                    role="option"
+                    aria-selected={selectedChannelId === 'all'}
+                    onClick={() => {
+                      setSelectedChannelId('all');
+                      setIsChannelDropdownOpen(false);
+                    }}
+                  >
+                    <span className="channel-picker__option-avatar channel-picker__option-avatar--empty" aria-hidden="true">All</span>
+                    <span className="channel-picker__option-meta">
+                      <span className="channel-picker__option-title">All channels</span>
+                    </span>
+                  </button>
+
+                  {channels.map((channel) => {
+                    const isActive = String(channel.id) === selectedChannelId;
+                    return (
+                      <button
+                        key={channel.id}
+                        className={`channel-picker__option ${isActive ? 'channel-picker__option--active' : ''}`}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onClick={() => {
+                          setSelectedChannelId(String(channel.id));
+                          setIsChannelDropdownOpen(false);
+                        }}
+                      >
+                        {channel.avatar_url ? (
+                          <img
+                            className="channel-picker__option-avatar"
+                            src={channel.avatar_url}
+                            alt={channel.display_name || channel.username || 'Channel avatar'}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="channel-picker__option-avatar channel-picker__option-avatar--empty" aria-hidden="true">
+                            CH
+                          </span>
+                        )}
+                        <span className="channel-picker__option-meta">
+                          <span className="channel-picker__option-title">{channel.display_name || channel.username || channel.id}</span>
+                          {channel.username ? (
+                            <span className="channel-picker__option-subtitle">@{channel.username}</span>
+                          ) : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="actions">
+            {selectedChannel ? (
+              <button
+                className="button button--ghost"
+                type="button"
+                onClick={() => setSelectedChannelId('all')}
+              >
+                Clear filter
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -234,7 +240,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
             <div className="loading-dot" />
             <div>Đang tải video</div>
           </div>
-        ) : videos.length ? (
+        ) : filteredVideos.length ? (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
@@ -250,14 +256,68 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                 </tr>
               </thead>
               <tbody>
-                {videos.map((video) => (
+                {filteredVideos.map((video) => (
                   <tr key={video.id}>
                     <td>
-                      <span className="row-title">{video.title}</span>
-                      <span className="row-subtitle">{video.content_type || 'content'} | {video.platform_video_id}</span>
+                      <div className="video-cell">
+                        {video.thumbnail_url ? (
+                          video.video_url ? (
+                            <a
+                              className="video-cell__thumb-link"
+                              href={video.video_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label={`Open ${video.title}`}
+                            >
+                              <img
+                                className="video-cell__thumb"
+                                src={video.thumbnail_url}
+                                alt={video.title}
+                                loading="lazy"
+                              />
+                            </a>
+                          ) : (
+                            <img
+                              className="video-cell__thumb"
+                              src={video.thumbnail_url}
+                              alt={video.title}
+                              loading="lazy"
+                            />
+                          )
+                        ) : (
+                          <div className="video-cell__thumb video-cell__thumb--empty" aria-hidden="true">
+                            No thumb
+                          </div>
+                        )}
+                        <div className="video-cell__meta">
+                          <span className="row-title">{video.title}</span>
+                          <span className="row-subtitle">{video.content_type || 'content'} | {video.platform_video_id}</span>
+                        </div>
+                      </div>
                     </td>
                     <td><span className="chip">{getPlatformLabel(video.platform || 'tiktok')}</span></td>
-                    <td>@{video.channel?.username || video.channel_id}</td>
+                    <td>
+                      <div className="channel-cell">
+                        {video.channel?.avatar_url ? (
+                          <img
+                            className="channel-cell__avatar"
+                            src={video.channel.avatar_url}
+                            alt={video.channel?.display_name || video.channel?.username || 'Channel avatar'}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="channel-cell__avatar channel-cell__avatar--empty" aria-hidden="true">
+                            CH
+                          </div>
+                        )}
+                        <div className="channel-cell__meta">
+                          <span className="row-title">{video.channel?.display_name || video.channel?.username || video.channel_id}</span>
+                          {video.channel?.username ? (
+                            <span className="row-subtitle">@{video.channel.username}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </td>
                     <td>
                       <div className="chip-row">
                         {(video.products || []).map((product) => (
@@ -275,7 +335,9 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
             </table>
           </div>
         ) : (
-          <div className="empty-state">Chưa có video nào trong hệ thống.</div>
+          <div className="empty-state">
+            <div>Không có video khớp bộ lọc.</div>
+          </div>
         )}
       </section>
     </div>

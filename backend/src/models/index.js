@@ -84,6 +84,34 @@ const TikTokChannel = sequelize.define('TikTokChannel', {
     type: DataTypes.TEXT,
     allowNull: true,
   },
+  avatar_large_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  bio_description: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  is_verified: {
+    type: DataTypes.BOOLEAN,
+    allowNull: true,
+  },
+  follower_count: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  following_count: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  likes_count: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  video_count: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   profile_url: {
     type: DataTypes.TEXT,
     allowNull: true,

@@ -10,12 +10,26 @@ const {
 } = require('../models');
 
 const TIKTOK_TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
-const TIKTOK_USER_INFO_URL = 'https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name';
+const TIKTOK_USER_INFO_FIELDS = [
+  'open_id',
+  'union_id',
+  'display_name',
+  'avatar_url',
+  'avatar_large_url',
+  'username',
+  'bio_description',
+  'is_verified',
+  'follower_count',
+  'following_count',
+  'likes_count',
+  'video_count',
+].join(',');
+const TIKTOK_USER_INFO_URL = `https://open.tiktokapis.com/v2/user/info/?fields=${TIKTOK_USER_INFO_FIELDS}`;
 const TIKTOK_VIDEO_LIST_URL = 'https://open.tiktokapis.com/v2/video/list/';
 const DEFAULT_FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const DEFAULT_OAUTH_RETURN_PATH = process.env.TIKTOK_OAUTH_RETURN_PATH || '/manage/channels';
 const TIKTOK_VIDEO_LIST_FIELDS = process.env.TIKTOK_VIDEO_LIST_FIELDS
-  || 'id,title,create_time,cover_image_url,share_url,video_description,duration';
+  || 'id,title,create_time,cover_image_url,share_url,video_description,duration,view_count,like_count,comment_count,share_count';
 const TIKTOK_VIDEO_SYNC_LIMIT = Number(process.env.TIKTOK_VIDEO_SYNC_LIMIT || 20);
 const TIKTOK_VIDEO_SYNC_MAX_PAGES = Number(process.env.TIKTOK_VIDEO_SYNC_MAX_PAGES || 10);
 
@@ -432,6 +446,13 @@ const handleTiktokOauthCallback = async (req, res) => {
         username,
         display_name: displayName,
         avatar_url: profileData?.avatar_url || null,
+        avatar_large_url: profileData?.avatar_large_url || null,
+        bio_description: profileData?.bio_description || null,
+        is_verified: profileData?.is_verified ?? null,
+        follower_count: profileData?.follower_count ?? null,
+        following_count: profileData?.following_count ?? null,
+        likes_count: profileData?.likes_count ?? null,
+        video_count: profileData?.video_count ?? null,
         profile_url: profileUrl,
         access_token_encrypted: tokenData.access_token || null,
         refresh_token_encrypted: tokenData.refresh_token || null,
@@ -446,6 +467,13 @@ const handleTiktokOauthCallback = async (req, res) => {
       username,
       display_name: displayName,
       avatar_url: profileData?.avatar_url || channel.avatar_url || null,
+      avatar_large_url: profileData?.avatar_large_url || channel.avatar_large_url || null,
+      bio_description: profileData?.bio_description || channel.bio_description || null,
+      is_verified: profileData?.is_verified ?? channel.is_verified ?? null,
+      follower_count: profileData?.follower_count ?? channel.follower_count ?? null,
+      following_count: profileData?.following_count ?? channel.following_count ?? null,
+      likes_count: profileData?.likes_count ?? channel.likes_count ?? null,
+      video_count: profileData?.video_count ?? channel.video_count ?? null,
       profile_url: profileUrl || channel.profile_url || null,
       access_token_encrypted: tokenData.access_token || channel.access_token_encrypted || null,
       refresh_token_encrypted: tokenData.refresh_token || channel.refresh_token_encrypted || null,
