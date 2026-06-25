@@ -109,13 +109,6 @@ export function createAssignment(payload) {
   });
 }
 
-export function importPlatformData(payload) {
-  return apiRequest('/import/platform', {
-    method: 'POST',
-    body: payload,
-  });
-}
-
 export function generateWeeklyReport(payload) {
   return apiRequest('/reports/generate', {
     method: 'POST',

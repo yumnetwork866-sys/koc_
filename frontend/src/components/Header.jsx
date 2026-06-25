@@ -8,7 +8,6 @@ const navItems = [
   { to: '/channels', label: 'Platforms' },
   { to: '/videos', label: 'Videos' },
   { to: '/assignments', label: 'Assign' },
-  { to: '/import', label: 'Import' },
   { to: '/reports', label: 'Reports' },
 ];
 

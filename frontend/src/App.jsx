@@ -8,7 +8,6 @@ import Header from './components/Header';
 import TeamManagement from './components/TeamManagement';
 import ChannelManagement from './components/ChannelManagement';
 import AssignmentManagement from './components/AssignmentManagement';
-import PlatformImport from './components/PlatformImport';
 import Login from './components/Login';
 import './App.css';
 
@@ -71,15 +70,6 @@ function App() {
                 <AssignmentManagement
                   heroTitle="Assign video ownership"
                   heroSubtitle="Leader gắn video cho script, editor, uploader, actor hoặc AI creator để tính KPI theo user/team."
-                />
-              }
-            />
-            <Route
-              path="/import"
-              element={
-                <PlatformImport
-                  heroTitle="Import data"
-                  heroSubtitle="Nhập dữ liệu đã parse từ Excel/CSV để đồng bộ channel, video và product vào database."
                 />
               }
             />
