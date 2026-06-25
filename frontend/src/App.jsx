@@ -1,21 +1,26 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Routes, Route, useLocation } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
-import EmployeeTable from './components/EmployeeTable';
 import VideoTable from './components/VideoTable';
 import ReportFilter from './components/ReportFilter';
 import Header from './components/Header';
-import TeamManagement from './components/TeamManagement';
-import ChannelManagement from './components/ChannelManagement';
+import Sidebar from './components/Sidebar';
 import AssignmentManagement from './components/AssignmentManagement';
+import TeamManagement from './components/TeamManagement';
+import EmployeeTable from './components/EmployeeTable';
+import ChannelManagement from './components/ChannelManagement';
 import Login from './components/Login';
 import './App.css';
 
-function App() {
+function AppLayout() {
+  const location = useLocation();
+  const isLoginPage = location.pathname === '/login';
+
   return (
-    <Router>
-      <div className="app-shell">
-        <Header />
+    <div className={`app-shell${isLoginPage ? ' app-shell--auth' : ''}`}>
+      <Header />
+      <div className="app-shell__layout">
+        {!isLoginPage ? <Sidebar /> : null}
         <main className="app-shell__content">
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -28,8 +33,9 @@ function App() {
                 />
               }
             />
+            <Route path="/manage" element={<Navigate to="/manage/teams" replace />} />
             <Route
-              path="/teams"
+              path="/manage/teams"
               element={
                 <TeamManagement
                   heroTitle="Team management"
@@ -38,7 +44,7 @@ function App() {
               }
             />
             <Route
-              path="/users"
+              path="/manage/users"
               element={
                 <EmployeeTable
                   heroTitle="User management"
@@ -47,7 +53,7 @@ function App() {
               }
             />
             <Route
-              path="/channels"
+              path="/manage/channels"
               element={
                 <ChannelManagement
                   heroTitle="Channel management"
@@ -85,6 +91,14 @@ function App() {
           </Routes>
         </main>
       </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AppLayout />
     </Router>
   );
 }

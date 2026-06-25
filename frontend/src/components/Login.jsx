@@ -36,7 +36,7 @@ const Login = () => {
     <div className="page login-page">
       <section className="page__hero">
         <span className="page__eyebrow">Login admin</span>
-        <h1 className="page__title">Content Performance Report</h1>
+        <h1 className="page__title">Performance Report</h1>
         <p className="page__subtitle">Đăng nhập admin để quản lý team, user, kênh, video và báo cáo tuần.</p>
       </section>
 
