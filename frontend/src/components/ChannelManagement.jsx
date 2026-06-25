@@ -249,10 +249,29 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                 {channels.map((channel) => (
                   <tr key={channel.id}>
                     <td>
-                      <span className="row-title">{channel.display_name}</span>
-                      {!isFallbackUsername(channel.username) ? (
-                        <div className="row-subtitle">@{channel.username}</div>
-                      ) : null}
+                      <div className="channel-cell">
+                        {channel.avatar_url ? (
+                          <img
+                            className="channel-cell__avatar"
+                            src={channel.avatar_url}
+                            alt={channel.display_name || channel.username || 'Channel avatar'}
+                          />
+                        ) : (
+                          <div className="channel-cell__avatar channel-cell__avatar--empty" aria-hidden="true">
+                            {(channel.display_name || channel.username || channel.id || '?')
+                              .toString()
+                              .trim()
+                              .charAt(0)
+                              .toUpperCase()}
+                          </div>
+                        )}
+                        <div className="channel-cell__meta">
+                          <span className="row-title">{channel.display_name}</span>
+                          {!isFallbackUsername(channel.username) ? (
+                            <div className="row-subtitle">@{channel.username}</div>
+                          ) : null}
+                        </div>
+                      </div>
                     </td>
                     <td>{getPlatformLabel(channel.platform || 'tiktok')}</td>
                     <td><span className="chip">{channel.sync_source}</span></td>

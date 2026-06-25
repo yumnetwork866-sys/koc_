@@ -17,7 +17,6 @@ import './App.css';
 function AppLayout() {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
-  const isHomePage = location.pathname === '/';
 
   return (
     <div className={`app-shell${isLoginPage ? ' app-shell--auth' : ''}`}>
