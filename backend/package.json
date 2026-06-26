@@ -11,6 +11,8 @@
     "db:seed": "node src/migrations/run.js seed",
     "db:reset": "node src/migrations/run.js reset",
     "db:check": "node src/db/check.js",
+    "sync:tiktok": "node src/jobs/syncTiktokChannels.js",
+    "sync:tiktok:scheduler": "node src/jobs/scheduleTiktokSync.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -18,11 +20,12 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "express": "^4.18.2",
     "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "helmet": "^7.0.0",
     "morgan": "^1.10.0",
-    "dotenv": "^16.3.1",
+    "node-cron": "^4.5.0",
     "pg": "^8.11.0",
     "sequelize": "^6.37.8"
   },

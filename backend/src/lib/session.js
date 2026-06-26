@@ -2,7 +2,13 @@ const crypto = require('crypto');
 
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
-const getSessionSecret = () => process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || 'development-only-secret';
+const getSessionSecret = () => {
+  if (!process.env.SESSION_SECRET) {
+    throw new Error('SESSION_SECRET must be set in .env');
+  }
+
+  return process.env.SESSION_SECRET;
+};
 
 const sign = (value) => crypto.createHmac('sha256', getSessionSecret()).update(value).digest('base64url');
 

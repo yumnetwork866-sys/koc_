@@ -45,6 +45,14 @@ app.use('/api/auth', authRoutes);
 
 const startServer = async () => {
   try {
+    if (!process.env.ADMIN_PASSWORD) {
+      throw new Error('ADMIN_PASSWORD must be set in .env');
+    }
+
+    if (!process.env.SESSION_SECRET) {
+      throw new Error('SESSION_SECRET must be set in .env');
+    }
+
     await sequelize.sync({ alter: true });
 
     const channels = await TikTokChannel.findAll({

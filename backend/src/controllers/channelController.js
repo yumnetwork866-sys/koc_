@@ -35,6 +35,14 @@ const TIKTOK_VIDEO_LIST_FIELDS = process.env.TIKTOK_VIDEO_LIST_FIELDS
 const TIKTOK_VIDEO_SYNC_LIMIT = Number(process.env.TIKTOK_VIDEO_SYNC_LIMIT || 20);
 const TIKTOK_VIDEO_SYNC_MAX_PAGES = Number(process.env.TIKTOK_VIDEO_SYNC_MAX_PAGES || 10);
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
+const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000;
+
+const expiresAtFromSeconds = (seconds) => {
+  const expiresIn = Number(seconds);
+  return Number.isFinite(expiresIn) && expiresIn > 0
+    ? new Date(Date.now() + expiresIn * 1000)
+    : null;
+};
 
 const buildOauthState = () => {
   const issuedAt = Date.now().toString();
@@ -161,6 +169,7 @@ const revokeTiktokChannelAuthorization = async (channel) => {
     access_token_encrypted: null,
     refresh_token_encrypted: null,
     token_expires_at: null,
+    refresh_token_expires_at: null,
   });
 
   return {
@@ -266,6 +275,79 @@ const exchangeTiktokCodeForToken = async (code) => {
   }
 
   return payload;
+};
+
+const refreshTiktokAccessToken = async (refreshToken) => {
+  const clientKey = process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+
+  if (!clientKey || !clientSecret) {
+    throw new Error('TikTok token refresh is not configured. Set TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET.');
+  }
+
+  const body = new URLSearchParams({
+    client_key: clientKey,
+    client_secret: clientSecret,
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+  });
+  const response = await fetch(TIKTOK_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: body.toString(),
+  });
+  const payload = await parseResponseJson(response);
+  const payloadErrorCode = payload?.error?.code || payload?.error?.error_code || payload?.error?.status;
+
+  if (!response.ok || (payload?.error && payloadErrorCode !== 'ok')) {
+    const errorMessage = buildTikTokErrorMessage(
+      payload,
+      `TikTok token refresh failed with status ${response.status} ${response.statusText}`.trim(),
+    );
+    throw new Error(`TikTok authorization must be connected again: ${errorMessage}`);
+  }
+
+  const tokenData = payload?.data || payload;
+  if (!tokenData?.access_token) {
+    throw new Error('TikTok authorization must be connected again: refresh response did not contain an access token.');
+  }
+
+  return tokenData;
+};
+
+const getUsableTiktokAccessToken = async (channel) => {
+  const tokenExpiresAt = channel.token_expires_at ? new Date(channel.token_expires_at).getTime() : NaN;
+  const accessTokenIsUsable = channel.access_token_encrypted
+    && Number.isFinite(tokenExpiresAt)
+    && tokenExpiresAt > Date.now() + TOKEN_REFRESH_SKEW_MS;
+
+  if (accessTokenIsUsable) {
+    return decryptToken(channel.access_token_encrypted);
+  }
+
+  if (!channel.refresh_token_encrypted) {
+    throw new Error('TikTok authorization must be connected again because no refresh token is available.');
+  }
+
+  const refreshExpiresAt = channel.refresh_token_expires_at
+    ? new Date(channel.refresh_token_expires_at).getTime()
+    : NaN;
+  if (Number.isFinite(refreshExpiresAt) && refreshExpiresAt <= Date.now()) {
+    throw new Error('TikTok authorization must be connected again because the refresh token has expired.');
+  }
+
+  const tokenData = await refreshTiktokAccessToken(decryptToken(channel.refresh_token_encrypted));
+  await channel.update({
+    access_token_encrypted: encryptToken(tokenData.access_token),
+    refresh_token_encrypted: encryptToken(tokenData.refresh_token) || channel.refresh_token_encrypted,
+    token_expires_at: expiresAtFromSeconds(tokenData.expires_in),
+    refresh_token_expires_at: expiresAtFromSeconds(tokenData.refresh_expires_in) || channel.refresh_token_expires_at,
+  });
+
+  console.info('[TikTok OAuth] Access token refreshed', { channelId: channel.id });
+  return tokenData.access_token;
 };
 
 const fetchTiktokUserInfo = async (accessToken) => {
@@ -483,6 +565,28 @@ const syncTiktokVideosForChannel = async (channel, accessToken) => {
   };
 };
 
+const syncTiktokChannel = async (channel) => {
+  try {
+    const accessToken = await getUsableTiktokAccessToken(channel);
+    const summary = await syncTiktokVideosForChannel(channel, accessToken);
+
+    await channel.update({
+      last_sync_at: new Date(),
+      last_sync_status: 'success',
+      last_sync_error: null,
+    });
+
+    return summary;
+  } catch (error) {
+    await channel.update({
+      last_sync_at: new Date(),
+      last_sync_status: 'failed',
+      last_sync_error: String(error.message || error).slice(0, 2000),
+    });
+    throw error;
+  }
+};
+
 const handleTiktokOauthCallback = async (req, res) => {
   let stage = 'callback_received';
   try {
@@ -528,10 +632,8 @@ const handleTiktokOauthCallback = async (req, res) => {
       .replace(/^@/, '')
       .trim();
     const profileUrl = profileData?.username ? `https://www.tiktok.com/@${profileData.username}` : null;
-    const expiresIn = Number(tokenData?.expires_in);
-    const tokenExpiresAt = Number.isFinite(expiresIn) && expiresIn > 0
-      ? new Date(Date.now() + expiresIn * 1000)
-      : null;
+    const tokenExpiresAt = expiresAtFromSeconds(tokenData?.expires_in);
+    const refreshTokenExpiresAt = expiresAtFromSeconds(tokenData?.refresh_expires_in);
 
     const lookup = openId
       ? { tiktok_open_id: String(openId) }
@@ -562,6 +664,7 @@ const handleTiktokOauthCallback = async (req, res) => {
         access_token_encrypted: encryptToken(tokenData.access_token),
         refresh_token_encrypted: encryptToken(tokenData.refresh_token),
         token_expires_at: tokenExpiresAt,
+        refresh_token_expires_at: refreshTokenExpiresAt,
         sync_source: 'oauth',
       },
     });
@@ -583,6 +686,7 @@ const handleTiktokOauthCallback = async (req, res) => {
       access_token_encrypted: tokenData.access_token ? encryptToken(tokenData.access_token) : channel.access_token_encrypted || null,
       refresh_token_encrypted: tokenData.refresh_token ? encryptToken(tokenData.refresh_token) : channel.refresh_token_encrypted || null,
       token_expires_at: tokenExpiresAt || channel.token_expires_at || null,
+      refresh_token_expires_at: refreshTokenExpiresAt || channel.refresh_token_expires_at || null,
       sync_source: 'oauth',
     });
 
@@ -600,7 +704,7 @@ const handleTiktokOauthCallback = async (req, res) => {
         channelId: channel.id,
         openId: openId || null,
       });
-      videoSyncSummary = await syncTiktokVideosForChannel(channel, tokenData.access_token);
+      videoSyncSummary = await syncTiktokChannel(channel);
       console.info('[TikTok OAuth] Video sync completed', {
         channelId: channel.id,
         ...videoSyncSummary,
@@ -717,18 +821,15 @@ const syncChannelVideos = async (req, res) => {
       return res.status(404).json({ message: 'Channel not found' });
     }
 
-    if (!channel.access_token_encrypted) {
-      return res.status(400).json({ message: 'Channel does not have an OAuth access token to sync videos' });
-    }
-
-    const summary = await syncTiktokVideosForChannel(channel, decryptToken(channel.access_token_encrypted));
+    const summary = await syncTiktokChannel(channel);
 
     return res.json({
       message: `Synced ${summary.total} videos`,
       summary,
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    const requiresReauthorization = error.message?.startsWith('TikTok authorization must be connected again');
+    return res.status(requiresReauthorization ? 401 : 500).json({ message: error.message });
   }
 };
 
@@ -807,6 +908,7 @@ module.exports = {
   createChannel,
   updateChannel,
   syncChannelVideos,
+  syncTiktokChannel,
   revokeChannelAuthorization,
   deleteChannel,
 };

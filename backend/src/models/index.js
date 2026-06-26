@@ -135,6 +135,25 @@ const TikTokChannel = sequelize.define('TikTokChannel', {
     type: DataTypes.DATE,
     allowNull: true,
   },
+  refresh_token_expires_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  last_sync_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  last_sync_status: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    validate: {
+      isIn: [['success', 'failed']],
+    },
+  },
+  last_sync_error: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
   sync_source: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -219,6 +238,10 @@ const Video = sequelize.define('Video', {
 }, {
   tableName: 'videos',
   timestamps: false,
+  indexes: [
+    { fields: ['published_at'] },
+    { fields: ['channel_id'] },
+  ],
 });
 
 const VideoAssignment = sequelize.define('VideoAssignment', {
@@ -249,6 +272,9 @@ const VideoAssignment = sequelize.define('VideoAssignment', {
     {
       unique: true,
       fields: ['video_id', 'user_id', 'assignment_role'],
+    },
+    {
+      fields: ['user_id', 'video_id'],
     },
   ],
 });
@@ -316,6 +342,10 @@ const VideoDailyStats = sequelize.define('VideoDailyStats', {
 }, {
   tableName: 'video_daily_stats',
   timestamps: false,
+  indexes: [
+    { fields: ['video_id', 'date'] },
+    { fields: ['date'] },
+  ],
 });
 
 const WeeklyReport = sequelize.define('WeeklyReport', {

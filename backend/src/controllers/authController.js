@@ -7,7 +7,11 @@ const login = async (req, res) => {
   try {
     const identifier = (req.body.identifier || req.body.email || req.body.username || '').trim();
     const { password } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (!adminPassword) {
+      throw new Error('ADMIN_PASSWORD must be set in .env');
+    }
 
     if (!identifier || !password) {
       return res.status(400).json({ message: 'username and password are required' });

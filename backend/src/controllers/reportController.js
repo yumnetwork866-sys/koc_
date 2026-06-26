@@ -1,7 +1,10 @@
-const { Op } = require('sequelize');
-const { Product, Team, User, Video, VideoAssignment, WeeklyReport } = require('../models');
+const { Op, QueryTypes } = require('sequelize');
+const { Product, User, Video, VideoAssignment, WeeklyReport, sequelize } = require('../models');
 
 const toDateOnly = (date) => date.toISOString().slice(0, 10);
+const toNumbers = (row, fields) => Object.fromEntries(
+  Object.entries(row).map(([key, value]) => [key, fields.includes(key) ? Number(value) : value]),
+);
 
 const getReports = async (req, res) => {
   try {
@@ -68,94 +71,94 @@ const deleteReport = async (req, res) => {
 
 const getKpis = async (req, res) => {
   try {
-    const [teams, users, videos, products] = await Promise.all([
-      Team.findAll({ order: [['id', 'ASC']] }),
-      User.findAll({ order: [['id', 'ASC']] }),
-      Video.findAll({
-        include: [
-          { model: VideoAssignment, as: 'assignments', include: [{ model: User, as: 'user' }] },
-          { model: Product, as: 'products', through: { attributes: [] } },
-        ],
-      }),
-      Product.findAll({
-        include: [{ model: Video, as: 'videos', through: { attributes: [] } }],
-        order: [['id', 'ASC']],
-      }),
+    const [overviewRows, teamKpis, userKpis, productKpis] = await Promise.all([
+      sequelize.query(`
+        SELECT
+          (SELECT COUNT(*) FROM teams)::int AS "totalTeams",
+          (SELECT COUNT(*) FROM users)::int AS "totalUsers",
+          COUNT(*)::int AS "totalVideos",
+          COALESCE(SUM(views), 0)::bigint AS "totalViews",
+          COALESCE(SUM(likes), 0)::bigint AS "totalLikes",
+          COALESCE(SUM(comments), 0)::bigint AS "totalComments",
+          COALESCE(SUM(shares), 0)::bigint AS "totalShares"
+        FROM videos
+      `, { type: QueryTypes.SELECT }),
+      sequelize.query(`
+        WITH team_videos AS (
+          SELECT DISTINCT u.team_id, va.video_id
+          FROM users u
+          JOIN video_assignments va ON va.user_id = u.id
+          WHERE u.team_id IS NOT NULL
+        )
+        SELECT
+          t.id,
+          t.name,
+          COUNT(tv.video_id)::int AS "totalVideos",
+          COALESCE(SUM(v.views), 0)::bigint AS "totalViews",
+          COALESCE(SUM(v.likes), 0)::bigint AS "totalLikes",
+          COALESCE(SUM(v.comments), 0)::bigint AS "totalComments",
+          COALESCE(SUM(v.shares), 0)::bigint AS "totalShares",
+          COALESCE(ROUND(AVG(v.views)), 0)::bigint AS "avgViewsPerVideo"
+        FROM teams t
+        LEFT JOIN team_videos tv ON tv.team_id = t.id
+        LEFT JOIN videos v ON v.id = tv.video_id
+        GROUP BY t.id, t.name
+        ORDER BY t.id ASC
+      `, { type: QueryTypes.SELECT }),
+      sequelize.query(`
+        WITH user_videos AS (
+          SELECT DISTINCT user_id, video_id
+          FROM video_assignments
+        )
+        SELECT
+          u.id,
+          u.name,
+          u.email,
+          u.role,
+          u.team_id,
+          COUNT(uv.video_id)::int AS "videoCount",
+          COALESCE(SUM(v.views), 0)::bigint AS "totalViews",
+          COALESCE(ROUND(AVG(v.views)), 0)::bigint AS "avgViewsPerVideo",
+          COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE v.views >= 10000) / NULLIF(COUNT(v.id), 0)), 0)::int AS "over10kRate",
+          CASE WHEN top_video.id IS NULL THEN NULL ELSE json_build_object(
+            'id', top_video.id,
+            'title', top_video.title,
+            'views', top_video.views
+          ) END AS "topVideo"
+        FROM users u
+        LEFT JOIN user_videos uv ON uv.user_id = u.id
+        LEFT JOIN videos v ON v.id = uv.video_id
+        LEFT JOIN LATERAL (
+          SELECT v_top.id, v_top.title, v_top.views
+          FROM user_videos uv_top
+          JOIN videos v_top ON v_top.id = uv_top.video_id
+          WHERE uv_top.user_id = u.id
+          ORDER BY v_top.views DESC, v_top.id ASC
+          LIMIT 1
+        ) top_video ON true
+        GROUP BY u.id, u.name, u.email, u.role, u.team_id, top_video.id, top_video.title, top_video.views
+        ORDER BY u.id ASC
+      `, { type: QueryTypes.SELECT }),
+      sequelize.query(`
+        SELECT
+          p.id,
+          p.name,
+          COUNT(vp.video_id)::int AS "totalVideos",
+          COALESCE(SUM(v.views), 0)::bigint AS "totalViews",
+          COALESCE(ROUND(AVG(v.views)), 0)::bigint AS "avgViewsPerVideo"
+        FROM products p
+        LEFT JOIN video_products vp ON vp.product_id = p.id
+        LEFT JOIN videos v ON v.id = vp.video_id
+        GROUP BY p.id, p.name
+        ORDER BY p.id ASC
+      `, { type: QueryTypes.SELECT }),
     ]);
 
-    const userTeamIds = new Map(users.map((user) => [user.id, user.team_id]));
-    const videosForUser = (userId) => {
-      return videos.filter((video) => {
-        return video.assignments?.some((assignment) => assignment.user_id === userId);
-      });
-    };
-
-    const teamKpis = teams.map((team) => {
-      const teamUserIds = users
-        .filter((user) => user.team_id === team.id)
-        .map((user) => user.id);
-      const teamVideos = videos.filter((video) => {
-        return video.assignments?.some((assignment) => teamUserIds.includes(assignment.user_id));
-      });
-      const totalViews = teamVideos.reduce((sum, video) => sum + Number(video.views || 0), 0);
-
-      return {
-        id: team.id,
-        name: team.name,
-        totalVideos: teamVideos.length,
-        totalViews,
-        totalLikes: teamVideos.reduce((sum, video) => sum + Number(video.likes || 0), 0),
-        totalComments: teamVideos.reduce((sum, video) => sum + Number(video.comments || 0), 0),
-        totalShares: teamVideos.reduce((sum, video) => sum + Number(video.shares || 0), 0),
-        avgViewsPerVideo: teamVideos.length ? Math.round(totalViews / teamVideos.length) : 0,
-      };
-    });
-
-    const userKpis = users.map((user) => {
-      const assignedVideos = videosForUser(user.id);
-      const totalViews = assignedVideos.reduce((sum, video) => sum + Number(video.views || 0), 0);
-      const topVideo = [...assignedVideos].sort((a, b) => Number(b.views || 0) - Number(a.views || 0))[0];
-      const above10k = assignedVideos.filter((video) => Number(video.views || 0) >= 10000).length;
-
-      return {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        team_id: userTeamIds.get(user.id),
-        videoCount: assignedVideos.length,
-        totalViews,
-        avgViewsPerVideo: assignedVideos.length ? Math.round(totalViews / assignedVideos.length) : 0,
-        topVideo: topVideo ? { id: topVideo.id, title: topVideo.title, views: topVideo.views } : null,
-        over10kRate: assignedVideos.length ? Math.round((above10k / assignedVideos.length) * 100) : 0,
-      };
-    });
-
-    const productKpis = products.map((product) => {
-      const productVideos = product.videos || [];
-      const totalViews = productVideos.reduce((sum, video) => sum + Number(video.views || 0), 0);
-      return {
-        id: product.id,
-        name: product.name,
-        totalVideos: productVideos.length,
-        totalViews,
-        avgViewsPerVideo: productVideos.length ? Math.round(totalViews / productVideos.length) : 0,
-      };
-    });
-
     res.json({
-      overview: {
-        totalTeams: teams.length,
-        totalUsers: users.length,
-        totalVideos: videos.length,
-        totalViews: videos.reduce((sum, video) => sum + Number(video.views || 0), 0),
-        totalLikes: videos.reduce((sum, video) => sum + Number(video.likes || 0), 0),
-        totalComments: videos.reduce((sum, video) => sum + Number(video.comments || 0), 0),
-        totalShares: videos.reduce((sum, video) => sum + Number(video.shares || 0), 0),
-      },
-      teams: teamKpis,
-      users: userKpis,
-      products: productKpis,
+      overview: toNumbers(overviewRows[0], ['totalViews', 'totalLikes', 'totalComments', 'totalShares']),
+      teams: teamKpis.map((team) => toNumbers(team, ['totalViews', 'totalLikes', 'totalComments', 'totalShares', 'avgViewsPerVideo'])),
+      users: userKpis.map((user) => toNumbers(user, ['totalViews', 'avgViewsPerVideo'])),
+      products: productKpis.map((product) => toNumbers(product, ['totalViews', 'avgViewsPerVideo'])),
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

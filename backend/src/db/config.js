@@ -1,18 +1,37 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-// Create Sequelize instance
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'report',
-  process.env.DB_USER || 'adminyum',
-  process.env.DB_PASSWORD || 'Yum1234@admin',
-  {
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: process.env.DB_PORT || 5432,
-    dialect: 'postgres',
-    logging: false, // Set to true to see SQL queries
+const createSequelize = () => {
+  if (process.env.DATABASE_URL) {
+    return new Sequelize(process.env.DATABASE_URL, {
+      dialect: 'postgres',
+      logging: false,
+    });
   }
-);
+
+  const requiredVariables = ['DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_HOST'];
+  const missingVariables = requiredVariables.filter((name) => !process.env[name]);
+
+  if (missingVariables.length > 0) {
+    throw new Error(
+      `Database configuration is missing. Set DATABASE_URL or ${missingVariables.join(', ')} in .env.`,
+    );
+  }
+
+  return new Sequelize(
+    process.env.DB_NAME,
+    process.env.DB_USER,
+    process.env.DB_PASSWORD,
+    {
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT || 5432,
+      dialect: 'postgres',
+      logging: false,
+    },
+  );
+};
+
+const sequelize = createSequelize();
 
 // Test the connection
 sequelize.authenticate()

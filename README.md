@@ -31,6 +31,23 @@ Before deploying, set `TIKTOK_TOKEN_ENCRYPTION_KEY` and `SESSION_SECRET` to sepa
 
 After TikTok redirects back, the backend exchanges the code, stores/updates the channel, and sends the browser to the frontend channels page with a status message.
 
+## Daily TikTok sync
+
+The scheduler worker uses `TIKTOK_SYNC_SCHEDULE` (a five-field cron expression) and `TIKTOK_SYNC_TIMEZONE` from `backend/.env`. It refreshes OAuth access tokens as needed, processes up to `TIKTOK_SYNC_CONCURRENCY` channels in parallel, and uses a PostgreSQL advisory lock so overlapping job runs do not sync the same channel concurrently.
+
+```bash
+cd backend
+TIKTOK_SYNC_SCHEDULE="0 2 * * *"
+TIKTOK_SYNC_TIMEZONE=Asia/Ho_Chi_Minh
+pnpm run sync:tiktok:scheduler
+```
+
+Run this as exactly one dedicated worker process (for example through systemd, PM2, or a container worker). To run a sync once without the scheduler:
+
+```bash
+pnpm run sync:tiktok
+```
+
 ## Database check
 
 Use the backend DB connection to verify the target database before running migrations:
