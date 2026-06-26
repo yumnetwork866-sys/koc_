@@ -12,6 +12,7 @@ const Footer = () => {
         <div className="footer__card">
           <span className="footer__card-label">Legal</span>
           <div className="footer__links">
+            <a href="/#contact" className="footer__link">Support</a>
             <NavLink to="/terms" className="footer__link">
               Terms of Service
             </NavLink>

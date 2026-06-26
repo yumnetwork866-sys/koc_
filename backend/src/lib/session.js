@@ -1,0 +1,34 @@
+const crypto = require('crypto');
+
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+
+const getSessionSecret = () => process.env.SESSION_SECRET || process.env.ADMIN_PASSWORD || 'development-only-secret';
+
+const sign = (value) => crypto.createHmac('sha256', getSessionSecret()).update(value).digest('base64url');
+
+const createSessionToken = (user) => {
+  const payload = Buffer.from(JSON.stringify({ sub: user.id, role: user.role, exp: Date.now() + SESSION_TTL_MS })).toString('base64url');
+  return `${payload}.${sign(payload)}`;
+};
+
+const requireAdmin = (req, res, next) => {
+  const token = req.get('authorization')?.replace(/^Bearer\s+/i, '');
+  const [payload, signature] = String(token || '').split('.');
+
+  if (!payload || !signature || signature.length !== sign(payload).length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(sign(payload)))) {
+    return res.status(401).json({ message: 'Authentication is required' });
+  }
+
+  try {
+    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (session.role !== 'admin' || !Number.isInteger(session.sub) || session.exp < Date.now()) {
+      return res.status(401).json({ message: 'Session is invalid or expired' });
+    }
+    req.session = session;
+    return next();
+  } catch {
+    return res.status(401).json({ message: 'Session is invalid' });
+  }
+};
+
+module.exports = { createSessionToken, requireAdmin };

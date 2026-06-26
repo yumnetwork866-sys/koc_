@@ -14,6 +14,8 @@ import Login from './components/Login';
 import LegalPage from './components/LegalPage';
 import './App.css';
 
+const privacyContactEmail = import.meta.env.VITE_PRIVACY_CONTACT_EMAIL || 'privacy@yumnetwork.vn';
+
 function AppLayout() {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
@@ -43,43 +45,40 @@ function AppLayout() {
                     element={
                       <LegalPage title="Terms of Service" updatedAt="June 26, 2026">
                         <p>
-                          These Terms govern access to the Content Performance Report website and the associated private
-                          workspace. By visiting the site or using the application, you agree to follow these Terms and
-                          any posted policies that apply to the service.
+                          These Terms govern access to Content Performance Report, including its public website and
+                          authorized reporting workspace. By using the service, you agree to these Terms, our Privacy
+                          Policy, and the applicable terms of third-party platforms such as TikTok.
                         </p>
                         <p>
-                          The public website is provided to explain the product, publish policy information, and direct
-                          users to the correct support and sign-in flows. The private application is available only to
-                          authorized users.
+                          The service helps authorized teams connect a TikTok account, organize content operations, and
+                          review channel and video performance. TikTok Login is optional. When you choose to connect an
+                          account, TikTok presents its own consent flow and you may deny or revoke access at any time.
                         </p>
                         <p>
-                          You may use the service only for lawful business purposes and in accordance with company
-                          policies, applicable law, and any restrictions imposed by third-party platforms.
+                          You may use the service only for lawful business purposes, with authority to connect each
+                          account, and in accordance with applicable law and TikTok policies. The private workspace is
+                          available only to users authorized by the service administrator.
                         </p>
-                        <p>Key obligations:</p>
+                        <p>Your responsibilities:</p>
                         <ul>
                           <li>Keep account credentials confidential and use only your assigned access.</li>
-                          <li>Do not attempt to bypass security controls, data permissions, or rate limits.</li>
-                          <li>Do not misuse the service to publish harmful, deceptive, or unauthorized content.</li>
-                          <li>Do not scrape, reverse engineer, or disrupt the platform or connected services.</li>
+                          <li>Connect only TikTok accounts for which you have permission to grant access.</li>
+                          <li>Do not bypass security controls, permissions, or platform rate limits.</li>
+                          <li>Do not use the service to publish harmful, deceptive, or unauthorized content.</li>
                         </ul>
                         <p>
-                          Content, reports, and operational metadata may be processed to support dashboards, assignments,
-                          audits, and weekly reporting. Third-party integrations remain subject to their own terms and
-                          policies.
+                          You can disconnect a TikTok account from Channel Management. Disconnecting revokes the stored
+                          TikTok authorization; deleting a channel also removes its associated local videos and reporting
+                          records. Requests for account or data deletion can also be sent to{' '}
+                          <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>.
                         </p>
                         <p>
-                          The service is provided on an "as is" and "as available" basis. To the fullest extent allowed
-                          by law, the provider disclaims warranties for uninterrupted availability, accuracy, and fitness
-                          for a particular purpose.
+                          The service is provided on an "as is" and "as available" basis to the extent permitted by law.
+                          We may suspend or terminate access for security, policy, or operational reasons, and may update
+                          these Terms by publishing a revised version on this page.
                         </p>
                         <p>
-                          The provider may suspend or terminate access for policy violations, security concerns, or
-                          operational necessity. We may update these Terms from time to time by posting a revised version
-                          on this site.
-                        </p>
-                        <p>
-                          Questions about these Terms can be sent through the contact details shown on the public website.
+                          Questions about these Terms can be sent to <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>.
                         </p>
                       </LegalPage>
                     }
@@ -89,40 +88,53 @@ function AppLayout() {
                     element={
                       <LegalPage title="Privacy Policy" updatedAt="June 26, 2026">
                         <p>
-                          This Privacy Policy explains how the provider collects, uses, shares, and protects information
-                          when you use the Content Performance Report website and application.
+                          This Privacy Policy explains how Content Performance Report collects, uses, retains, and deletes
+                          information when you use our website, private workspace, and TikTok integration.
                         </p>
+                        <h2>Information we collect</h2>
                         <p>
-                          Information we may collect includes account details, team and role assignments, channel
-                          metadata, video and report data, OAuth connection metadata, and support communications.
+                          We collect the information needed to operate the service: workspace account details (name, email,
+                          role and team), support messages, and operational records such as assignments and reports.
+                          If you choose TikTok Login, we collect the data approved through TikTok scopes, which may include
+                          your TikTok open ID, username, display name, avatar, profile description, verification status,
+                          public channel metrics, and video metadata and metrics such as title, URL, publish time, views,
+                          likes, comments, shares, duration, and cover image.
                         </p>
+                        <h2>How we use TikTok data</h2>
                         <p>
-                          We use this information to operate the service, generate dashboards and reports, administer
-                          accounts, enforce policy, maintain security, and improve the reliability of the platform.
+                          We use this data only to connect the authorized TikTok account, synchronize approved content data,
+                          display dashboards, assign ownership, and generate internal performance reports. We do not sell
+                          personal information or use TikTok data for advertising or to build unrelated user profiles.
                         </p>
-                        <p>How data may be handled:</p>
+                        <h2>Sharing and security</h2>
                         <ul>
-                          <li>OAuth tokens and credentials are processed on the backend and should not be exposed publicly.</li>
-                          <li>Operational data may be stored to support reporting, auditing, and assignment workflows.</li>
-                          <li>Access is limited to authorized users and service providers who need the information.</li>
-                          <li>We may retain logs and records as needed for security, compliance, and business operations.</li>
+                          <li>TikTok access and refresh tokens are processed server-side, encrypted at rest, and never displayed in the workspace.</li>
+                          <li>Access is limited to authorized workspace users and service providers that host or secure the service.</li>
+                          <li>We do not share TikTok data with third parties except as needed to operate the service, comply with law, or with your direction.</li>
                         </ul>
                         <p>
-                          We do not sell personal information. We may share information with infrastructure, analytics,
-                          or integration providers that help operate the service, subject to appropriate safeguards and
-                          contractual restrictions where applicable.
+                          We use reasonable administrative and technical safeguards. No system can guarantee absolute
+                          security, so you should protect your workspace credentials and promptly report suspected misuse.
+                        </p>
+                        <h2>Retention and deletion</h2>
+                        <p>
+                          We retain TikTok connection data and synchronized reporting data while the connected workspace is
+                          active. Disconnecting a channel revokes its TikTok authorization and deletes stored tokens.
+                          Deleting a channel removes its local channel, video, assignment, product-link, and daily-stat
+                          records. We retain limited backup and security logs for up to 90 days, unless a longer period is
+                          required by law or needed to resolve a security incident.
+                        </p>
+                        <h2>Your choices and rights</h2>
+                        <p>
+                          Depending on applicable law, you may request access to, correction of, export of, restriction of,
+                          or deletion of your personal information. You may also revoke TikTok access in TikTok settings or
+                          from Channel Management. To make a request, email{' '}
+                          <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a> from the account concerned.
+                          We may verify your identity and respond within 30 days, subject to applicable law.
                         </p>
                         <p>
-                          You may have rights to access, correct, or delete certain information, subject to the limits of
-                          applicable law and the needs of the service.
-                        </p>
-                        <p>
-                          The provider may update this Privacy Policy as the service evolves. The most recent version
-                          will be posted on this public website.
-                        </p>
-                        <p>
-                          If you have questions about privacy or data handling, use the contact information shown on the
-                          public website.
+                          This policy may change as the service evolves. The latest version is published here. For privacy
+                          questions or a deletion request, contact <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>.
                         </p>
                       </LegalPage>
                     }

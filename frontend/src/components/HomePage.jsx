@@ -32,6 +32,8 @@ const processSteps = [
 ];
 
 const HomePage = () => {
+  const privacyContactEmail = import.meta.env.VITE_PRIVACY_CONTACT_EMAIL || 'privacy@yumnetwork.vn';
+
   return (
     <div className="page home-page">
       <section className="page__hero home-page__hero" id="overview">
@@ -128,9 +130,29 @@ const HomePage = () => {
           </div>
 
           <p className="home-page__copy">
-            Account and reporting data are processed on the backend and shown only to authorized users.
+            TikTok Login is optional. We use approved data to connect the channel, sync performance reporting, and show it
+            only to authorized workspace users. You can disconnect access at any time.
           </p>
         </article>
+      </section>
+
+      <section className="section-card home-page__contact" id="contact">
+        <div className="section-card__header">
+          <div>
+            <h2 className="section-card__title">Privacy and support</h2>
+            <p className="section-card__meta">Request access, correction, deletion, or support for a TikTok connection.</p>
+          </div>
+        </div>
+        <div className="home-page__contact-grid">
+          <div>
+            <p className="home-page__contact-label">Privacy requests</p>
+            <a className="home-page__contact-link" href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>
+          </div>
+          <div>
+            <p className="home-page__contact-label">TikTok data</p>
+            <Link className="home-page__contact-link" to="/privacy">Read our Privacy Policy</Link>
+          </div>
+        </div>
       </section>
 
       <section className="home-page__legal-links" aria-label="Legal links">

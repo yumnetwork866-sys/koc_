@@ -5,10 +5,18 @@ async function apiRequest(path, options = {}) {
     ? JSON.stringify(options.body)
     : options.body;
 
+  let sessionToken = null;
+  try {
+    sessionToken = JSON.parse(localStorage.getItem('content_report_session'))?.token || null;
+  } catch {
+    localStorage.removeItem('content_report_session');
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
       ...(options.headers || {}),
     },
     ...options,
@@ -147,4 +155,8 @@ export function loginAdmin(payload) {
     method: 'POST',
     body: payload,
   });
+}
+
+export function getTikTokOauthUrl() {
+  return apiRequest('/channels/oauth/tiktok/start').then((response) => response.authorizeUrl);
 }

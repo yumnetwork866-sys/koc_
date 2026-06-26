@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { Op } = require('sequelize');
+const { decryptToken, encryptToken } = require('../lib/tokenEncryption');
 const {
   TikTokChannel,
   Video,
@@ -33,6 +34,37 @@ const TIKTOK_VIDEO_LIST_FIELDS = process.env.TIKTOK_VIDEO_LIST_FIELDS
   || 'id,title,create_time,cover_image_url,share_url,video_description,duration,view_count,like_count,comment_count,share_count';
 const TIKTOK_VIDEO_SYNC_LIMIT = Number(process.env.TIKTOK_VIDEO_SYNC_LIMIT || 20);
 const TIKTOK_VIDEO_SYNC_MAX_PAGES = Number(process.env.TIKTOK_VIDEO_SYNC_MAX_PAGES || 10);
+const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
+
+const buildOauthState = () => {
+  const issuedAt = Date.now().toString();
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const payload = `${issuedAt}.${nonce}`;
+  const signature = crypto
+    .createHmac('sha256', process.env.TIKTOK_CLIENT_SECRET || '')
+    .update(payload)
+    .digest('base64url');
+
+  return `${payload}.${signature}`;
+};
+
+const isValidOauthState = (state) => {
+  const [issuedAt, nonce, signature] = String(state || '').split('.');
+  const timestamp = Number(issuedAt);
+
+  if (!issuedAt || !nonce || !signature || !Number.isFinite(timestamp) || Date.now() - timestamp > OAUTH_STATE_MAX_AGE_MS) {
+    return false;
+  }
+
+  const payload = `${issuedAt}.${nonce}`;
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.TIKTOK_CLIENT_SECRET || '')
+    .update(payload)
+    .digest('base64url');
+
+  return signature.length === expectedSignature.length
+    && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+};
 
 const buildTiktokOauthUrl = () => {
   const clientKey = process.env.TIKTOK_CLIENT_KEY;
@@ -48,14 +80,12 @@ const buildTiktokOauthUrl = () => {
     return null;
   }
 
-  const state = crypto.randomBytes(16).toString('hex');
-
   const url = new URL(authorizeBaseUrl);
   url.searchParams.set('client_key', clientKey);
   url.searchParams.set('scope', scopes);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set('state', state);
+  url.searchParams.set('state', buildOauthState());
 
   return url.toString();
 };
@@ -125,7 +155,7 @@ const revokeTiktokChannelAuthorization = async (channel) => {
     };
   }
 
-  await revokeTiktokAccessToken(channel.access_token_encrypted);
+  await revokeTiktokAccessToken(decryptToken(channel.access_token_encrypted));
 
   await channel.update({
     access_token_encrypted: null,
@@ -136,6 +166,14 @@ const revokeTiktokChannelAuthorization = async (channel) => {
   return {
     alreadyRevoked: false,
   };
+};
+
+const serializeChannel = (channel) => {
+  const safeChannel = channel.get({ plain: true });
+  safeChannel.is_connected = Boolean(safeChannel.access_token_encrypted || safeChannel.refresh_token_encrypted);
+  delete safeChannel.access_token_encrypted;
+  delete safeChannel.refresh_token_encrypted;
+  return safeChannel;
 };
 
 const parseResponseJson = async (response) => {
@@ -448,7 +486,7 @@ const syncTiktokVideosForChannel = async (channel, accessToken) => {
 const handleTiktokOauthCallback = async (req, res) => {
   let stage = 'callback_received';
   try {
-    const { code, error, error_description: errorDescription } = req.query || {};
+    const { code, error, error_description: errorDescription, state } = req.query || {};
 
     console.info('[TikTok OAuth] Callback received', {
       hasCode: Boolean(code),
@@ -458,6 +496,10 @@ const handleTiktokOauthCallback = async (req, res) => {
 
     if (error) {
       return res.redirect(buildFrontendRedirectUrl('error', errorDescription || error));
+    }
+
+    if (!isValidOauthState(state)) {
+      return res.redirect(buildFrontendRedirectUrl('error', 'TikTok OAuth callback state is invalid or expired'));
     }
 
     if (!code) {
@@ -517,8 +559,8 @@ const handleTiktokOauthCallback = async (req, res) => {
         likes_count: profileData?.likes_count ?? null,
         video_count: profileData?.video_count ?? null,
         profile_url: profileUrl,
-        access_token_encrypted: tokenData.access_token || null,
-        refresh_token_encrypted: tokenData.refresh_token || null,
+        access_token_encrypted: encryptToken(tokenData.access_token),
+        refresh_token_encrypted: encryptToken(tokenData.refresh_token),
         token_expires_at: tokenExpiresAt,
         sync_source: 'oauth',
       },
@@ -538,8 +580,8 @@ const handleTiktokOauthCallback = async (req, res) => {
       likes_count: profileData?.likes_count ?? channel.likes_count ?? null,
       video_count: profileData?.video_count ?? channel.video_count ?? null,
       profile_url: profileUrl || channel.profile_url || null,
-      access_token_encrypted: tokenData.access_token || channel.access_token_encrypted || null,
-      refresh_token_encrypted: tokenData.refresh_token || channel.refresh_token_encrypted || null,
+      access_token_encrypted: tokenData.access_token ? encryptToken(tokenData.access_token) : channel.access_token_encrypted || null,
+      refresh_token_encrypted: tokenData.refresh_token ? encryptToken(tokenData.refresh_token) : channel.refresh_token_encrypted || null,
       token_expires_at: tokenExpiresAt || channel.token_expires_at || null,
       sync_source: 'oauth',
     });
@@ -601,9 +643,7 @@ const startTiktokOauth = async (req, res) => {
       });
     }
 
-    console.log('TikTok OAuth URL:', authorizeUrl);
-
-    return res.redirect(authorizeUrl);
+    return res.json({ authorizeUrl });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -615,7 +655,7 @@ const getChannels = async (req, res) => {
       include: [{ model: Video, as: 'videos' }],
       order: [['id', 'ASC']],
     });
-    res.json(channels);
+    res.json(channels.map(serializeChannel));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -629,7 +669,7 @@ const getChannelById = async (req, res) => {
     if (!channel) {
       return res.status(404).json({ message: 'Channel not found' });
     }
-    res.json(channel);
+    res.json(serializeChannel(channel));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -641,7 +681,7 @@ const createChannel = async (req, res) => {
       platform: req.body.platform || 'tiktok',
       ...req.body,
     });
-    res.status(201).json(channel);
+    res.status(201).json(serializeChannel(channel));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -657,7 +697,7 @@ const updateChannel = async (req, res) => {
     }
 
     const channel = await TikTokChannel.findByPk(req.params.id);
-    res.json(channel);
+    res.json(serializeChannel(channel));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -681,7 +721,7 @@ const syncChannelVideos = async (req, res) => {
       return res.status(400).json({ message: 'Channel does not have an OAuth access token to sync videos' });
     }
 
-    const summary = await syncTiktokVideosForChannel(channel, channel.access_token_encrypted);
+    const summary = await syncTiktokVideosForChannel(channel, decryptToken(channel.access_token_encrypted));
 
     return res.json({
       message: `Synced ${summary.total} videos`,

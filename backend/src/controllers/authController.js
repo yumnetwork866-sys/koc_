@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const { Team, User } = require('../models');
 const { verifyPassword } = require('../lib/password');
+const { createSessionToken } = require('../lib/session');
 
 const login = async (req, res) => {
   try {
@@ -31,7 +32,7 @@ const login = async (req, res) => {
     delete safeUser.password_hash;
 
     res.json({
-      token: `admin-demo-${user.id}`,
+      token: createSessionToken(user),
       user: safeUser,
     });
   } catch (error) {

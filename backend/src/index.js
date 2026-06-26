@@ -17,7 +17,9 @@ const productRoutes = require('./routes/productRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
 const importRoutes = require('./routes/importRoutes');
 const authRoutes = require('./routes/authRoutes');
-const { sequelize, User } = require('./models');
+const { sequelize, TikTokChannel, User } = require('./models');
+const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
+const { requireAdmin } = require('./lib/session');
 
 // Middleware
 app.use(helmet());
@@ -31,19 +33,35 @@ app.get('/', (req, res) => {
 });
 
 // API routes
-app.use('/api/users', userRoutes);
-app.use('/api/teams', teamRoutes);
-app.use('/api/videos', videoRoutes);
-app.use('/api/reports', reportRoutes);
+app.use('/api/users', requireAdmin, userRoutes);
+app.use('/api/teams', requireAdmin, teamRoutes);
+app.use('/api/videos', requireAdmin, videoRoutes);
+app.use('/api/reports', requireAdmin, reportRoutes);
 app.use('/api/channels', channelRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/assignments', assignmentRoutes);
-app.use('/api/import', importRoutes);
+app.use('/api/products', requireAdmin, productRoutes);
+app.use('/api/assignments', requireAdmin, assignmentRoutes);
+app.use('/api/import', requireAdmin, importRoutes);
 app.use('/api/auth', authRoutes);
 
 const startServer = async () => {
   try {
     await sequelize.sync({ alter: true });
+
+    const channels = await TikTokChannel.findAll({
+      attributes: ['id', 'access_token_encrypted', 'refresh_token_encrypted'],
+    });
+
+    for (const channel of channels) {
+      const accessToken = channel.access_token_encrypted;
+      const refreshToken = channel.refresh_token_encrypted;
+
+      if ((accessToken && !isEncryptedToken(accessToken)) || (refreshToken && !isEncryptedToken(refreshToken))) {
+        await channel.update({
+          access_token_encrypted: accessToken ? encryptToken(accessToken) : null,
+          refresh_token_encrypted: refreshToken ? encryptToken(refreshToken) : null,
+        });
+      }
+    }
 
     const adminUsername = process.env.ADMIN_USERNAME || 'admin@company.com';
     const [adminUser] = await User.findOrCreate({

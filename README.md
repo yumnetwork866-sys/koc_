@@ -27,6 +27,8 @@ TIKTOK_REDIRECT_URI=http://localhost:8000/api/channels/oauth/tiktok/callback
 TIKTOK_SCOPES=user.info.basic
 ```
 
+Before deploying, set `TIKTOK_TOKEN_ENCRYPTION_KEY` and `SESSION_SECRET` to separate, unique secrets of at least 32 characters. Set `VITE_PRIVACY_CONTACT_EMAIL` in the frontend environment to the monitored address used for privacy and deletion requests.
+
 After TikTok redirects back, the backend exchanges the code, stores/updates the channel, and sends the browser to the frontend channels page with a status message.
 
 ## Database check
