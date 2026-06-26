@@ -5,8 +5,8 @@ import { loginAdmin } from '../lib/api';
 const Login = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({
-    email: 'admin@company.com',
-    password: 'admin123',
+    identifier: '',
+    password: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -19,10 +19,10 @@ const Login = () => {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-      try {
-        setLoading(true);
-        setError('');
-        const session = await loginAdmin(form);
+    try {
+          setLoading(true);
+          setError('');
+          const session = await loginAdmin(form);
       localStorage.setItem('content_report_session', JSON.stringify(session));
       navigate('/');
     } catch (err) {
@@ -37,7 +37,7 @@ const Login = () => {
       <section className="page__hero">
         <span className="page__eyebrow">Login admin</span>
         <h1 className="page__title">Performance Report</h1>
-        <p className="page__subtitle">Đăng nhập admin để quản lý team, user, kênh, video và báo cáo tuần.</p>
+        <p className="page__subtitle">Đăng nhập để quản lý team, user, kênh, video và báo cáo tuần.</p>
       </section>
 
       {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
@@ -45,8 +45,16 @@ const Login = () => {
       <section className="section-card login-card">
         <form className="filter-panel filter-panel--compact" onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor="email">Email</label>
-            <input id="email" name="email" type="email" value={form.email} onChange={handleChange} required />
+            <label htmlFor="identifier">Username or Email</label>
+            <input
+              id="identifier"
+              name="identifier"
+              type="text"
+              value={form.identifier}
+              onChange={handleChange}
+              autoComplete="username"
+              required
+            />
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>

@@ -17,7 +17,7 @@ const productRoutes = require('./routes/productRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
 const importRoutes = require('./routes/importRoutes');
 const authRoutes = require('./routes/authRoutes');
-const { sequelize } = require('./models');
+const { sequelize, User } = require('./models');
 
 // Middleware
 app.use(helmet());
@@ -44,6 +44,22 @@ app.use('/api/auth', authRoutes);
 const startServer = async () => {
   try {
     await sequelize.sync({ alter: true });
+
+    const adminUsername = process.env.ADMIN_USERNAME || 'admin@company.com';
+    const [adminUser] = await User.findOrCreate({
+      where: { email: 'admin@company.com' },
+      defaults: {
+        name: adminUsername,
+        email: 'admin@company.com',
+        role: 'admin',
+        team_id: null,
+      },
+    });
+
+    if (adminUser.name !== adminUsername) {
+      await adminUser.update({ name: adminUsername });
+    }
+
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });

@@ -35,6 +35,10 @@ const User = sequelize.define('User', {
       isEmail: true,
     },
   },
+  password_hash: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
   team_id: {
     type: DataTypes.INTEGER,
     allowNull: true,
@@ -50,6 +54,9 @@ const User = sequelize.define('User', {
 }, {
   tableName: 'users',
   timestamps: false,
+  defaultScope: {
+    attributes: { exclude: ['password_hash'] },
+  },
 });
 
 const TikTokChannel = sequelize.define('TikTokChannel', {

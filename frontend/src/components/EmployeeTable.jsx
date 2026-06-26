@@ -4,6 +4,7 @@ import { createUser, deleteUser, fetchTeams, fetchUsers, updateUser } from '../l
 const initialForm = {
   name: '',
   email: '',
+  password: '',
   role: 'member',
   team_id: '',
 };
@@ -153,6 +154,19 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           <div className="field">
             <label htmlFor="email">Email</label>
             <input id="email" name="email" type="email" value={form.email} onChange={handleChange} required />
+          </div>
+          <div className="field">
+            <label htmlFor="password">Mật khẩu</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              value={form.password}
+              onChange={handleChange}
+              autoComplete="new-password"
+              minLength="8"
+              required
+            />
           </div>
           <div className="field">
             <label htmlFor="role">Role</label>

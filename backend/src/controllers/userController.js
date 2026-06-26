@@ -1,4 +1,12 @@
 const { Team, User } = require('../models');
+const { hashPassword } = require('../lib/password');
+const MIN_PASSWORD_LENGTH = 8;
+
+const serializeUser = (user) => {
+  const safeUser = user.get({ plain: true });
+  delete safeUser.password_hash;
+  return safeUser;
+};
 
 // Get all users
 const getUsers = async (req, res) => {
@@ -31,10 +39,22 @@ const getUserById = async (req, res) => {
 // Create new user
 const createUser = async (req, res) => {
   try {
-    const user = await User.create(req.body);
-    res.status(201).json(user);
+    const { name, email, password, role, team_id: teamId } = req.body;
+
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    }
+
+    const user = await User.create({
+      name,
+      email,
+      role,
+      team_id: teamId,
+      password_hash: await hashPassword(password),
+    });
+    res.status(201).json(serializeUser(user));
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(400).json({ message: error.message });
   }
 };
 

@@ -1,25 +1,38 @@
+const { Op } = require('sequelize');
 const { Team, User } = require('../models');
+const { verifyPassword } = require('../lib/password');
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const identifier = (req.body.identifier || req.body.email || req.body.username || '').trim();
+    const { password } = req.body;
+    const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-    if (!email || !password) {
-      return res.status(400).json({ message: 'email and password are required' });
+    if (!identifier || !password) {
+      return res.status(400).json({ message: 'username and password are required' });
     }
 
-    const user = await User.findOne({
-      where: { email },
+    const user = await User.unscoped().findOne({
+      where: {
+        [Op.or]: [{ email: identifier }, { name: identifier }],
+      },
       include: [{ model: Team, as: 'team' }],
     });
 
-    if (!user || user.role !== 'admin' || password !== (process.env.ADMIN_PASSWORD || 'admin123')) {
+    const passwordIsValid = user?.password_hash
+      ? await verifyPassword(password, user.password_hash)
+      : password === adminPassword;
+
+    if (!user || user.role !== 'admin' || !passwordIsValid) {
       return res.status(401).json({ message: 'Invalid admin credentials' });
     }
 
+    const safeUser = user.get({ plain: true });
+    delete safeUser.password_hash;
+
     res.json({
       token: `admin-demo-${user.id}`,
-      user,
+      user: safeUser,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
