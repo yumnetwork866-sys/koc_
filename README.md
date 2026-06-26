@@ -50,6 +50,17 @@ pnpm run sync:tiktok
 
 ## Database check
 
+The backend never changes the schema while starting. Apply versioned migrations explicitly; `db:migrate` and `db:rollback` create a PostgreSQL custom-format backup in `backend/backups/` first (override with `DB_BACKUP_DIR`).
+
+```bash
+cd backend
+pnpm run db:migrate
+pnpm run db:rollback
+pnpm run db:backup
+```
+
+Use `-- --no-backup` only when a backup is handled by deployment infrastructure.
+
 Use the backend DB connection to verify the target database before running migrations:
 
 ```bash

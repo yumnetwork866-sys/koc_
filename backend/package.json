@@ -8,6 +8,8 @@
     "dev": "nodemon src/index.js",
     "db:init": "node src/migrations/run.js init",
     "db:migrate": "node src/migrations/run.js migrate",
+    "db:rollback": "node src/migrations/run.js rollback",
+    "db:backup": "node src/migrations/run.js backup",
     "db:seed": "node src/migrations/run.js seed",
     "db:reset": "node src/migrations/run.js reset",
     "db:check": "node src/db/check.js",

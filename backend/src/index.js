@@ -53,8 +53,6 @@ const startServer = async () => {
       throw new Error('SESSION_SECRET must be set in .env');
     }
 
-    await sequelize.sync({ alter: true });
-
     const channels = await TikTokChannel.findAll({
       attributes: ['id', 'access_token_encrypted', 'refresh_token_encrypted'],
     });
@@ -90,7 +88,7 @@ const startServer = async () => {
       console.log(`Server is running on port ${PORT}`);
     });
   } catch (error) {
-    console.error('Failed to initialize database schema:', error);
+    console.error('Failed to start server:', error);
     process.exit(1);
   }
 };
