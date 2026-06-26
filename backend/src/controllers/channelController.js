@@ -26,7 +26,7 @@ const TIKTOK_USER_INFO_FIELDS = [
 ].join(',');
 const TIKTOK_USER_INFO_URL = `https://open.tiktokapis.com/v2/user/info/?fields=${TIKTOK_USER_INFO_FIELDS}`;
 const TIKTOK_VIDEO_LIST_URL = 'https://open.tiktokapis.com/v2/video/list/';
-const DEFAULT_FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const DEFAULT_FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3005';
 const DEFAULT_OAUTH_RETURN_PATH = process.env.TIKTOK_OAUTH_RETURN_PATH || '/manage/channels';
 const TIKTOK_VIDEO_LIST_FIELDS = process.env.TIKTOK_VIDEO_LIST_FIELDS
   || 'id,title,create_time,cover_image_url,share_url,video_description,duration,view_count,like_count,comment_count,share_count';

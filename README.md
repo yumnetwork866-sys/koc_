@@ -19,10 +19,11 @@ This project is structured for multi-platform content performance reporting.
 The backend handles TikTok OAuth entirely server-side. Configure `backend/.env` with:
 
 ```bash
-FRONTEND_URL=http://localhost:5173
+PORT=8000
+FRONTEND_URL=http://localhost:3005
 TIKTOK_CLIENT_KEY=...
 TIKTOK_CLIENT_SECRET=...
-TIKTOK_REDIRECT_URI=http://localhost:5000/api/channels/oauth/tiktok/callback
+TIKTOK_REDIRECT_URI=http://localhost:8000/api/channels/oauth/tiktok/callback
 TIKTOK_SCOPES=user.info.basic
 ```
 
