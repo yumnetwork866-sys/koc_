@@ -10,6 +10,7 @@ pnpm dev
 
 `pnpm dev` runs both backend and frontend in parallel from the repo root.
 `pnpm start` does the same with the packages' `start` scripts.
+`pnpm build` builds the frontend bundle.
 
 This project is structured for multi-platform content performance reporting.
 
