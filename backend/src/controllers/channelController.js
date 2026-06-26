@@ -10,6 +10,7 @@ const {
 } = require('../models');
 
 const TIKTOK_TOKEN_URL = 'https://open.tiktokapis.com/v2/oauth/token/';
+const TIKTOK_REVOKE_URL = 'https://open.tiktokapis.com/v2/oauth/revoke/';
 const TIKTOK_USER_INFO_FIELDS = [
   'open_id',
   'union_id',
@@ -73,6 +74,68 @@ const handleTiktokWebhook = async (req, res) => {
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
+};
+
+const revokeTiktokAccessToken = async (accessToken) => {
+  const clientKey = process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+
+  if (!clientKey || !clientSecret) {
+    throw new Error('TikTok revoke is not configured. Set TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET.');
+  }
+
+  const body = new URLSearchParams({
+    client_key: clientKey,
+    client_secret: clientSecret,
+    token: accessToken,
+  });
+
+  const response = await fetch(TIKTOK_REVOKE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    let errorMessage = `TikTok revoke failed with status ${response.status} ${response.statusText}`.trim();
+
+    try {
+      const payload = await response.json();
+      errorMessage = buildTikTokErrorMessage(payload, errorMessage);
+    } catch {
+      // Keep the generic HTTP error message if the response is not JSON.
+    }
+
+    throw new Error(errorMessage);
+  }
+
+  return true;
+};
+
+const revokeTiktokChannelAuthorization = async (channel) => {
+  if (!channel) {
+    throw new Error('Channel not found');
+  }
+
+  if (!channel.access_token_encrypted) {
+    return {
+      alreadyRevoked: true,
+    };
+  }
+
+  await revokeTiktokAccessToken(channel.access_token_encrypted);
+
+  await channel.update({
+    access_token_encrypted: null,
+    refresh_token_encrypted: null,
+    token_expires_at: null,
+  });
+
+  return {
+    alreadyRevoked: false,
+  };
 };
 
 const parseResponseJson = async (response) => {
@@ -629,6 +692,27 @@ const syncChannelVideos = async (req, res) => {
   }
 };
 
+const revokeChannelAuthorization = async (req, res) => {
+  try {
+    const channel = await TikTokChannel.findByPk(req.params.id);
+
+    if (!channel) {
+      return res.status(404).json({ message: 'Channel not found' });
+    }
+
+    const result = await revokeTiktokChannelAuthorization(channel);
+
+    return res.json({
+      message: result.alreadyRevoked
+        ? 'Channel authorization was already revoked'
+        : 'Channel authorization revoked successfully',
+      alreadyRevoked: result.alreadyRevoked,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 const deleteChannel = async (req, res) => {
   try {
     const channelId = req.params.id;
@@ -683,5 +767,6 @@ module.exports = {
   createChannel,
   updateChannel,
   syncChannelVideos,
+  revokeChannelAuthorization,
   deleteChannel,
 };

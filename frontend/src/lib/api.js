@@ -73,6 +73,12 @@ export function syncChannelVideos(channelId) {
   });
 }
 
+export function revokeChannelAuthorization(channelId) {
+  return apiRequest(`/channels/${channelId}/revoke`, {
+    method: 'POST',
+  });
+}
+
 export function fetchProducts(signal) {
   return apiRequest('/products', { signal });
 }

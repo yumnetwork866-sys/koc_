@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { deleteChannel, fetchChannels, syncChannelVideos } from '../lib/api';
+import {
+  deleteChannel,
+  fetchChannels,
+  revokeChannelAuthorization,
+  syncChannelVideos,
+} from '../lib/api';
 import { PLATFORMS, getPlatformLabel } from '../lib/platforms';
 
 const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
@@ -140,6 +145,30 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
     }
   };
 
+  const handleRevokeChannelAuthorization = async (channel) => {
+    const confirmed = window.confirm(
+      `Disconnect channel "${channel.display_name}"? Kênh sẽ ngắt liên kết với TikTok nhưng dữ liệu local vẫn giữ nguyên.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setError('');
+      const result = await revokeChannelAuthorization(channel.id);
+      setToast({
+        status: 'success',
+        message: result?.message || 'Channel disconnected',
+      });
+      await loadChannels();
+    } catch (err) {
+      setError(err.message || 'Không disconnect được channel');
+    } finally {
+      setOpenActions({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
+    }
+  };
+
   const toggleActionsMenu = (channelId, triggerElement) => {
     setOpenActions((current) => {
       if (current.id === channelId) {
@@ -270,6 +299,9 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                           {!isFallbackUsername(channel.username) ? (
                             <div className="row-subtitle">@{channel.username}</div>
                           ) : null}
+                          {channel.sync_source === 'oauth' && !channel.access_token_encrypted ? (
+                            <div className="row-subtitle">Disconnected</div>
+                          ) : null}
                         </div>
                       </div>
                     </td>
@@ -304,9 +336,18 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                               type="button"
                               role="menuitem"
                               onClick={() => handleSyncChannelVideos(channel)}
-                              disabled={syncingChannelId === channel.id}
+                              disabled={syncingChannelId === channel.id || !channel.access_token_encrypted}
                             >
                               {syncingChannelId === channel.id ? 'Đang sync' : 'Sync video'}
+                            </button>
+                            <button
+                              className="action-menu__item"
+                              type="button"
+                              role="menuitem"
+                              onClick={() => handleRevokeChannelAuthorization(channel)}
+                              disabled={!channel.access_token_encrypted && !channel.refresh_token_encrypted}
+                            >
+                              Disconnect
                             </button>
                             <button
                               className="action-menu__item action-menu__item--danger"

@@ -9,6 +9,7 @@ const {
   createChannel,
   updateChannel,
   syncChannelVideos,
+  revokeChannelAuthorization,
   deleteChannel,
 } = require('../controllers/channelController');
 
@@ -21,6 +22,7 @@ router.get('/:id', getChannelById);
 router.post('/', createChannel);
 router.put('/:id', updateChannel);
 router.post('/:id/sync-videos', syncChannelVideos);
+router.post('/:id/revoke', revokeChannelAuthorization);
 router.delete('/:id', deleteChannel);
 
 module.exports = router;
