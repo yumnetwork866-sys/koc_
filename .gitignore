@@ -38,3 +38,4 @@ Thumbs.db
 # Backend generated assets
 backend/generated/prisma/
 backend/backups/
+package-lock.json
