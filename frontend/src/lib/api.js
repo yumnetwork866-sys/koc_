@@ -11,6 +11,7 @@ async function apiRequest(path, options = {}) {
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: 'no-store',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
@@ -162,4 +163,83 @@ export function loginAdmin(payload) {
 
 export function getTikTokOauthUrl() {
   return apiRequest('/channels/oauth/tiktok/start').then((response) => response.authorizeUrl);
+}
+
+export function getFacebookOauthUrl() {
+  return apiRequest('/chatbot/facebook/start').then((response) => response.authorizeUrl);
+}
+
+export function fetchChatbotFacebookMe(signal) {
+  return apiRequest('/chatbot/facebook/me', { signal });
+}
+
+export function logoutChatbotFacebook() {
+  return apiRequest('/chatbot/facebook/logout', { method: 'POST' });
+}
+
+export function fetchFacebookManagedPages(signal) {
+  return apiRequest('/chatbot/facebook/me/pages', { signal });
+}
+
+export function connectFacebookPage(pageId) {
+  return apiRequest(`/chatbot/pages/${pageId}/connect`, { method: 'POST' });
+}
+
+export function disconnectFacebookPage(pageId) {
+  return apiRequest(`/chatbot/pages/${pageId}`, { method: 'DELETE' });
+}
+
+export function fetchChatbotPages(signal) {
+  return apiRequest('/chatbot/pages', { signal });
+}
+
+export function fetchChatbotStats(signal) {
+  return apiRequest('/chatbot/stats', { signal });
+}
+
+export function fetchChatbotConversations(signal) {
+  return apiRequest('/chatbot/conversations', { signal });
+}
+
+export function fetchChatbotMessages(senderId, signal) {
+  return apiRequest(`/chatbot/messages?senderId=${encodeURIComponent(senderId)}`, { signal });
+}
+
+export function sendChatbotMessage(payload) {
+  return apiRequest('/chatbot/send', { method: 'POST', body: payload });
+}
+
+export function fetchChatbotOrders(signal) {
+  return apiRequest('/chatbot/orders', { signal });
+}
+
+export function updateChatbotOrder(orderId, payload) {
+  return apiRequest(`/chatbot/orders/${orderId}`, { method: 'PATCH', body: payload });
+}
+
+export function fetchChatbotKnowledgeDocs(signal) {
+  return apiRequest('/chatbot/kb', { signal });
+}
+
+export function createChatbotKnowledgeDoc(payload) {
+  return apiRequest('/chatbot/kb', { method: 'POST', body: payload });
+}
+
+export function deleteChatbotKnowledgeDoc(docId) {
+  return apiRequest(`/chatbot/kb/${docId}`, { method: 'DELETE' });
+}
+
+export function fetchChatbotSettings(signal) {
+  return apiRequest('/chatbot/settings', { signal });
+}
+
+export function fetchChatbotOllamaModels(signal) {
+  return apiRequest('/chatbot/ollama/models', { signal });
+}
+
+export function updateChatbotSettings(payload) {
+  return apiRequest('/chatbot/settings', {
+    method: 'PUT',
+    body: payload,
+  });
 }

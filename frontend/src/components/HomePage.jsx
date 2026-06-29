@@ -1,18 +1,19 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { PLATFORMS } from '../lib/platforms';
 
 const productHighlights = [
   {
-    title: 'Reporting views',
-    description: 'Browse channel, video, team, and product data in one place.',
+    title: 'Platform reporting',
+    description: 'Connect supported platforms, sync approved metrics, and review performance by team or workspace.',
   },
   {
-    title: 'Account connections',
-    description: 'Bring data in through OAuth or approved imports.',
+    title: 'Messaging automation',
+    description: 'Connect messaging channels, receive conversations, and manage responses and knowledge.',
   },
   {
     title: 'Weekly outputs',
-    description: 'Generate summaries for a chosen date range.',
+    description: 'Generate summaries for selected reporting windows and save them for review.',
   },
 ];
 
@@ -33,6 +34,11 @@ const processSteps = [
 
 const HomePage = () => {
   const privacyContactEmail = import.meta.env.VITE_PRIVACY_CONTACT_EMAIL || 'privacy@yumnetwork.vn';
+  const platformHighlights = PLATFORMS.map((platform) => ({
+    title: platform.label,
+    description: platform.description,
+    status: platform.status,
+  }));
 
   return (
     <div className="page home-page">
@@ -76,11 +82,26 @@ const HomePage = () => {
         </aside>
       </section>
 
-      <section className="home-page__section" id="features">
+      <section className="home-page__section" id="platforms">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">What it includes</h2>
+            <h2 className="section-card__title">Supported platforms</h2>
+            <p className="section-card__meta">The workspace adapts to any platform you connect later.</p>
           </div>
+        </div>
+
+        <div className="platform-grid">
+          {platformHighlights.map((platform) => (
+            <article className={`platform-card platform-card--${platform.status}`} key={platform.title}>
+              <div className="metric-item__head">
+                <span>{platform.title}</span>
+                <span className={`chip ${platform.status === 'active' ? 'chip--positive' : 'chip--amber'}`}>
+                  {platform.status}
+                </span>
+              </div>
+              <p className="row-subtitle">{platform.description}</p>
+            </article>
+          ))}
         </div>
 
         <div className="grid-two home-page__feature-grid">
@@ -93,12 +114,12 @@ const HomePage = () => {
         </div>
       </section>
 
-      <section className="grid-two home-page__section">
+      <section className="grid-two home-page__section" id="workflow">
         <article className="section-card" id="process">
           <div className="section-card__header">
             <div>
-              <h2 className="section-card__title">Typical flow</h2>
-              <p className="section-card__meta">From setup to review.</p>
+              <h2 className="section-card__title">Workflow</h2>
+              <p className="section-card__meta">A generic flow for platform setup, content operations, and reporting.</p>
             </div>
           </div>
 
@@ -115,11 +136,11 @@ const HomePage = () => {
           </div>
         </article>
 
-        <article className="section-card" id="security">
+        <article className="section-card" id="access">
           <div className="section-card__header">
             <div>
               <h2 className="section-card__title">Access and data</h2>
-              <p className="section-card__meta">Governance and handling.</p>
+              <p className="section-card__meta">Governance and handling for connected platforms.</p>
             </div>
           </div>
 
@@ -130,8 +151,8 @@ const HomePage = () => {
           </div>
 
           <p className="home-page__copy">
-            TikTok Login is optional. We use approved data to connect the channel, sync performance reporting, and show it
-            only to authorized workspace users. You can disconnect access at any time.
+            Supported platform connections are optional. We use approved data only to connect the platform, sync
+            reporting, and show it to authorized workspace users. You can disconnect access at any time.
           </p>
         </article>
       </section>
@@ -140,7 +161,7 @@ const HomePage = () => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Privacy and support</h2>
-            <p className="section-card__meta">Request access, correction, deletion, or support for a TikTok connection.</p>
+            <p className="section-card__meta">Request access, correction, deletion, or support for any connected platform.</p>
           </div>
         </div>
         <div className="home-page__contact-grid">
@@ -149,7 +170,7 @@ const HomePage = () => {
             <a className="home-page__contact-link" href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>
           </div>
           <div>
-            <p className="home-page__contact-label">TikTok data</p>
+            <p className="home-page__contact-label">Platform data</p>
             <Link className="home-page__contact-link" to="/privacy">Read our Privacy Policy</Link>
           </div>
         </div>

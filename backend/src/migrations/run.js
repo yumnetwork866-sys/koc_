@@ -13,6 +13,8 @@ const migrations = [
   require('./001_create_tables'),
   require('./003_add_tiktok_token_lifecycle'),
   require('./004_add_kpi_indexes'),
+  require('./005_add_facebook_chatbot_tables'),
+  require('./006_add_chatbot_settings'),
 ];
 
 const createMigrationTable = () => sequelize.query(`

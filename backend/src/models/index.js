@@ -371,6 +371,231 @@ const WeeklyReport = sequelize.define('WeeklyReport', {
   timestamps: false,
 });
 
+const FacebookPage = sequelize.define('FacebookPage', {
+  id: {
+    type: DataTypes.STRING,
+    primaryKey: true,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  access_token_encrypted: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  owner_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  owner_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  connected_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+  },
+  updated_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+  },
+}, {
+  tableName: 'facebook_pages',
+  timestamps: false,
+});
+
+const FacebookOauthState = sequelize.define('FacebookOauthState', {
+  state: {
+    type: DataTypes.STRING,
+    primaryKey: true,
+  },
+  expires_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+  },
+}, {
+  tableName: 'facebook_oauth_states',
+  timestamps: false,
+});
+
+const FacebookUserSession = sequelize.define('FacebookUserSession', {
+  sid: {
+    type: DataTypes.STRING,
+    primaryKey: true,
+  },
+  user_id: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  user_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  user_token_encrypted: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  expires_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+  },
+  created_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+  },
+}, {
+  tableName: 'facebook_user_sessions',
+  timestamps: false,
+});
+
+const ChatbotMessage = sequelize.define('ChatbotMessage', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  sender_id: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  page_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  direction: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    validate: {
+      isIn: [['in', 'out']],
+    },
+  },
+  text: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  via: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'system',
+  },
+  created_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+  },
+}, {
+  tableName: 'chatbot_messages',
+  timestamps: false,
+});
+
+const ChatbotOrder = sequelize.define('ChatbotOrder', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  sender_id: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  page_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  raw: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  phone: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  address: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  status: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'new',
+    validate: {
+      isIn: [['new', 'confirmed', 'done', 'cancelled']],
+    },
+  },
+  created_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+  },
+}, {
+  tableName: 'chatbot_orders',
+  timestamps: false,
+});
+
+const ChatbotKnowledgeDoc = sequelize.define('ChatbotKnowledgeDoc', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  title: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  content: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+  },
+  embedding: {
+    type: DataTypes.JSONB,
+    allowNull: true,
+  },
+  created_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+  },
+}, {
+  tableName: 'chatbot_knowledge_docs',
+  timestamps: false,
+});
+
+const ChatbotSetting = sequelize.define('ChatbotSetting', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+  },
+  provider: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'gemini',
+  },
+  model: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  ollama_host: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  updated_at: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW,
+  },
+}, {
+  tableName: 'chatbot_settings',
+  timestamps: false,
+});
+
 User.belongsTo(Team, { foreignKey: 'team_id', as: 'team' });
 Team.hasMany(User, { foreignKey: 'team_id', as: 'users' });
 
@@ -398,6 +623,11 @@ Product.belongsToMany(Video, {
 Video.hasMany(VideoDailyStats, { foreignKey: 'video_id', as: 'daily_stats' });
 VideoDailyStats.belongsTo(Video, { foreignKey: 'video_id', as: 'video' });
 
+FacebookPage.hasMany(ChatbotMessage, { foreignKey: 'page_id', as: 'messages' });
+ChatbotMessage.belongsTo(FacebookPage, { foreignKey: 'page_id', as: 'page' });
+FacebookPage.hasMany(ChatbotOrder, { foreignKey: 'page_id', as: 'orders' });
+ChatbotOrder.belongsTo(FacebookPage, { foreignKey: 'page_id', as: 'page' });
+
 module.exports = {
   User,
   Team,
@@ -408,6 +638,13 @@ module.exports = {
   VideoProduct,
   VideoDailyStats,
   WeeklyReport,
+  FacebookPage,
+  FacebookOauthState,
+  FacebookUserSession,
+  ChatbotMessage,
+  ChatbotOrder,
+  ChatbotKnowledgeDoc,
+  ChatbotSetting,
   Report: WeeklyReport,
   sequelize,
 };

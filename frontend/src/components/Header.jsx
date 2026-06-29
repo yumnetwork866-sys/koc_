@@ -35,12 +35,12 @@ const Header = () => {
         </Link>
 
         <nav className="topbar__nav" aria-label="Primary">
-          <a href="/#features" className="topbar__nav-link">
-            Features
-          </a>
-          <a href="/#security" className="topbar__nav-link">
-            Security
-          </a>
+          <Link to="/dashboard" className="topbar__nav-link">
+            TikTok
+          </Link>
+          <Link to="/chatbot" className="topbar__nav-link">
+            Facebook
+          </Link>
           {hasSession ? (
             <button type="button" className="button button--ghost topbar__nav-button" onClick={handleSignOut}>
               Sign out

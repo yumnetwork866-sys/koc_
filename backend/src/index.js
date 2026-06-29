@@ -17,15 +17,20 @@ const productRoutes = require('./routes/productRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
 const importRoutes = require('./routes/importRoutes');
 const authRoutes = require('./routes/authRoutes');
+const chatbotRoutes = require('./routes/chatbotRoutes');
 const { sequelize, TikTokChannel, User } = require('./models');
 const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
 const { requireAdmin } = require('./lib/session');
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || true,
+  credentials: true,
+}));
 app.use(morgan('combined'));
 app.use(express.json());
+app.use(chatbotRoutes.publicRouter);
 
 // Routes
 app.get('/', (req, res) => {
@@ -42,6 +47,7 @@ app.use('/api/products', requireAdmin, productRoutes);
 app.use('/api/assignments', requireAdmin, assignmentRoutes);
 app.use('/api/import', requireAdmin, importRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/chatbot', requireAdmin, chatbotRoutes.adminRouter);
 
 const startServer = async () => {
   try {

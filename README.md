@@ -31,6 +31,12 @@ Before deploying, set `TIKTOK_TOKEN_ENCRYPTION_KEY` and `SESSION_SECRET` to sepa
 
 After TikTok redirects back, the backend exchanges the code, stores/updates the channel, and sends the browser to the frontend channels page with a status message.
 
+### TikTok sandbox login errors
+
+If TikTok shows `non_sandbox_target`, the current TikTok app is still using a sandbox configuration and the TikTok account trying to authorize has not been added as a sandbox target user. In TikTok for Developers, open the same app that owns `TIKTOK_CLIENT_KEY`, switch to Sandbox, add the TikTok account under Sandbox settings > Target users, authorize it for Login Kit, then apply changes. TikTok says target users can take up to an hour to appear after refresh.
+
+Also verify that the Login Kit redirect URI in the TikTok app exactly matches `TIKTOK_REDIRECT_URI`, including protocol, domain, path, and trailing slash. For the current local tunnel, that value should be the ngrok HTTPS callback URL exposed by the backend, not `localhost`.
+
 ## Daily TikTok sync
 
 The scheduler worker uses `TIKTOK_SYNC_SCHEDULE` (a five-field cron expression) and `TIKTOK_SYNC_TIMEZONE` from `backend/.env`. It refreshes OAuth access tokens as needed, processes up to `TIKTOK_SYNC_CONCURRENCY` channels in parallel, and uses a PostgreSQL advisory lock so overlapping job runs do not sync the same channel concurrently.
