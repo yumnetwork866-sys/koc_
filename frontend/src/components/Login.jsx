@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginAdmin } from '../lib/api';
+import { saveStoredSession } from '../lib/session';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -20,11 +21,11 @@ const Login = () => {
     event.preventDefault();
 
     try {
-          setLoading(true);
-          setError('');
-          const session = await loginAdmin(form);
-      localStorage.setItem('content_report_session', JSON.stringify(session));
-      navigate('/');
+      setLoading(true);
+      setError('');
+      const session = await loginAdmin(form);
+      saveStoredSession(session);
+      navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Không đăng nhập được');
     } finally {

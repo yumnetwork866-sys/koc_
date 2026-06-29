@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { clearStoredSession, hasValidSession } from '../lib/session';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -7,12 +8,20 @@ const Header = () => {
   const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
-    setHasSession(Boolean(localStorage.getItem('content_report_session')));
+    const syncSessionState = () => setHasSession(hasValidSession());
+
+    syncSessionState();
+    window.addEventListener('storage', syncSessionState);
+    window.addEventListener('content-report-session-change', syncSessionState);
+
+    return () => {
+      window.removeEventListener('storage', syncSessionState);
+      window.removeEventListener('content-report-session-change', syncSessionState);
+    };
   }, [location.pathname]);
 
   const handleSignOut = () => {
-    localStorage.removeItem('content_report_session');
-    setHasSession(false);
+    clearStoredSession();
     navigate('/');
   };
 

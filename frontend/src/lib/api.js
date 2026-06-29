@@ -1,3 +1,5 @@
+import { clearStoredSession, getStoredSession } from './session';
+
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 async function apiRequest(path, options = {}) {
@@ -5,12 +7,7 @@ async function apiRequest(path, options = {}) {
     ? JSON.stringify(options.body)
     : options.body;
 
-  let sessionToken = null;
-  try {
-    sessionToken = JSON.parse(localStorage.getItem('content_report_session'))?.token || null;
-  } catch {
-    localStorage.removeItem('content_report_session');
-  }
+  const sessionToken = getStoredSession()?.token || null;
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: 'no-store',
@@ -35,7 +32,13 @@ async function apiRequest(path, options = {}) {
       // Ignore JSON parse failures and keep the generic error.
     }
 
-    throw new Error(message);
+    if (response.status === 401 && path !== '/auth/login') {
+      clearStoredSession();
+    }
+
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
 
   return response.json();

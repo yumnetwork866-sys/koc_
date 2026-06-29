@@ -12,9 +12,31 @@ import EmployeeTable from './components/EmployeeTable';
 import ChannelManagement from './components/ChannelManagement';
 import Login from './components/Login';
 import LegalPage from './components/LegalPage';
+import { hasValidSession } from './lib/session';
 import './App.css';
 
 const privacyContactEmail = import.meta.env.VITE_PRIVACY_CONTACT_EMAIL || 'privacy@yumnetwork.vn';
+
+function RequireSession({ children }) {
+  const location = useLocation();
+
+  if (!hasValidSession()) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  return children;
+}
+
+function LoginRoute() {
+  const location = useLocation();
+  const destination = location.state?.from?.pathname || '/dashboard';
+
+  if (hasValidSession()) {
+    return <Navigate to={destination} replace />;
+  }
+
+  return <Login />;
+}
 
 function AppLayout() {
   const location = useLocation();
@@ -25,7 +47,7 @@ function AppLayout() {
     <div className={`app-shell${isLoginPage ? ' app-shell--auth' : ''}`}>
       <Header />
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<LoginRoute />} />
         <Route
           path="/"
           element={
@@ -147,79 +169,81 @@ function AppLayout() {
           <Route
             path="/*"
             element={
-              <div className="app-shell__layout">
-                <Sidebar />
-                <main className="app-shell__content">
-                  <Routes>
-                    <Route
-                      path="/dashboard"
-                      element={
-                        <Dashboard
-                          heroTitle="Content performance dashboard"
-                          heroSubtitle="Theo dõi KPI theo team, user, sản phẩm và nền tảng từ dữ liệu OAuth, import hoặc crawler."
-                        />
-                      }
-                    />
-                    <Route path="/manage" element={<Navigate to="/manage/teams" replace />} />
-                    <Route
-                      path="/manage/teams"
-                      element={
-                        <TeamManagement
-                          heroTitle="Team management"
-                          heroSubtitle="Tạo và kiểm soát các team Content MKT, Content AI, Tin tức để dashboard tính KPI đúng ownership."
-                        />
-                      }
-                    />
-                    <Route
-                      path="/manage/users"
-                      element={
-                        <EmployeeTable
-                          heroTitle="User management"
-                          heroSubtitle="Quản lý admin, leader và member trước khi leader gắn video cho từng người."
-                        />
-                      }
-                    />
-                    <Route
-                      path="/manage/channels"
-                      element={
-                        <ChannelManagement
-                          heroTitle="Channel management"
-                          heroSubtitle="Thêm kênh bằng OAuth, import file hoặc crawler public theo username."
-                        />
-                      }
-                    />
-                    <Route
-                      path="/videos"
-                      element={
-                        <VideoTable
-                          heroTitle="Video library"
-                          heroSubtitle="Kiểm tra toàn bộ video, metric nền tảng, sản phẩm, campaign và content type."
-                        />
-                      }
-                    />
-                    <Route
-                      path="/assignments"
-                      element={
-                        <AssignmentManagement
-                          heroTitle="Assign video ownership"
-                          heroSubtitle="Leader gắn video cho script, editor, uploader, actor hoặc AI creator để tính KPI theo user/team."
-                        />
-                      }
-                    />
-                    <Route
-                      path="/reports"
-                      element={
-                        <ReportFilter
-                          heroTitle="AI weekly report"
-                          heroSubtitle="Sinh báo cáo tuần từ video trong khoảng ngày, lưu vào weekly_reports để leader/admin xem lại."
-                        />
-                      }
-                    />
-                    <Route path="/terms" element={<Navigate to="/" replace />} />
-                    <Route path="/privacy" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </main>
-              </div>
+              <RequireSession>
+                <div className="app-shell__layout">
+                  <Sidebar />
+                  <main className="app-shell__content">
+                    <Routes>
+                      <Route
+                        path="/dashboard"
+                        element={
+                          <Dashboard
+                            heroTitle="Content performance dashboard"
+                            heroSubtitle="Theo dõi KPI theo team, user, sản phẩm và nền tảng từ dữ liệu OAuth, import hoặc crawler."
+                          />
+                        }
+                      />
+                      <Route path="/manage" element={<Navigate to="/manage/teams" replace />} />
+                      <Route
+                        path="/manage/teams"
+                        element={
+                          <TeamManagement
+                            heroTitle="Team management"
+                            heroSubtitle="Tạo và kiểm soát các team Content MKT, Content AI, Tin tức để dashboard tính KPI đúng ownership."
+                          />
+                        }
+                      />
+                      <Route
+                        path="/manage/users"
+                        element={
+                          <EmployeeTable
+                            heroTitle="User management"
+                            heroSubtitle="Quản lý admin, leader và member trước khi leader gắn video cho từng người."
+                          />
+                        }
+                      />
+                      <Route
+                        path="/manage/channels"
+                        element={
+                          <ChannelManagement
+                            heroTitle="Channel management"
+                            heroSubtitle="Thêm kênh bằng OAuth, import file hoặc crawler public theo username."
+                          />
+                        }
+                      />
+                      <Route
+                        path="/videos"
+                        element={
+                          <VideoTable
+                            heroTitle="Video library"
+                            heroSubtitle="Kiểm tra toàn bộ video, metric nền tảng, sản phẩm, campaign và content type."
+                          />
+                        }
+                      />
+                      <Route
+                        path="/assignments"
+                        element={
+                          <AssignmentManagement
+                            heroTitle="Assign video ownership"
+                            heroSubtitle="Leader gắn video cho script, editor, uploader, actor hoặc AI creator để tính KPI theo user/team."
+                          />
+                        }
+                      />
+                      <Route
+                        path="/reports"
+                        element={
+                          <ReportFilter
+                            heroTitle="AI weekly report"
+                            heroSubtitle="Sinh báo cáo tuần từ video trong khoảng ngày, lưu vào weekly_reports để leader/admin xem lại."
+                          />
+                        }
+                      />
+                      <Route path="/terms" element={<Navigate to="/" replace />} />
+                      <Route path="/privacy" element={<Navigate to="/" replace />} />
+                    </Routes>
+                  </main>
+                </div>
+              </RequireSession>
             }
           />
         )}
