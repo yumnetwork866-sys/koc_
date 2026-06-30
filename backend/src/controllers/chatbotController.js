@@ -482,7 +482,7 @@ async function startFacebookOAuth(_req, res) {
 async function facebookCallback(req, res) {
   const { code, state, error, error_description: errorDescription } = req.query;
   const redirect = (status, message, token = '') => {
-    const url = new URL(`${getFrontendUrl()}/chatbot`);
+    const url = new URL(`${getFrontendUrl()}/chatbot/dashboard`);
     url.searchParams.set('oauth_status', status);
     url.searchParams.set('oauth_message', message);
     if (token) url.hash = `fb_token=${encodeURIComponent(token)}`;
