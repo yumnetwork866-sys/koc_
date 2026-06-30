@@ -267,6 +267,19 @@ async function fetchMessengerProfile(pageId, senderId) {
   }
 }
 
+async function createIncomingMessage(pageId, senderId, text, via = 'customer') {
+  const profile = await fetchMessengerProfile(pageId, senderId);
+  return ChatbotMessage.create({
+    sender_id: senderId,
+    page_id: pageId,
+    display_name: profile.displayName,
+    avatar_url: profile.avatarUrl,
+    direction: 'in',
+    text,
+    via,
+  });
+}
+
 async function pageForSender(senderId) {
   const message = await ChatbotMessage.findOne({
     where: { sender_id: senderId, page_id: { [Op.ne]: null } },
@@ -446,7 +459,7 @@ const sendAction = (pageId, senderId, action) => callSendAPI(pageId, {
 });
 
 async function handleMessage(pageId, senderId, text) {
-  await ChatbotMessage.create({ sender_id: senderId, page_id: pageId, direction: 'in', text, via: 'customer' });
+  await createIncomingMessage(pageId, senderId, text, 'customer');
   await sendAction(pageId, senderId, 'typing_on');
   const lower = text.toLowerCase();
   const phone = await findPhone(text);
@@ -473,7 +486,7 @@ async function handleMessage(pageId, senderId, text) {
 }
 
 async function handlePostback(pageId, senderId, payload) {
-  await ChatbotMessage.create({ sender_id: senderId, page_id: pageId, direction: 'in', text: `[postback] ${payload}`, via: 'customer' });
+  await createIncomingMessage(pageId, senderId, `[postback] ${payload}`, 'customer');
   if (payload === 'GET_STARTED') {
     return sendText(pageId, senderId, 'Chào mừng bạn đến với Shop! Mình có thể giúp gì ạ?', ['Xem sản phẩm', 'Hỏi giá', 'CSKH'], 'script');
   }
@@ -706,9 +719,10 @@ async function listConversations(_req, res) {
   messages.forEach((message) => {
     const conversation = map.get(message.sender_id) || {
       senderId: message.sender_id,
-      displayName: message.sender_id,
-      avatarUrl: null,
+      displayName: message.display_name || message.sender_id,
+      avatarUrl: message.avatar_url || null,
       pageId: message.page_id,
+      lastMessageId: message.id,
       count: 0,
       lastText: '',
       lastTs: 0,
@@ -718,15 +732,32 @@ async function listConversations(_req, res) {
     const ts = new Date(message.created_at).getTime();
     if (ts >= conversation.lastTs) {
       conversation.pageId = message.page_id;
+      conversation.lastMessageId = message.id;
       conversation.lastTs = ts;
       conversation.lastText = message.text;
       conversation.lastDirection = message.direction;
+      conversation.displayName = message.display_name || conversation.displayName || message.sender_id;
+      conversation.avatarUrl = message.avatar_url || conversation.avatarUrl || null;
     }
     map.set(message.sender_id, conversation);
   });
 
   const conversations = await Promise.all([...map.values()].map(async (conversation) => {
+    if (conversation.displayName !== conversation.senderId || conversation.avatarUrl) {
+      return conversation;
+    }
+
     const profile = await fetchMessengerProfile(conversation.pageId, conversation.senderId);
+    if (conversation.lastMessageId && (profile.displayName !== conversation.senderId || profile.avatarUrl)) {
+      await ChatbotMessage.update(
+        {
+          display_name: profile.displayName,
+          avatar_url: profile.avatarUrl,
+        },
+        { where: { id: conversation.lastMessageId } },
+      );
+    }
+
     return {
       ...conversation,
       displayName: profile.displayName,

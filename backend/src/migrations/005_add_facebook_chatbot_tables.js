@@ -24,11 +24,15 @@ const statements = [
     id SERIAL PRIMARY KEY,
     sender_id VARCHAR(255) NOT NULL,
     page_id VARCHAR(255) REFERENCES facebook_pages(id) ON DELETE SET NULL,
+    display_name VARCHAR(255),
+    avatar_url TEXT,
     direction VARCHAR(16) NOT NULL,
     text TEXT NOT NULL,
     via VARCHAR(32) NOT NULL DEFAULT 'system',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+  `ALTER TABLE chatbot_messages ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)`,
+  `ALTER TABLE chatbot_messages ADD COLUMN IF NOT EXISTS avatar_url TEXT`,
   `CREATE TABLE IF NOT EXISTS chatbot_orders (
     id SERIAL PRIMARY KEY,
     sender_id VARCHAR(255) NOT NULL,

@@ -466,6 +466,14 @@ const ChatbotMessage = sequelize.define('ChatbotMessage', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  display_name: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  avatar_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
   direction: {
     type: DataTypes.STRING,
     allowNull: false,
