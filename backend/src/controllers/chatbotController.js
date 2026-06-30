@@ -18,6 +18,13 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const STATE_TTL_MS = 10 * 60 * 1000;
 const EMBED_MODEL = 'text-embedding-004';
 const DEFAULT_OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
+const DEBUG_FB_CHATBOT = process.env.FB_CHATBOT_DEBUG === '1' || process.env.FB_CHATBOT_DEBUG === 'true';
+
+function fbDebug(message, meta = {}) {
+  if (!DEBUG_FB_CHATBOT) return;
+  const suffix = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+  console.log(`[fb-chatbot] ${message}${suffix}`);
+}
 
 function parseModelList(rawValue) {
   return String(rawValue || '')
@@ -232,14 +239,17 @@ async function graphGet(path, params = {}) {
 
 async function currentFacebookSession(req) {
   const sid = readCookies(req).fb_chatbot_sid;
+  fbDebug('currentFacebookSession:cookie', { hasSid: Boolean(sid) });
   if (!sid) return null;
 
   const session = await FacebookUserSession.findByPk(sid);
   if (!session || new Date(session.expires_at).getTime() < Date.now()) {
+    fbDebug('currentFacebookSession:expired-or-missing', { hasSession: Boolean(session) });
     if (session) await session.destroy();
     return null;
   }
 
+  fbDebug('currentFacebookSession:ok', { userId: session.user_id, userName: session.user_name });
   return {
     sid: session.sid,
     userId: session.user_id,
@@ -492,6 +502,11 @@ async function facebookCallback(req, res) {
   const { code, state, error, error_description: errorDescription } = req.query;
   const redirect = (status, message) => res.redirect(`${getFrontendUrl()}/chatbot?oauth_status=${status}&oauth_message=${encodeURIComponent(message)}`);
 
+  fbDebug('facebookCallback:start', {
+    hasCode: Boolean(code),
+    hasState: Boolean(state),
+    hasError: Boolean(error),
+  });
   if (error) return redirect('error', errorDescription || error);
   if (!code || !state) return redirect('error', 'Missing Facebook OAuth code or state');
 
@@ -527,9 +542,11 @@ async function facebookCallback(req, res) {
       expires_at: new Date(Date.now() + SESSION_TTL_MS),
     });
     appendCookie(res, 'fb_chatbot_sid', sid, { maxAge: SESSION_TTL_MS / 1000 });
+    fbDebug('facebookCallback:success', { userId: me.id, userName: me.name, sidPrefix: sid.slice(0, 8) });
     return redirect('success', 'Facebook login connected');
   } catch (err) {
     console.error('Facebook OAuth callback error:', err);
+    fbDebug('facebookCallback:error', { message: err.message });
     return redirect('error', err.message);
   }
 }
@@ -543,6 +560,7 @@ async function facebookLogout(req, res) {
 
 async function getFacebookMe(req, res) {
   const session = await currentFacebookSession(req);
+  fbDebug('getFacebookMe', { loggedIn: Boolean(session), configured: fbConfigured() });
   res.json({
     configured: fbConfigured(),
     loggedIn: Boolean(session),
@@ -555,6 +573,7 @@ async function getManagedPages(req, res) {
   if (!session) return res.status(401).json({ message: 'Facebook login is required' });
 
   try {
+    fbDebug('getManagedPages:start', { userId: session.userId, userName: session.userName });
     const data = await graphGet('me/accounts', {
       fields: 'id,name,tasks',
       access_token: session.userToken,
@@ -567,8 +586,10 @@ async function getManagedPages(req, res) {
       canManage: (page.tasks || []).includes('MANAGE'),
       connected: connected.has(page.id),
     }));
+    fbDebug('getManagedPages:done', { count: pages.length, pageIds: pages.map((page) => page.id) });
     return res.json(pages);
   } catch (err) {
+    fbDebug('getManagedPages:error', { message: err.message });
     return res.status(500).json({ message: err.message });
   }
 }
@@ -579,6 +600,7 @@ async function connectPage(req, res) {
 
   try {
     const pageId = req.params.id;
+    fbDebug('connectPage:start', { pageId, userId: session.userId, userName: session.userName });
     const accounts = await graphGet('me/accounts', {
       fields: 'id,name,access_token',
       access_token: session.userToken,
@@ -612,9 +634,11 @@ async function connectPage(req, res) {
     if (existing) await existing.update(payload);
     else await FacebookPage.create({ ...payload, connected_at: new Date() });
 
+    fbDebug('connectPage:ok', { pageId: page.id, pageName: page.name });
     return res.json({ ok: true, id: page.id, name: page.name });
   } catch (err) {
     console.error('Connect Facebook page error:', err);
+    fbDebug('connectPage:error', { message: err.message });
     return res.status(500).json({ message: err.message });
   }
 }

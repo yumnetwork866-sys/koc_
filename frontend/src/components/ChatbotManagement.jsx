@@ -464,6 +464,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 </div>
               </article>
             )) : null}
+            {facebookMe.loggedIn && managedPages.length === 0 ? (
+              <div className="section-card__meta">Tài khoản Facebook đã kết nối nhưng chưa có Page nào hiện ra. Hãy kiểm tra lại quyền Page hoặc đảm bảo tài khoản này đang quản lý ít nhất một Page.</div>
+            ) : null}
             {connectedPages.map((page) => (
               <article className="mini-card" key={`connected-${page.id}`}>
                 <div className="mini-card__content">
@@ -477,6 +480,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 </div>
               </article>
             ))}
+            {!facebookMe.loggedIn && connectedPages.length === 0 ? (
+              <div className="section-card__meta">Chưa có Page nào được kết nối. Đăng nhập Facebook để chọn Page hoặc kết nối Page đã lưu trước đó.</div>
+            ) : null}
           </div>
         </section>
       </>

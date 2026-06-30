@@ -88,7 +88,7 @@ export const protectedRouteCards = [
     path: '/chatbot/dashboard',
     component: 'ChatbotManagement',
     props: {
-      heroTitle: 'Facebook page chatbot',
+      heroTitle: 'Facebook',
       heroSubtitle: '',
     },
   },
