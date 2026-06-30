@@ -1,0 +1,125 @@
+export const topNavItems = [
+  { to: '/dashboard', label: 'TikTok' },
+  { to: '/chatbot', label: 'Facebook' },
+];
+
+export const sidebarSections = [
+  {
+    title: 'TikTok',
+    items: [
+      { to: '/dashboard', label: 'Dashboard' },
+      { to: '/manage/teams', label: 'Teams' },
+      { to: '/manage/users', label: 'Users' },
+      { to: '/manage/channels', label: 'Channels' },
+      { to: '/videos', label: 'Videos' },
+      { to: '/assignments', label: 'Assign' },
+      { to: '/reports', label: 'Reports' },
+    ],
+  },
+  {
+    title: 'Facebook',
+    items: [
+      { to: '/chatbot/dashboard', label: 'Dashboard' },
+      { to: '/chatbot/chat', label: 'Chat' },
+      { to: '/chatbot/chat-setting', label: 'Chat setting' },
+      { to: '/chatbot/orders', label: 'Đơn hàng' },
+    ],
+  },
+];
+
+export const protectedRouteCards = [
+  {
+    path: '/dashboard',
+    component: 'Dashboard',
+    props: {
+      heroTitle: 'Content performance dashboard',
+      heroSubtitle: 'Theo dõi KPI theo team, user, sản phẩm và nền tảng từ dữ liệu OAuth, import hoặc crawler.',
+    },
+  },
+  {
+    path: '/manage/teams',
+    component: 'TeamManagement',
+    props: {
+      heroTitle: 'Team management',
+      heroSubtitle: 'Tạo và kiểm soát các team Content MKT, Content AI, Tin tức để dashboard tính KPI đúng ownership.',
+    },
+  },
+  {
+    path: '/manage/users',
+    component: 'EmployeeTable',
+    props: {
+      heroTitle: 'User management',
+      heroSubtitle: 'Quản lý admin, leader và member trước khi leader gắn video cho từng người.',
+    },
+  },
+  {
+    path: '/manage/channels',
+    component: 'ChannelManagement',
+    props: {
+      heroTitle: 'Channel management',
+      heroSubtitle: 'Thêm kênh bằng OAuth, import file hoặc crawler public theo username.',
+    },
+  },
+  {
+    path: '/videos',
+    component: 'VideoTable',
+    props: {
+      heroTitle: 'Video library',
+      heroSubtitle: 'Kiểm tra toàn bộ video, metric nền tảng, sản phẩm, campaign và content type.',
+    },
+  },
+  {
+    path: '/assignments',
+    component: 'AssignmentManagement',
+    props: {
+      heroTitle: 'Assign video ownership',
+      heroSubtitle: 'Leader gắn video cho script, editor, uploader, actor hoặc AI creator để tính KPI theo user/team.',
+    },
+  },
+  {
+    path: '/reports',
+    component: 'ReportFilter',
+    props: {
+      heroTitle: 'AI weekly report',
+      heroSubtitle: 'Sinh báo cáo tuần từ video trong khoảng ngày, lưu vào weekly_reports để leader/admin xem lại.',
+    },
+  },
+  {
+    path: '/chatbot/dashboard',
+    component: 'ChatbotManagement',
+    props: {
+      heroTitle: 'Facebook page chatbot',
+      heroSubtitle: '',
+    },
+  },
+  {
+    path: '/chatbot/chat',
+    component: 'ChatbotManagement',
+    props: {
+      heroTitle: 'Chat',
+      heroSubtitle: '',
+    },
+  },
+  {
+    path: '/chatbot/chat-setting',
+    component: 'ChatbotManagement',
+    props: {
+      heroTitle: 'Chat setting',
+      heroSubtitle: '',
+    },
+  },
+  {
+    path: '/chatbot/orders',
+    component: 'ChatbotManagement',
+    props: {
+      heroTitle: 'Orders',
+      heroSubtitle: '',
+    },
+  },
+];
+
+export const redirectRoutes = [
+  { path: '/manage', to: '/manage/teams' },
+  { path: '/chatbot', to: '/chatbot/dashboard' },
+  { path: '/chatbot/rag', to: '/chatbot/chat-setting' },
+];

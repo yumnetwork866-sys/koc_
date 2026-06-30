@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "test": "node --test",
     "db:init": "node src/migrations/run.js init",
     "db:migrate": "node src/migrations/run.js migrate",
     "db:rollback": "node src/migrations/run.js rollback",
@@ -14,8 +15,7 @@
     "db:reset": "node src/migrations/run.js reset",
     "db:check": "node src/db/check.js",
     "sync:tiktok": "node src/jobs/syncTiktokChannels.js",
-    "sync:tiktok:scheduler": "node src/jobs/scheduleTiktokSync.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "sync:tiktok:scheduler": "node src/jobs/scheduleTiktokSync.js"
   },
   "keywords": [],
   "author": "",

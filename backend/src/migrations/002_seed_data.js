@@ -7,6 +7,7 @@ const {
   VideoAssignment,
   WeeklyReport,
 } = require('../models');
+const { getAdminAccount } = require('../lib/adminAccount');
 
 const products = ['Sẹo', 'Rạn', 'Follicas', 'Lumilab', 'Mụn'];
 
@@ -16,11 +17,12 @@ const seedDatabase = async () => {
     const [contentAi] = await Team.findOrCreate({ where: { name: 'Content AI' } });
     const [news] = await Team.findOrCreate({ where: { name: 'Tin tức' } });
 
+    const adminAccount = getAdminAccount();
     const [admin] = await User.findOrCreate({
-      where: { email: 'admin@company.com' },
+      where: { email: adminAccount.email },
       defaults: {
-        name: 'Admin User',
-        email: 'admin@company.com',
+        name: adminAccount.username,
+        email: adminAccount.email,
         role: 'admin',
         team_id: null,
       },

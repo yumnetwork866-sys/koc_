@@ -28,6 +28,7 @@ TIKTOK_SCOPES=user.info.basic
 ```
 
 Before deploying, set `TIKTOK_TOKEN_ENCRYPTION_KEY` and `SESSION_SECRET` to separate, unique secrets of at least 32 characters. Set `VITE_PRIVACY_CONTACT_EMAIL` in the frontend environment to the monitored address used for privacy and deletion requests.
+If you want to override the default bootstrap admin account, set `ADMIN_USERNAME` in `backend/.env`. It can be a plain username like `megumin`; the backend will derive a valid internal email for the admin record automatically.
 
 After TikTok redirects back, the backend exchanges the code, stores/updates the channel, and sends the browser to the frontend channels page with a status message.
 

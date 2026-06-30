@@ -60,16 +60,6 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const totals = useMemo(() => {
-    return videos.reduce((acc, video) => {
-      acc.views += Number(video.views || 0);
-      acc.likes += Number(video.likes || 0);
-      acc.comments += Number(video.comments || 0);
-      acc.shares += Number(video.shares || 0);
-      return acc;
-    }, { views: 0, likes: 0, comments: 0, shares: 0 });
-  }, [videos]);
-
   const filteredVideos = useMemo(() => {
     if (selectedChannelId === 'all') {
       return videos;

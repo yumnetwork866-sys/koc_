@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { clearStoredSession, hasValidSession } from '../lib/session';
+import { topNavItems } from '../routes/navigation';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -35,12 +36,11 @@ const Header = () => {
         </Link>
 
         <nav className="topbar__nav" aria-label="Primary">
-          <Link to="/dashboard" className="topbar__nav-link">
-            TikTok
-          </Link>
-          <Link to="/chatbot" className="topbar__nav-link">
-            Facebook
-          </Link>
+          {topNavItems.map((item) => (
+            <Link key={item.to} to={item.to} className="topbar__nav-link">
+              {item.label}
+            </Link>
+          ))}
           {hasSession ? (
             <button type="button" className="button button--ghost topbar__nav-button" onClick={handleSignOut}>
               Sign out

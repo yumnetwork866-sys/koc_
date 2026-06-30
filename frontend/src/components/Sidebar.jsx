@@ -1,36 +1,13 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-
-const navSections = [
-  {
-    title: 'TikTok',
-    items: [
-      { to: '/dashboard', label: 'Dashboard' },
-      { to: '/manage/teams', label: 'Teams' },
-      { to: '/manage/users', label: 'Users' },
-      { to: '/manage/channels', label: 'Channels' },
-      { to: '/videos', label: 'Videos' },
-      { to: '/assignments', label: 'Assign' },
-      { to: '/reports', label: 'Reports' },
-    ],
-  },
-  {
-    title: 'Facebook',
-    items: [
-      { to: '/chatbot/dashboard', label: 'Dashboard' },
-      { to: '/chatbot/chat', label: 'Chat' },
-      { to: '/chatbot/chat-setting', label: 'Chat setting' },
-      { to: '/chatbot/orders', label: 'Đơn hàng' },
-    ],
-  },
-];
+import { sidebarSections } from '../routes/navigation';
 
 const Sidebar = () => {
   const location = useLocation();
   const isFacebookArea = location.pathname.startsWith('/chatbot');
   const visibleSections = isFacebookArea
-    ? navSections.filter((section) => section.title === 'Facebook')
-    : navSections.filter((section) => section.title === 'TikTok');
+    ? sidebarSections.filter((section) => section.title === 'Facebook')
+    : sidebarSections.filter((section) => section.title === 'TikTok');
 
   return (
     <aside className="sidebar">

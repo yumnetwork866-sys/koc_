@@ -4,7 +4,6 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
 
-const app = express();
 const PORT = process.env.PORT || 8000;
 
 // Import routes
@@ -21,33 +20,39 @@ const chatbotRoutes = require('./routes/chatbotRoutes');
 const { sequelize, TikTokChannel, User } = require('./models');
 const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
 const { requireAdmin } = require('./lib/session');
+const { getAdminAccount } = require('./lib/adminAccount');
 
-// Middleware
-app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || true,
-  credentials: true,
-}));
-app.use(morgan('combined'));
-app.use(express.json());
-app.use(chatbotRoutes.publicRouter);
+const createApp = () => {
+  const app = express();
 
-// Routes
-app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to Content Performance Reporting API' });
-});
+  app.use(helmet());
+  app.use(cors({
+    origin: process.env.FRONTEND_URL || true,
+    credentials: true,
+  }));
+  app.use(morgan('combined'));
+  app.use(express.json());
+  app.use(chatbotRoutes.publicRouter);
 
-// API routes
-app.use('/api/users', requireAdmin, userRoutes);
-app.use('/api/teams', requireAdmin, teamRoutes);
-app.use('/api/videos', requireAdmin, videoRoutes);
-app.use('/api/reports', requireAdmin, reportRoutes);
-app.use('/api/channels', channelRoutes);
-app.use('/api/products', requireAdmin, productRoutes);
-app.use('/api/assignments', requireAdmin, assignmentRoutes);
-app.use('/api/import', requireAdmin, importRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/chatbot', requireAdmin, chatbotRoutes.adminRouter);
+  app.get('/', (req, res) => {
+    res.json({ message: 'Welcome to Content Performance Reporting API' });
+  });
+
+  app.use('/api/users', requireAdmin, userRoutes);
+  app.use('/api/teams', requireAdmin, teamRoutes);
+  app.use('/api/videos', requireAdmin, videoRoutes);
+  app.use('/api/reports', requireAdmin, reportRoutes);
+  app.use('/api/channels', channelRoutes);
+  app.use('/api/products', requireAdmin, productRoutes);
+  app.use('/api/assignments', requireAdmin, assignmentRoutes);
+  app.use('/api/import', requireAdmin, importRoutes);
+  app.use('/api/auth', authRoutes);
+  app.use('/api/chatbot', requireAdmin, chatbotRoutes.adminRouter);
+
+  return app;
+};
+
+const app = createApp();
 
 const startServer = async () => {
   try {
@@ -75,19 +80,22 @@ const startServer = async () => {
       }
     }
 
-    const adminUsername = process.env.ADMIN_USERNAME || 'admin@company.com';
+    const adminAccount = getAdminAccount();
     const [adminUser] = await User.findOrCreate({
-      where: { email: 'admin@company.com' },
+      where: { email: adminAccount.email },
       defaults: {
-        name: adminUsername,
-        email: 'admin@company.com',
+        name: adminAccount.username,
+        email: adminAccount.email,
         role: 'admin',
         team_id: null,
       },
     });
 
-    if (adminUser.name !== adminUsername) {
-      await adminUser.update({ name: adminUsername });
+    if (adminUser.name !== adminAccount.username || adminUser.email !== adminAccount.email) {
+      await adminUser.update({
+        name: adminAccount.username,
+        email: adminAccount.email,
+      });
     }
 
     app.listen(PORT, () => {
@@ -99,6 +107,8 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
 
-module.exports = app;
+module.exports = { app, createApp, startServer };
