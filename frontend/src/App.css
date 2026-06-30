@@ -1423,7 +1423,9 @@
 
 .conversation-row {
   display: grid;
-  gap: 6px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
   width: 100%;
   padding: 14px;
   border: 0;
@@ -1439,7 +1441,35 @@
   background: #eef2ff;
 }
 
-.conversation-row span {
+.conversation-row__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.conversation-row__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.conversation-row__content {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.conversation-row__content span {
   overflow: hidden;
   font-size: 0.92rem;
   font-weight: 700;
@@ -1447,7 +1477,7 @@
   white-space: nowrap;
 }
 
-.conversation-row small {
+.conversation-row__content small {
   overflow: hidden;
   color: #64748b;
   font-size: 0.82rem;

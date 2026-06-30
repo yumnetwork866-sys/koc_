@@ -247,6 +247,26 @@ async function tokenForPage(pageId) {
   return process.env.PAGE_ACCESS_TOKEN || null;
 }
 
+async function fetchMessengerProfile(pageId, senderId) {
+  const token = await tokenForPage(pageId);
+  if (!token) return { displayName: senderId, avatarUrl: null };
+
+  try {
+    const data = await graphGet(senderId, {
+      fields: 'first_name,last_name,profile_pic',
+      access_token: token,
+    });
+    const displayName = [data.first_name, data.last_name].filter(Boolean).join(' ').trim() || senderId;
+    return {
+      displayName,
+      avatarUrl: data.profile_pic || null,
+    };
+  } catch (error) {
+    fbDebug('fetchMessengerProfile:error', { senderId, message: error.message });
+    return { displayName: senderId, avatarUrl: null };
+  }
+}
+
 async function pageForSender(senderId) {
   const message = await ChatbotMessage.findOne({
     where: { sender_id: senderId, page_id: { [Op.ne]: null } },
@@ -686,6 +706,8 @@ async function listConversations(_req, res) {
   messages.forEach((message) => {
     const conversation = map.get(message.sender_id) || {
       senderId: message.sender_id,
+      displayName: message.sender_id,
+      avatarUrl: null,
       pageId: message.page_id,
       count: 0,
       lastText: '',
@@ -702,7 +724,17 @@ async function listConversations(_req, res) {
     }
     map.set(message.sender_id, conversation);
   });
-  res.json([...map.values()].sort((a, b) => b.lastTs - a.lastTs));
+
+  const conversations = await Promise.all([...map.values()].map(async (conversation) => {
+    const profile = await fetchMessengerProfile(conversation.pageId, conversation.senderId);
+    return {
+      ...conversation,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+    };
+  }));
+
+  res.json(conversations.sort((a, b) => b.lastTs - a.lastTs));
 }
 
 async function listMessages(req, res) {

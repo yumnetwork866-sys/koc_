@@ -36,6 +36,15 @@ const formatTime = (value) => {
 
 const orderStatuses = ['new', 'confirmed', 'done', 'cancelled'];
 
+const getConversationAvatarText = (conversation) => {
+  const source = String(conversation?.displayName || conversation?.senderId || '?').trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  const initials = parts.length >= 2
+    ? `${parts[0][0] || ''}${parts[parts.length - 1][0] || ''}`
+    : source.slice(0, 2);
+  return initials.toUpperCase();
+};
+
 const mergeModelOptions = (baseModels, ollamaModels, currentSetting) => {
   const map = new Map();
   [...(baseModels || []), ...(ollamaModels || [])].forEach((item) => {
@@ -209,7 +218,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   const handleConnectPage = async (pageId) => {
     await connectFacebookPage(pageId);
-    setToast({ status: 'success', message: 'Đã kết nối Page' });
     await refresh();
   };
 
@@ -290,8 +298,17 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     className={`conversation-row${conversation.senderId === selectedSenderId ? ' conversation-row--active' : ''}`}
                     onClick={() => setSelectedSenderId(conversation.senderId)}
                   >
-                    <span>{conversation.senderId}</span>
-                    <small>{conversation.lastText}</small>
+                    <span className="conversation-row__avatar" aria-hidden="true">
+                      {conversation.avatarUrl ? (
+                        <img src={conversation.avatarUrl} alt="" />
+                      ) : (
+                        getConversationAvatarText(conversation)
+                      )}
+                    </span>
+                    <span className="conversation-row__content">
+                      <span>{conversation.displayName || conversation.senderId}</span>
+                      <small>{conversation.lastText}</small>
+                    </span>
                   </button>
                 ))}
               </div>
