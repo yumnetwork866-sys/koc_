@@ -146,25 +146,39 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     return () => controller.abort();
   }, [loadOverview]);
 
+  const refresh = useCallback(async () => {
+    await loadOverview();
+    if (selectedSenderId) await loadMessages(selectedSenderId);
+  }, [loadMessages, loadOverview, selectedSenderId]);
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const status = params.get('oauth_status');
     if (!status) return;
-    setToast({
-      status,
-      message: params.get('oauth_message') || (status === 'success' ? 'Đã kết nối tài khoản Facebook' : 'Kết nối tài khoản Facebook thất bại'),
-    });
-    navigate({ pathname: location.pathname, search: '' }, { replace: true });
-  }, [location.search, location.pathname, navigate]);
+
+    const syncAfterOauth = async () => {
+      setToast({
+        status,
+        message: params.get('oauth_message') || (status === 'success' ? 'Đã kết nối tài khoản Facebook' : 'Kết nối tài khoản Facebook thất bại'),
+      });
+
+      if (status === 'success') {
+        try {
+          await refresh();
+        } catch (err) {
+          if (err.name !== 'AbortError') setError(err.message || 'Không đồng bộ được trạng thái Facebook');
+        }
+      }
+
+      navigate({ pathname: location.pathname, search: '' }, { replace: true });
+    };
+
+    syncAfterOauth();
+  }, [location.pathname, location.search, navigate, refresh]);
 
   useEffect(() => {
     loadMessages(selectedSenderId).catch((err) => setError(err.message || 'Không tải được hội thoại'));
   }, [loadMessages, selectedSenderId]);
-
-  const refresh = async () => {
-    await loadOverview();
-    if (selectedSenderId) await loadMessages(selectedSenderId);
-  };
 
   const startFacebookLogin = async () => {
     try {
