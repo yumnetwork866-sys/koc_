@@ -13,6 +13,7 @@ const migrations = [
   require('./004_add_kpi_indexes'),
   require('./005_add_facebook_chatbot_tables'),
   require('./006_add_chatbot_settings'),
+  require('./007_add_chatbot_message_profile_fields'),
 ];
 
 const createMigrationRunner = ({
