@@ -22,6 +22,8 @@ const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
 const { requireAdmin } = require('./lib/session');
 const { getAdminAccount } = require('./lib/adminAccount');
 
+const httpLogFormat = process.env.HTTP_LOG_FORMAT || ':method :url :status :response-time ms';
+
 const createApp = () => {
   const app = express();
 
@@ -30,7 +32,7 @@ const createApp = () => {
     origin: process.env.FRONTEND_URL || true,
     credentials: true,
   }));
-  app.use(morgan('combined'));
+  app.use(morgan(httpLogFormat));
   app.use(express.json());
   app.use(chatbotRoutes.publicRouter);
 
