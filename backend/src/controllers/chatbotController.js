@@ -162,6 +162,7 @@ const getBaseUrl = () => (process.env.BASE_URL || `http://localhost:${process.en
 const getFrontendUrl = () => (process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/+$/, '');
 const getRedirectUri = () => `${getBaseUrl()}/api/chatbot/facebook/callback`;
 const fbConfigured = () => Boolean(process.env.FB_APP_ID && process.env.FB_APP_SECRET);
+const getFacebookSessionToken = (req) => req.get('x-fb-chatbot-token')?.trim() || null;
 
 const loginScopes = [
   'public_profile',
@@ -170,26 +171,6 @@ const loginScopes = [
   'pages_manage_metadata',
   'pages_read_engagement',
 ].join(',');
-
-function readCookies(req) {
-  return Object.fromEntries(
-    (req.headers.cookie || '')
-      .split(';')
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .map((item) => {
-        const index = item.indexOf('=');
-        return [item.slice(0, index), decodeURIComponent(item.slice(index + 1))];
-      }),
-  );
-}
-
-function appendCookie(res, name, value, options = {}) {
-  const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
-  if (getBaseUrl().startsWith('https')) parts.push('Secure');
-  if (options.maxAge != null) parts.push(`Max-Age=${options.maxAge}`);
-  res.append('Set-Cookie', parts.join('; '));
-}
 
 function toMessage(row) {
   return {
@@ -238,8 +219,8 @@ async function graphGet(path, params = {}) {
 }
 
 async function currentFacebookSession(req) {
-  const sid = readCookies(req).fb_chatbot_sid;
-  fbDebug('currentFacebookSession:cookie', { hasSid: Boolean(sid) });
+  const sid = getFacebookSessionToken(req);
+  fbDebug('currentFacebookSession:token', { hasToken: Boolean(sid) });
   if (!sid) return null;
 
   const session = await FacebookUserSession.findByPk(sid);
@@ -500,7 +481,13 @@ async function startFacebookOAuth(_req, res) {
 
 async function facebookCallback(req, res) {
   const { code, state, error, error_description: errorDescription } = req.query;
-  const redirect = (status, message) => res.redirect(`${getFrontendUrl()}/chatbot?oauth_status=${status}&oauth_message=${encodeURIComponent(message)}`);
+  const redirect = (status, message, token = '') => {
+    const url = new URL(`${getFrontendUrl()}/chatbot`);
+    url.searchParams.set('oauth_status', status);
+    url.searchParams.set('oauth_message', message);
+    if (token) url.hash = `fb_token=${encodeURIComponent(token)}`;
+    return res.redirect(url.toString());
+  };
 
   fbDebug('facebookCallback:start', {
     hasCode: Boolean(code),
@@ -541,9 +528,8 @@ async function facebookCallback(req, res) {
       user_token_encrypted: encryptToken(userToken),
       expires_at: new Date(Date.now() + SESSION_TTL_MS),
     });
-    appendCookie(res, 'fb_chatbot_sid', sid, { maxAge: SESSION_TTL_MS / 1000 });
     fbDebug('facebookCallback:success', { userId: me.id, userName: me.name, sidPrefix: sid.slice(0, 8) });
-    return redirect('success', 'Facebook login connected');
+    return redirect('success', 'Facebook login connected', sid);
   } catch (err) {
     console.error('Facebook OAuth callback error:', err);
     fbDebug('facebookCallback:error', { message: err.message });
@@ -552,9 +538,8 @@ async function facebookCallback(req, res) {
 }
 
 async function facebookLogout(req, res) {
-  const sid = readCookies(req).fb_chatbot_sid;
+  const sid = getFacebookSessionToken(req);
   if (sid) await FacebookUserSession.destroy({ where: { sid } });
-  appendCookie(res, 'fb_chatbot_sid', '', { maxAge: 0 });
   res.json({ ok: true });
 }
 

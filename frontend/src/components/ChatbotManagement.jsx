@@ -21,6 +21,10 @@ import {
   updateChatbotSettings,
   updateChatbotOrder,
 } from '../lib/api';
+import {
+  clearStoredFacebookChatbotToken,
+  saveStoredFacebookChatbotToken,
+} from '../lib/session';
 
 const formatTime = (value) => {
   if (!value) return '-';
@@ -96,6 +100,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     ]);
 
     setFacebookMe(me);
+    if (!me.loggedIn) {
+      clearStoredFacebookChatbotToken();
+    }
     setConnectedPages(pages);
     setStats(nextStats);
     setConversations(nextConversations);
@@ -155,6 +162,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     const params = new URLSearchParams(location.search);
     const status = params.get('oauth_status');
     if (!status) return;
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const fbToken = hash.get('fb_token');
 
     const syncAfterOauth = async () => {
       setToast({
@@ -163,18 +172,21 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       });
 
       if (status === 'success') {
+        if (fbToken) saveStoredFacebookChatbotToken(fbToken);
         try {
           await refresh();
         } catch (err) {
           if (err.name !== 'AbortError') setError(err.message || 'Không đồng bộ được trạng thái Facebook');
         }
+      } else {
+        clearStoredFacebookChatbotToken();
       }
 
-      navigate({ pathname: location.pathname, search: '' }, { replace: true });
+      navigate({ pathname: location.pathname, search: '', hash: '' }, { replace: true });
     };
 
     syncAfterOauth();
-  }, [location.pathname, location.search, navigate, refresh]);
+  }, [location.hash, location.pathname, location.search, navigate, refresh]);
 
   useEffect(() => {
     loadMessages(selectedSenderId).catch((err) => setError(err.message || 'Không tải được hội thoại'));
@@ -191,6 +203,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   const handleLogoutFacebook = async () => {
     await logoutChatbotFacebook();
+    clearStoredFacebookChatbotToken();
     await refresh();
   };
 
@@ -480,9 +493,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 </div>
               </article>
             ))}
-            {!facebookMe.loggedIn && connectedPages.length === 0 ? (
-              <div className="section-card__meta">Chưa có Page nào được kết nối. Đăng nhập Facebook để chọn Page hoặc kết nối Page đã lưu trước đó.</div>
-            ) : null}
           </div>
         </section>
       </>

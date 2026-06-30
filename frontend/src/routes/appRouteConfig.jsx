@@ -1,19 +1,20 @@
-import React from 'react';
+import React, { lazy } from 'react';
 import { Navigate } from 'react-router-dom';
-import AssignmentManagement from '../components/AssignmentManagement';
-import ChannelManagement from '../components/ChannelManagement';
-import ChatbotManagement from '../components/ChatbotManagement';
-import Dashboard from '../components/Dashboard';
-import EmployeeTable from '../components/EmployeeTable';
-import HomePage from '../components/HomePage';
-import Login from '../components/Login';
-import ReportFilter from '../components/ReportFilter';
-import TeamManagement from '../components/TeamManagement';
-import VideoTable from '../components/VideoTable';
-import TermsPage from '../pages/legal/TermsPage';
-import PrivacyPage from '../pages/legal/PrivacyPage';
 import { LoginRoute } from './guards';
 import { protectedRouteCards, redirectRoutes } from './navigation';
+
+const AssignmentManagement = lazy(() => import('../components/AssignmentManagement'));
+const ChannelManagement = lazy(() => import('../components/ChannelManagement'));
+const ChatbotManagement = lazy(() => import('../components/ChatbotManagement'));
+const Dashboard = lazy(() => import('../components/Dashboard'));
+const EmployeeTable = lazy(() => import('../components/EmployeeTable'));
+const HomePage = lazy(() => import('../components/HomePage'));
+const Login = lazy(() => import('../components/Login'));
+const ReportFilter = lazy(() => import('../components/ReportFilter'));
+const TeamManagement = lazy(() => import('../components/TeamManagement'));
+const VideoTable = lazy(() => import('../components/VideoTable'));
+const TermsPage = lazy(() => import('../pages/legal/TermsPage'));
+const PrivacyPage = lazy(() => import('../pages/legal/PrivacyPage'));
 
 const componentMap = {
   Dashboard,
@@ -49,4 +50,3 @@ export const protectedRedirectConfig = redirectRoutes.map(({ path, to }) => ({
   path,
   element: <Navigate to={to} replace />,
 }));
-

@@ -1,4 +1,5 @@
 const SESSION_STORAGE_KEY = 'content_report_session';
+const FB_CHATBOT_TOKEN_STORAGE_KEY = 'content_report_fb_chatbot_token';
 
 function decodeTokenPayload(token) {
   const payload = token?.split('.')?.[0];
@@ -42,4 +43,28 @@ export function clearStoredSession() {
 
 export function hasValidSession() {
   return Boolean(getStoredSession());
+}
+
+export function getStoredFacebookChatbotToken() {
+  try {
+    const token = localStorage.getItem(FB_CHATBOT_TOKEN_STORAGE_KEY);
+    return token || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredFacebookChatbotToken(token) {
+  if (!token) {
+    clearStoredFacebookChatbotToken();
+    return;
+  }
+
+  localStorage.setItem(FB_CHATBOT_TOKEN_STORAGE_KEY, token);
+  window.dispatchEvent(new Event('content-report-fb-chatbot-token-change'));
+}
+
+export function clearStoredFacebookChatbotToken() {
+  localStorage.removeItem(FB_CHATBOT_TOKEN_STORAGE_KEY);
+  window.dispatchEvent(new Event('content-report-fb-chatbot-token-change'));
 }

@@ -1,4 +1,4 @@
-import { clearStoredSession, getStoredSession } from './session';
+import { clearStoredSession, getStoredSession, getStoredFacebookChatbotToken } from './session';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
@@ -8,6 +8,7 @@ async function apiRequest(path, options = {}) {
     : options.body;
 
   const sessionToken = getStoredSession()?.token || null;
+  const facebookChatbotToken = options.facebookToken || null;
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: 'no-store',
@@ -15,6 +16,7 @@ async function apiRequest(path, options = {}) {
     headers: {
       'Content-Type': 'application/json',
       ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+      ...(facebookChatbotToken ? { 'X-FB-Chatbot-Token': facebookChatbotToken } : {}),
       ...(options.headers || {}),
     },
     ...options,
@@ -170,23 +172,23 @@ export function getFacebookOauthUrl() {
 }
 
 export function fetchChatbotFacebookMe(signal) {
-  return apiRequest('/chatbot/facebook/me', { signal });
+  return apiRequest('/chatbot/facebook/me', { signal, facebookToken: getStoredFacebookChatbotToken() });
 }
 
 export function logoutChatbotFacebook() {
-  return apiRequest('/chatbot/facebook/logout', { method: 'POST' });
+  return apiRequest('/chatbot/facebook/logout', { method: 'POST', facebookToken: getStoredFacebookChatbotToken() });
 }
 
 export function fetchFacebookManagedPages(signal) {
-  return apiRequest('/chatbot/facebook/me/pages', { signal });
+  return apiRequest('/chatbot/facebook/me/pages', { signal, facebookToken: getStoredFacebookChatbotToken() });
 }
 
 export function connectFacebookPage(pageId) {
-  return apiRequest(`/chatbot/pages/${pageId}/connect`, { method: 'POST' });
+  return apiRequest(`/chatbot/pages/${pageId}/connect`, { method: 'POST', facebookToken: getStoredFacebookChatbotToken() });
 }
 
 export function disconnectFacebookPage(pageId) {
-  return apiRequest(`/chatbot/pages/${pageId}`, { method: 'DELETE' });
+  return apiRequest(`/chatbot/pages/${pageId}`, { method: 'DELETE', facebookToken: getStoredFacebookChatbotToken() });
 }
 
 export function fetchChatbotPages(signal) {
