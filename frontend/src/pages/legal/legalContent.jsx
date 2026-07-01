@@ -93,3 +93,33 @@ export const PrivacyContent = () => (
   </>
 );
 
+export const DataDeletionContent = () => (
+  <>
+    <p>
+      This page explains how to request deletion of personal data associated with Content Performance Report and
+      connected platform accounts.
+    </p>
+    <h2>How to request deletion</h2>
+    <p>
+      Send an email to <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a> from the account you want
+      reviewed. Include the platform name, the account identifier if you know it, and a clear request to delete your
+      data.
+    </p>
+    <h2>What we delete</h2>
+    <p>
+      When we receive a valid request, we review the account and delete or disconnect the relevant local data where
+      applicable. This may include stored access tokens, connected page records, conversation records, orders,
+      knowledge documents, or reporting data linked to the account.
+    </p>
+    <h2>What may be retained</h2>
+    <p>
+      We may keep limited records when needed for security, audit, legal, or operational reasons, such as backup logs
+      or records required by law. Where deletion is completed, the account will be disconnected from the service.
+    </p>
+    <h2>Response time</h2>
+    <p>
+      We aim to respond within 30 days, subject to identity verification and applicable law. If you need to follow up,
+      use the same email address above.
+    </p>
+  </>
+);

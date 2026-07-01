@@ -179,6 +179,7 @@ const HomePage = () => {
       <section className="home-page__legal-links" aria-label="Legal links">
         <Link to="/terms">Terms of Service</Link>
         <Link to="/privacy">Privacy Policy</Link>
+        <Link to="/data-deletion">Data Deletion</Link>
       </section>
     </div>
   );

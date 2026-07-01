@@ -19,6 +19,9 @@ const Footer = () => {
             <NavLink to="/privacy" className="footer__link">
               Privacy Policy
             </NavLink>
+            <NavLink to="/data-deletion" className="footer__link">
+              Data Deletion
+            </NavLink>
           </div>
         </div>
       </div>

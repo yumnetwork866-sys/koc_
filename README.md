@@ -32,6 +32,15 @@ If you want to override the default bootstrap admin account, set `ADMIN_USERNAME
 
 For the Facebook webhook, Meta should call the public API origin that serves `GET /webhook`. In this project that is the backend host from `BASE_URL`, so the callback URL should be `https://backend_domain.vn/webhook` if you are using the current deployment values. Do not point Meta at the frontend host unless that host proxies `/webhook` to the backend.
 
+For Meta review, the public website should expose these direct URLs on the frontend host and they should all resolve without authentication:
+
+- `/`
+- `/privacy`
+- `/terms`
+- `/data-deletion`
+
+If you host the frontend on static infrastructure, make sure the server rewrites every unknown path back to `index.html` so deep links like `/privacy` and `/data-deletion` do not 404 on refresh or direct visit.
+
 After TikTok redirects back, the backend exchanges the code, stores/updates the channel, and sends the browser to the frontend channels page with a status message.
 
 ### TikTok sandbox login errors

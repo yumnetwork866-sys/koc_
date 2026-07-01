@@ -4,11 +4,10 @@ import { PrivacyContent } from './legalContent';
 
 const PrivacyPage = () => {
   return (
-    <LegalPage title="Privacy Policy" updatedAt="June 26, 2026">
+    <LegalPage title="Privacy Policy" updatedAt="July 1, 2026">
       <PrivacyContent />
     </LegalPage>
   );
 };
 
 export default PrivacyPage;
-

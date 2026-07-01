@@ -15,6 +15,7 @@ const TeamManagement = lazy(() => import('../components/TeamManagement'));
 const VideoTable = lazy(() => import('../components/VideoTable'));
 const TermsPage = lazy(() => import('../pages/legal/TermsPage'));
 const PrivacyPage = lazy(() => import('../pages/legal/PrivacyPage'));
+const DataDeletionPage = lazy(() => import('../pages/legal/DataDeletionPage'));
 
 const componentMap = {
   Dashboard,
@@ -39,6 +40,7 @@ export const publicRouteConfig = [
   },
   { path: '/terms', element: <TermsPage /> },
   { path: '/privacy', element: <PrivacyPage /> },
+  { path: '/data-deletion', element: <DataDeletionPage /> },
 ];
 
 export const protectedRouteConfig = protectedRouteCards.map(({ path, component, props }) => ({
