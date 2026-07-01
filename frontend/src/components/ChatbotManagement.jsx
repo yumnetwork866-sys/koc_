@@ -45,6 +45,15 @@ const getConversationAvatarText = (conversation) => {
   return initials.toUpperCase();
 };
 
+const getPageAvatarText = (name) => {
+  const source = String(name || '?').trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  const initials = parts.length >= 2
+    ? `${parts[0][0] || ''}${parts[parts.length - 1][0] || ''}`
+    : source.slice(0, 2);
+  return initials.toUpperCase();
+};
+
 const mergeModelOptions = (baseModels, ollamaModels, currentSetting) => {
   const map = new Map();
   [...(baseModels || []), ...(ollamaModels || [])].forEach((item) => {
@@ -91,6 +100,11 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.senderId === selectedSenderId),
     [conversations, selectedSenderId],
+  );
+
+  const managedPageMap = useMemo(
+    () => new Map(managedPages.map((page) => [page.id, page])),
+    [managedPages],
   );
 
   const loadOverview = useCallback(async (signal) => {
@@ -226,6 +240,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     await disconnectFacebookPage(page.id);
     await refresh();
   };
+
+  const getPageAvatarUrl = (page) => managedPageMap.get(page.id)?.avatarUrl || page.avatarUrl || null;
 
   const handleSendReply = async (event) => {
     event.preventDefault();
@@ -460,10 +476,10 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
         <section className="section-card">
           <div className="section-card__header">
-            <div>
+              <div>
             <h2 className="section-card__title">Kết nối Page</h2>
             <p className="section-card__subtitle">
-              {facebookMe.loggedIn ? `Đã kết nối tài khoản Facebook: ${facebookMe.name}` : 'Kết nối tài khoản Facebook để chọn Page quản lý.'}
+              {facebookMe.loggedIn ? `Đã kết nối tài khoản Facebook: ${facebookMe.name}` : null}
             </p>
           </div>
           <div className="actions">
@@ -478,6 +494,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
           <div className="chatbot-page-grid">
             {facebookMe.loggedIn ? managedPages.map((page) => (
               <article className="mini-card" key={page.id}>
+                <span className="mini-card__avatar" aria-hidden="true">
+                  {getPageAvatarUrl(page) ? (
+                    <img src={getPageAvatarUrl(page)} alt="" />
+                  ) : (
+                    getPageAvatarText(page.name)
+                  )}
+                </span>
                 <div className="mini-card__content">
                   <h3>{page.name}</h3>
                   <p>{page.connected ? 'Đã kết nối webhook' : page.canManage ? 'Có thể kết nối' : 'Thiếu quyền quản lý'}</p>
@@ -499,6 +522,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
             ) : null}
             {connectedPages.map((page) => (
               <article className="mini-card" key={`connected-${page.id}`}>
+                <span className="mini-card__avatar" aria-hidden="true">
+                  {getPageAvatarUrl(page) ? (
+                    <img src={getPageAvatarUrl(page)} alt="" />
+                  ) : (
+                    getPageAvatarText(page.name)
+                  )}
+                </span>
                 <div className="mini-card__content">
                   <h3>{page.name}</h3>
                   <p>Owner: {page.ownerName || '-'}</p>

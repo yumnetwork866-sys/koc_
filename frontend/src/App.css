@@ -1352,7 +1352,7 @@
 
 .mini-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
   min-height: 88px;
@@ -1360,6 +1360,27 @@
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 8px;
   background: #ffffff;
+}
+
+.mini-card__avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(14, 165, 233, 0.18));
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+}
+
+.mini-card__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .mini-card__content {
@@ -1385,6 +1406,11 @@
 
 .mini-card--doc {
   align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.mini-card--doc .mini-card__avatar {
+  display: none;
 }
 
 .mini-card--doc p {

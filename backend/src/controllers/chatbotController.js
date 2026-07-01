@@ -593,7 +593,7 @@ async function getManagedPages(req, res) {
   try {
     fbDebug('getManagedPages:start', { userId: session.userId, userName: session.userName });
     const data = await graphGet('me/accounts', {
-      fields: 'id,name,tasks',
+      fields: 'id,name,tasks,picture{url}',
       access_token: session.userToken,
       limit: 100,
     });
@@ -603,6 +603,7 @@ async function getManagedPages(req, res) {
       name: page.name,
       canManage: (page.tasks || []).includes('MANAGE'),
       connected: connected.has(page.id),
+      avatarUrl: page.picture?.data?.url || page.picture?.url || null,
     }));
     fbDebug('getManagedPages:done', { count: pages.length, pageIds: pages.map((page) => page.id) });
     return res.json(pages);
