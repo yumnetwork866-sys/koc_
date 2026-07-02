@@ -214,8 +214,10 @@ export function fetchChatbotConversations(signal) {
   return apiRequest('/chatbot/conversations', { signal });
 }
 
-export function fetchChatbotMessages(senderId, signal) {
-  return apiRequest(`/chatbot/messages?senderId=${encodeURIComponent(senderId)}`, { signal });
+export function fetchChatbotMessages(senderId, pageId, signal) {
+  const params = new URLSearchParams({ senderId });
+  if (pageId) params.set('pageId', pageId);
+  return apiRequest(`/chatbot/messages?${params.toString()}`, { signal });
 }
 
 export function sendChatbotMessage(payload) {

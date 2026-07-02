@@ -623,8 +623,26 @@ async function facebookLogout(req, res) {
   res.json({ ok: true });
 }
 
-async function revokeFacebookOwner(userId, sid = null) {
-  const pages = await FacebookPage.findAll({ where: { owner_id: userId } });
+async function revokeFacebookOwner(userId) {
+  const sessions = await FacebookUserSession.findAll({ where: { user_id: userId } });
+  const ownerNames = new Set(
+    sessions
+      .map((session) => session.user_name)
+      .filter(Boolean)
+      .map((value) => String(value).trim())
+      .filter(Boolean),
+  );
+
+  const pageWhere = ownerNames.size
+    ? {
+        [Op.or]: [
+          { owner_id: userId },
+          { owner_name: { [Op.in]: [...ownerNames] } },
+        ],
+      }
+    : { owner_id: userId };
+
+  const pages = await FacebookPage.findAll({ where: pageWhere });
   for (const page of pages) {
     try {
       const token = decryptToken(page.access_token_encrypted);
@@ -637,11 +655,7 @@ async function revokeFacebookOwner(userId, sid = null) {
     await page.destroy();
   }
 
-  if (sid) {
-    await FacebookUserSession.destroy({ where: { sid } });
-  } else {
-    await FacebookUserSession.destroy({ where: { user_id: userId } });
-  }
+  await FacebookUserSession.destroy({ where: { user_id: userId } });
 
   return pages.length;
 }
@@ -650,7 +664,7 @@ async function revokeFacebookAccount(req, res) {
   const session = await currentFacebookSession(req);
   if (!session) return res.status(401).json({ message: 'Facebook login is required' });
 
-  const revokedPages = await revokeFacebookOwner(session.userId, session.sid);
+  const revokedPages = await revokeFacebookOwner(session.userId);
   return res.json({ ok: true, revokedPages });
 }
 
@@ -813,7 +827,8 @@ async function listConversations(_req, res) {
   const messages = await ChatbotMessage.findAll({ order: [['created_at', 'ASC']] });
   const map = new Map();
   messages.forEach((message) => {
-    const conversation = map.get(message.sender_id) || {
+    const key = `${message.page_id || 'unknown'}:${message.sender_id}`;
+    const conversation = map.get(key) || {
       senderId: message.sender_id,
       displayName: message.display_name || message.sender_id,
       avatarUrl: message.avatar_url || null,
@@ -835,7 +850,7 @@ async function listConversations(_req, res) {
       conversation.displayName = message.display_name || conversation.displayName || message.sender_id;
       conversation.avatarUrl = message.avatar_url || conversation.avatarUrl || null;
     }
-    map.set(message.sender_id, conversation);
+    map.set(key, conversation);
   });
 
   const conversations = await Promise.all([...map.values()].map(async (conversation) => {
@@ -867,6 +882,7 @@ async function listConversations(_req, res) {
 async function listMessages(req, res) {
   const where = {};
   if (req.query.senderId) where.sender_id = req.query.senderId;
+  if (req.query.pageId) where.page_id = req.query.pageId;
   const rows = await ChatbotMessage.findAll({
     where,
     order: [['created_at', 'DESC']],

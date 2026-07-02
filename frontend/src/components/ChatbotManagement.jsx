@@ -89,6 +89,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [settingsForm, setSettingsForm] = useState({ modelKey: '' });
   const [stats, setStats] = useState({});
   const [conversations, setConversations] = useState([]);
+  const [selectedPageId, setSelectedPageId] = useState('');
   const [selectedSenderId, setSelectedSenderId] = useState('');
   const [messages, setMessages] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -100,15 +101,44 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [toast, setToast] = useState(null);
   const [facebookMeLoaded, setFacebookMeLoaded] = useState(false);
   const [managedPagesLoaded, setManagedPagesLoaded] = useState(false);
-
-  const selectedConversation = useMemo(
-    () => conversations.find((conversation) => conversation.senderId === selectedSenderId),
-    [conversations, selectedSenderId],
-  );
+  const [pagePickerOpen, setPagePickerOpen] = useState(false);
 
   const managedPageMap = useMemo(
     () => new Map(managedPages.map((page) => [page.id, page])),
     [managedPages],
+  );
+
+  const chatPageOptions = useMemo(() => {
+    const map = new Map();
+
+    managedPages.forEach((page) => {
+      if (page?.id) map.set(page.id, page);
+    });
+
+    conversations.forEach((conversation) => {
+      if (!conversation.pageId || map.has(conversation.pageId)) return;
+      map.set(conversation.pageId, {
+        id: conversation.pageId,
+        name: `Page ${conversation.pageId}`,
+      });
+    });
+
+    return [...map.values()].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }, [conversations, managedPages]);
+
+  const filteredConversations = useMemo(() => {
+    if (!selectedPageId) return conversations;
+    return conversations.filter((conversation) => conversation.pageId === selectedPageId);
+  }, [conversations, selectedPageId]);
+
+  const selectedConversation = useMemo(
+    () => filteredConversations.find((conversation) => conversation.senderId === selectedSenderId),
+    [filteredConversations, selectedSenderId],
+  );
+
+  const selectedChatPage = useMemo(
+    () => chatPageOptions.find((page) => page.id === selectedPageId) || null,
+    [chatPageOptions, selectedPageId],
   );
 
   const facebookUserGroups = useMemo(() => {
@@ -175,7 +205,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     setSettingsForm({
       modelKey: `${nextSettings.provider}:${nextSettings.model}`,
     });
-    setSelectedSenderId((current) => current || nextConversations[0]?.senderId || '');
 
     let graphPages = [];
     if (me.loggedIn) {
@@ -205,12 +234,38 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     setManagedPagesLoaded(true);
   }, []);
 
-  const loadMessages = useCallback(async (senderId) => {
+  useEffect(() => {
+    if (!chatPageOptions.length) {
+      setSelectedPageId('');
+      setSelectedSenderId('');
+      return;
+    }
+
+    setSelectedPageId((current) => (
+      current && chatPageOptions.some((page) => page.id === current)
+        ? current
+        : chatPageOptions[0].id
+    ));
+  }, [chatPageOptions]);
+
+  useEffect(() => {
+    setSelectedSenderId((current) => (
+      current && filteredConversations.some((conversation) => conversation.senderId === current)
+        ? current
+        : filteredConversations[0]?.senderId || ''
+    ));
+  }, [filteredConversations]);
+
+  useEffect(() => {
+    if (activeSection !== 'chat') setPagePickerOpen(false);
+  }, [activeSection]);
+
+  const loadMessages = useCallback(async (senderId, pageId) => {
     if (!senderId) {
       setMessages([]);
       return;
     }
-    setMessages(await fetchChatbotMessages(senderId));
+    setMessages(await fetchChatbotMessages(senderId, pageId));
   }, []);
 
   useEffect(() => {
@@ -233,8 +288,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   const refresh = useCallback(async () => {
     await loadOverview();
-    if (selectedSenderId) await loadMessages(selectedSenderId);
-  }, [loadMessages, loadOverview, selectedSenderId]);
+    if (selectedSenderId) await loadMessages(selectedSenderId, selectedPageId);
+  }, [loadMessages, loadOverview, selectedPageId, selectedSenderId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -267,8 +322,18 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   }, [location.hash, location.pathname, location.search, navigate, refresh]);
 
   useEffect(() => {
-    loadMessages(selectedSenderId).catch((err) => setError(err.message || 'Không tải được hội thoại'));
-  }, [loadMessages, selectedSenderId]);
+    loadMessages(selectedSenderId, selectedPageId).catch((err) => setError(err.message || 'Không tải được hội thoại'));
+  }, [loadMessages, selectedPageId, selectedSenderId]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setToast(null);
+    }, 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
 
   const startFacebookLogin = async () => {
     try {
@@ -311,7 +376,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       text,
     });
     setReplyText('');
-    await Promise.all([loadMessages(selectedSenderId), loadOverview()]);
+    await Promise.all([loadMessages(selectedSenderId, selectedConversation?.pageId), loadOverview()]);
   };
 
   const handleCreateDoc = async (event) => {
@@ -372,20 +437,67 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         <>
           <section className="section-card chatbot-chat-card" id="chat">
             <div className="section-card__header chatbot-chat-card__header">
-              <div>
-                <h2 className="section-card__title">Chat</h2>
+              <div className="chatbot-page-picker">
+                <span>Page</span>
+                <div className="chatbot-page-picker__menu-wrap">
+                  <button
+                    className="chatbot-page-picker__trigger"
+                    type="button"
+                    disabled={!chatPageOptions.length}
+                    aria-haspopup="listbox"
+                    aria-expanded={pagePickerOpen}
+                    onClick={() => setPagePickerOpen((current) => !current)}
+                  >
+                    <span className="mini-card__avatar chatbot-page-picker__avatar" aria-hidden="true">
+                      {selectedChatPage && getPageAvatarUrl(selectedChatPage) ? (
+                        <img src={getPageAvatarUrl(selectedChatPage)} alt="" />
+                      ) : (
+                        getPageAvatarText(selectedChatPage?.name || 'Page')
+                      )}
+                    </span>
+                    <span className="chatbot-page-picker__name">{selectedChatPage?.name || 'Select Page'}</span>
+                  </button>
+                  {pagePickerOpen ? (
+                    <div className="chatbot-page-picker__menu" role="listbox">
+                      {chatPageOptions.map((page) => (
+                        <button
+                          key={page.id}
+                          className={`chatbot-page-picker__option${page.id === selectedPageId ? ' chatbot-page-picker__option--active' : ''}`}
+                          type="button"
+                          role="option"
+                          aria-selected={page.id === selectedPageId}
+                          onClick={() => {
+                            setSelectedPageId(page.id);
+                            setPagePickerOpen(false);
+                          }}
+                        >
+                          <span className="mini-card__avatar chatbot-page-picker__avatar" aria-hidden="true">
+                            {getPageAvatarUrl(page) ? (
+                              <img src={getPageAvatarUrl(page)} alt="" />
+                            ) : (
+                              getPageAvatarText(page.name)
+                            )}
+                          </span>
+                          <span className="chatbot-page-picker__name">{page.name || page.id}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-              <div className="chatbot-hero__chips" aria-label="Chatbot summary">
-                <span className="chip chip--blue">Messages {stats.totalMessages || 0}</span>
-                <span className="chip chip--positive">Conversations {stats.uniqueUsers || 0}</span>
-                <span className="chip chip--amber">New orders {stats.newOrders || 0}</span>
+              <div className="chatbot-chat-card__tools">
+                <div className="chatbot-hero__chips" aria-label="Chatbot summary">
+                  <span className="chip chip--blue">Messages {stats.totalMessages || 0}</span>
+                  <span className="chip chip--positive">Conversations {filteredConversations.length || 0}</span>
+                  <span className="chip chip--amber">New orders {stats.newOrders || 0}</span>
+                </div>
               </div>
             </div>
             <div className="chatbot-inbox__layout">
               <div className="chatbot-inbox__list">
-                {conversations.map((conversation) => (
+                {filteredConversations.map((conversation) => (
                   <button
-                    key={conversation.senderId}
+                    key={`${conversation.pageId || 'page'}:${conversation.senderId}`}
                     type="button"
                     className={`conversation-row${conversation.senderId === selectedSenderId ? ' conversation-row--active' : ''}`}
                     onClick={() => setSelectedSenderId(conversation.senderId)}
@@ -403,6 +515,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     </span>
                   </button>
                 ))}
+                {!filteredConversations.length ? (
+                  <div className="chatbot-inbox__empty">No conversations for this Page.</div>
+                ) : null}
               </div>
               <div className="chatbot-inbox__thread">
                 <div className="message-list">
