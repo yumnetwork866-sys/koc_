@@ -259,7 +259,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     }
 
     setSelectedPageId((current) => (
-      current && chatPageOptions.some((page) => page.id === current)
+      current
+        && chatPageOptions.some((page) => page.id === current)
+        && conversations.some((conversation) => conversation.pageId === current)
         ? current
         : conversations.find((conversation) => (
           conversation.pageId && chatPageOptions.some((page) => page.id === conversation.pageId)
