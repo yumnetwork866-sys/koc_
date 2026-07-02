@@ -110,6 +110,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [selectedPageId, setSelectedPageId] = useState('');
   const [selectedSenderId, setSelectedSenderId] = useState('');
   const [messages, setMessages] = useState([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [orders, setOrders] = useState([]);
   const [docs, setDocs] = useState([]);
   const [replyText, setReplyText] = useState('');
@@ -345,12 +346,21 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
     if (!senderId || !pageId) {
       setMessages([]);
+      setMessagesLoading(false);
       return;
     }
 
-    const nextMessages = await fetchChatbotMessages(senderId, pageId, signal);
-    if (messagesRequestRef.current === requestId) {
-      setMessages(nextMessages);
+    setMessagesLoading(true);
+    setMessages([]);
+    try {
+      const nextMessages = await fetchChatbotMessages(senderId, pageId, signal);
+      if (messagesRequestRef.current === requestId) {
+        setMessages(nextMessages);
+      }
+    } finally {
+      if (messagesRequestRef.current === requestId) {
+        setMessagesLoading(false);
+      }
     }
   }, []);
 
@@ -462,13 +472,17 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     event.preventDefault();
     const text = replyText.trim();
     if (!selectedPageId || !selectedSenderId || !text) return;
-    await sendChatbotMessage({
-      senderId: selectedSenderId,
-      pageId: selectedPageId,
-      text,
-    });
-    setReplyText('');
-    await Promise.all([loadMessages(selectedSenderId, selectedPageId), loadOverview()]);
+    try {
+      await sendChatbotMessage({
+        senderId: selectedSenderId,
+        pageId: selectedPageId,
+        text,
+      });
+      setReplyText('');
+      await Promise.all([loadMessages(selectedSenderId, selectedPageId), loadOverview()]);
+    } catch (err) {
+      setError(err.message || 'Không gửi được tin nhắn');
+    }
   };
 
   const handleCreateDoc = async (event) => {
@@ -623,6 +637,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
               </div>
               <div className="chatbot-inbox__thread">
                 <div className="message-list">
+                  {messagesLoading ? (
+                    <div className="chatbot-inbox__empty">Đang tải hội thoại...</div>
+                  ) : null}
                   {messages.map((message) => (
                     <article key={message.id} className={`message-bubble message-bubble--${message.direction}`}>
                       <div className="message-bubble__head">

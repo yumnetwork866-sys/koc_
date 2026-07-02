@@ -919,9 +919,16 @@ async function listConversations(_req, res) {
 }
 
 async function listMessages(req, res) {
-  const where = {};
-  if (req.query.senderId) where.sender_id = req.query.senderId;
-  if (req.query.pageId) where.page_id = req.query.pageId;
+  const senderId = String(req.query.senderId || '').trim();
+  const pageId = String(req.query.pageId || '').trim();
+  if (!senderId || !pageId) {
+    return res.status(400).json({ message: 'senderId and pageId are required' });
+  }
+
+  const where = {
+    sender_id: senderId,
+    page_id: pageId,
+  };
   const rows = await ChatbotMessage.findAll({
     where,
     order: [['created_at', 'DESC']],
@@ -1029,7 +1036,10 @@ async function sendManualMessage(req, res) {
   if (!senderId || !text) return res.status(400).json({ message: 'senderId and text are required' });
 
   try {
-    const pageId = req.body.pageId || await pageForSender(senderId);
+    const pageId = String(req.body.pageId || '').trim() || await pageForSender(senderId);
+    if (!pageId) {
+      return res.status(400).json({ message: 'pageId is required when no prior conversation exists' });
+    }
     await sendText(pageId, senderId, text, [], 'manual');
     return res.json({ ok: true });
   } catch (err) {
