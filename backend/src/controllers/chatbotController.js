@@ -229,6 +229,7 @@ function publicPage(row) {
   return {
     id: row.id,
     name: row.name,
+    avatarUrl: row.avatar_url || null,
     ownerId: row.owner_id || '',
     ownerName: row.owner_name || '',
     connectedAt: row.connected_at,
@@ -288,7 +289,7 @@ function tempManagedPage(row) {
     name: row.name,
     canManage: true,
     connected: true,
-    avatarUrl: null,
+    avatarUrl: row.avatar_url || null,
   };
 }
 
@@ -738,7 +739,9 @@ async function getManagedPages(req, res) {
       access_token: session.userToken,
       limit: 100,
     });
-    const connected = new Set((await FacebookPage.findAll({ attributes: ['id'] })).map((page) => page.id));
+    const localPages = await FacebookPage.findAll({ attributes: ['id', 'avatar_url'] });
+    const connected = new Set(localPages.map((page) => page.id));
+    const localPageMap = new Map(localPages.map((page) => [page.id, page]));
     const pages = (data.data || []).map((page) => ({
       id: page.id,
       name: page.name,
@@ -746,7 +749,7 @@ async function getManagedPages(req, res) {
       ownerName: session.userName,
       canManage: (page.tasks || []).includes('MANAGE'),
       connected: connected.has(page.id),
-      avatarUrl: page.picture?.data?.url || page.picture?.url || null,
+      avatarUrl: page.picture?.data?.url || page.picture?.url || localPageMap.get(page.id)?.avatar_url || null,
     }));
     fbDebug('getManagedPages:done', { count: pages.length, pageIds: pages.map((page) => page.id) });
     return res.json(pages);
@@ -764,7 +767,7 @@ async function connectPage(req, res) {
     const pageId = req.params.id;
     fbDebug('connectPage:start', { pageId, userId: session.userId, userName: session.userName });
     const accounts = await graphGet('me/accounts', {
-      fields: 'id,name,access_token',
+      fields: 'id,name,access_token,picture{url}',
       access_token: session.userToken,
       limit: 100,
     });
@@ -784,15 +787,17 @@ async function connectPage(req, res) {
       throw new Error(subscriptionData.error?.message || 'Could not subscribe page webhook');
     }
 
+    const existing = await FacebookPage.findByPk(page.id);
+    const avatarUrl = page.picture?.data?.url || page.picture?.url || existing?.avatar_url || null;
     const payload = {
       id: page.id,
       name: page.name,
       access_token_encrypted: encryptToken(page.access_token),
       owner_id: session.userId,
       owner_name: session.userName,
+      avatar_url: avatarUrl,
       updated_at: new Date(),
     };
-    const existing = await FacebookPage.findByPk(page.id);
     if (existing) await existing.update(payload);
     else await FacebookPage.create({ ...payload, connected_at: new Date() });
 

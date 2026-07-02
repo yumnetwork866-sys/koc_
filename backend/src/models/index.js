@@ -392,6 +392,10 @@ const FacebookPage = sequelize.define('FacebookPage', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  avatar_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
   connected_at: {
     type: DataTypes.DATE,
     allowNull: false,
