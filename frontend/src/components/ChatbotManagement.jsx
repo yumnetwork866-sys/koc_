@@ -37,7 +37,7 @@ const formatTime = (value) => {
 
 const orderStatuses = ['new', 'confirmed', 'done', 'cancelled'];
 
-const getConversationKey = (conversation) => `${conversation?.pageId || 'unknown'}:${conversation?.senderId || ''}`;
+const getConversationKey = (conversation) => `${conversation?.pageId !== undefined && conversation?.pageId !== null ? String(conversation.pageId) : 'unknown'}:${conversation?.senderId || ''}`;
 
 const getConversationAvatarText = (conversation) => {
   const source = String(conversation?.displayName || conversation?.senderId || '?').trim();
@@ -139,16 +139,17 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   const filteredConversations = useMemo(() => {
     if (!selectedPageId) return conversations;
-    return conversations.filter((conversation) => conversation.pageId === selectedPageId);
+    const selPageIdStr = String(selectedPageId);
+    return conversations.filter((conversation) => String(conversation.pageId) === selPageIdStr);
   }, [conversations, selectedPageId]);
 
   const selectedConversationKey = useMemo(
-    () => (selectedPageId && selectedSenderId ? `${selectedPageId}:${selectedSenderId}` : ''),
+    () => (selectedPageId && selectedSenderId ? `${String(selectedPageId)}:${selectedSenderId}` : ''),
     [selectedPageId, selectedSenderId],
   );
 
   const selectedChatPage = useMemo(
-    () => chatPageOptions.find((page) => page.id === selectedPageId) || null,
+    () => chatPageOptions.find((page) => String(page.id) === String(selectedPageId)) || null,
     [chatPageOptions, selectedPageId],
   );
 
@@ -258,15 +259,16 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       return;
     }
 
-    setSelectedPageId((current) => (
-      current
-        && chatPageOptions.some((page) => page.id === current)
-        && conversations.some((conversation) => conversation.pageId === current)
-        ? current
-        : conversations.find((conversation) => (
-          conversation.pageId && chatPageOptions.some((page) => page.id === conversation.pageId)
-        ))?.pageId || chatPageOptions[0].id
-    ));
+    setSelectedPageId((current) => {
+      const currentStr = current ? String(current) : '';
+      if (currentStr && chatPageOptions.some((page) => String(page.id) === currentStr)) {
+        return current;
+      }
+      const foundConv = conversations.find((conversation) => (
+        conversation.pageId && chatPageOptions.some((page) => String(page.id) === String(conversation.pageId))
+      ));
+      return foundConv?.pageId || chatPageOptions[0]?.id || '';
+    });
   }, [chatPageOptions, conversations]);
 
   useEffect(() => {
@@ -576,10 +578,10 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                       {chatPageOptions.map((page) => (
                         <button
                           key={page.id}
-                          className={`chatbot-page-picker__option${page.id === selectedPageId ? ' chatbot-page-picker__option--active' : ''}`}
+                          className={`chatbot-page-picker__option${String(page.id) === String(selectedPageId) ? ' chatbot-page-picker__option--active' : ''}`}
                           type="button"
                           role="option"
-                          aria-selected={page.id === selectedPageId}
+                          aria-selected={String(page.id) === String(selectedPageId)}
                           onClick={() => {
                             setSelectedPageId(page.id);
                             setPagePickerOpen(false);
