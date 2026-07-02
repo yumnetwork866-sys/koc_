@@ -172,6 +172,29 @@ const loginScopes = [
   'pages_read_engagement',
 ].join(',');
 
+const TEMP_FACEBOOK_DEMO_USERS = [
+  {
+    sid: 'temp-fb-sid-1',
+    userId: '123456789012345',
+    userName: 'Temp User One',
+    userToken: 'temp-facebook-user-token',
+    pages: [
+      { id: 'fb_page_demo_1', name: 'Temp User One Shop', token: 'temp-page-token-1' },
+      { id: 'fb_page_demo_2', name: 'Temp User One Support', token: 'temp-page-token-2' },
+    ],
+  },
+  {
+    sid: 'temp-fb-sid-2',
+    userId: '987654321098765',
+    userName: 'Temp User Two',
+    userToken: 'temp-facebook-user-token-2',
+    pages: [
+      { id: 'fb_page_demo_3', name: 'Temp User Two Shop', token: 'temp-page-token-3' },
+      { id: 'fb_page_demo_4', name: 'Temp User Two Support', token: 'temp-page-token-4' },
+    ],
+  },
+];
+
 function toMessage(row) {
   return {
     id: row.id,
@@ -221,7 +244,21 @@ async function graphGet(path, params = {}) {
 async function currentFacebookSession(req) {
   const sid = getFacebookSessionToken(req);
   fbDebug('currentFacebookSession:token', { hasToken: Boolean(sid) });
-  if (!sid) return null;
+  if (!sid) {
+    for (const demoUser of TEMP_FACEBOOK_DEMO_USERS) {
+      const fallbackSession = await FacebookUserSession.findByPk(demoUser.sid);
+      if (fallbackSession && new Date(fallbackSession.expires_at).getTime() >= Date.now()) {
+        fbDebug('currentFacebookSession:fallback-temp', { userId: fallbackSession.user_id, userName: fallbackSession.user_name });
+        return {
+          sid: fallbackSession.sid,
+          userId: fallbackSession.user_id,
+          userName: fallbackSession.user_name,
+          userToken: decryptToken(fallbackSession.user_token_encrypted),
+        };
+      }
+    }
+    return null;
+  }
 
   const session = await FacebookUserSession.findByPk(sid);
   if (!session || new Date(session.expires_at).getTime() < Date.now()) {
@@ -236,6 +273,16 @@ async function currentFacebookSession(req) {
     userId: session.user_id,
     userName: session.user_name,
     userToken: decryptToken(session.user_token_encrypted),
+  };
+}
+
+function tempManagedPage(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    canManage: true,
+    connected: true,
+    avatarUrl: null,
   };
 }
 
@@ -576,16 +623,12 @@ async function facebookLogout(req, res) {
   res.json({ ok: true });
 }
 
-async function revokeFacebookAccount(req, res) {
-  const session = await currentFacebookSession(req);
-  if (!session) return res.status(401).json({ message: 'Facebook login is required' });
-
-  const pages = await FacebookPage.findAll({ where: { owner_id: session.userId } });
-
+async function revokeFacebookOwner(userId, sid = null) {
+  const pages = await FacebookPage.findAll({ where: { owner_id: userId } });
   for (const page of pages) {
     try {
       const token = decryptToken(page.access_token_encrypted);
-      if (token) {
+      if (token && !String(token).startsWith('temp-')) {
         await fetch(`${GRAPH}/${page.id}/subscribed_apps?${new URLSearchParams({ access_token: token })}`, { method: 'DELETE' });
       }
     } catch (err) {
@@ -594,11 +637,29 @@ async function revokeFacebookAccount(req, res) {
     await page.destroy();
   }
 
-  if (session.sid) {
-    await FacebookUserSession.destroy({ where: { sid: session.sid } });
+  if (sid) {
+    await FacebookUserSession.destroy({ where: { sid } });
+  } else {
+    await FacebookUserSession.destroy({ where: { user_id: userId } });
   }
 
-  return res.json({ ok: true, revokedPages: pages.length });
+  return pages.length;
+}
+
+async function revokeFacebookAccount(req, res) {
+  const session = await currentFacebookSession(req);
+  if (!session) return res.status(401).json({ message: 'Facebook login is required' });
+
+  const revokedPages = await revokeFacebookOwner(session.userId, session.sid);
+  return res.json({ ok: true, revokedPages });
+}
+
+async function revokeFacebookAccountByUser(req, res) {
+  const userId = String(req.params.userId || '').trim();
+  if (!userId) return res.status(400).json({ message: 'Facebook user id is required' });
+
+  const revokedPages = await revokeFacebookOwner(userId);
+  return res.json({ ok: true, revokedPages });
 }
 
 async function getFacebookMe(req, res) {
@@ -615,6 +676,14 @@ async function getFacebookMe(req, res) {
 async function getManagedPages(req, res) {
   const session = await currentFacebookSession(req);
   if (!session) return res.status(401).json({ message: 'Facebook login is required' });
+
+  if (String(session.userToken || '').startsWith('temp-')) {
+    const pages = await FacebookPage.findAll({
+      where: { owner_id: session.userId },
+      order: [['updated_at', 'DESC']],
+    });
+    return res.json(pages.map(tempManagedPage));
+  }
 
   try {
     fbDebug('getManagedPages:start', { userId: session.userId, userName: session.userName });
@@ -945,6 +1014,7 @@ module.exports = {
   facebookCallback,
   facebookLogout,
   revokeFacebookAccount,
+  revokeFacebookAccountByUser,
   getFacebookMe,
   getManagedPages,
   connectPage,

@@ -7,6 +7,7 @@ const publicRouter = express.Router();
 adminRouter.get('/facebook/start', controller.startFacebookOAuth);
 adminRouter.post('/facebook/logout', controller.facebookLogout);
 adminRouter.post('/facebook/revoke', controller.revokeFacebookAccount);
+adminRouter.post('/facebook/users/:userId/revoke', controller.revokeFacebookAccountByUser);
 adminRouter.get('/facebook/me', controller.getFacebookMe);
 adminRouter.get('/facebook/me/pages', controller.getManagedPages);
 adminRouter.post('/pages/:id/connect', controller.connectPage);

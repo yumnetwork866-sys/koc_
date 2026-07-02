@@ -183,6 +183,13 @@ export function revokeChatbotFacebookAccount() {
   return apiRequest('/chatbot/facebook/revoke', { method: 'POST', facebookToken: getStoredFacebookChatbotToken() });
 }
 
+export function revokeChatbotFacebookAccountByUser(userId) {
+  return apiRequest(`/chatbot/facebook/users/${encodeURIComponent(userId)}/revoke`, {
+    method: 'POST',
+    facebookToken: getStoredFacebookChatbotToken(),
+  });
+}
+
 export function fetchFacebookManagedPages(signal) {
   return apiRequest('/chatbot/facebook/me/pages', { signal, facebookToken: getStoredFacebookChatbotToken() });
 }

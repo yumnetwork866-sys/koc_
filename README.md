@@ -103,3 +103,6 @@ If you are already inside `psql` and see `postgres=#`, switch to the right datab
 ```sql
 \c report
 ```
+
+Run seed
+pnpm backend:seed:facebook:test

@@ -12,10 +12,11 @@ import {
   fetchChatbotMessages,
   fetchChatbotOrders,
   fetchChatbotOllamaModels,
+  fetchChatbotPages,
   fetchChatbotStats,
   fetchFacebookManagedPages,
   getFacebookOauthUrl,
-  revokeChatbotFacebookAccount,
+  revokeChatbotFacebookAccountByUser,
   sendChatbotMessage,
   fetchChatbotSettings,
   updateChatbotSettings,
@@ -53,6 +54,8 @@ const getPageAvatarText = (name) => {
     : source.slice(0, 2);
   return initials.toUpperCase();
 };
+
+const getOwnerAvatarText = (name) => getPageAvatarText(name);
 
 const mergeModelOptions = (baseModels, ollamaModels, currentSetting) => {
   const map = new Map();
@@ -108,10 +111,43 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     [managedPages],
   );
 
+  const facebookUserGroups = useMemo(() => {
+    const groups = new Map();
+
+    managedPages.forEach((page) => {
+      const ownerId = String(page.ownerId || page.owner_id || page.userId || page.id || 'unknown').trim();
+      const ownerName = String(page.ownerName || page.owner_name || page.userName || 'Facebook user').trim();
+      const key = ownerId || ownerName;
+      const current = groups.get(key) || {
+        id: key,
+        ownerId,
+        ownerName,
+        pages: [],
+      };
+
+      current.pages.push(page);
+      groups.set(key, current);
+    });
+
+    return [...groups.values()].map((group) => ({
+      ...group,
+      pages: group.pages.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+    })).sort((a, b) => a.ownerName.localeCompare(b.ownerName));
+  }, [managedPages]);
+
   const loadOverview = useCallback(async (signal) => {
     setFacebookMeLoaded(false);
     setManagedPagesLoaded(false);
-    const [me, nextStats, nextConversations, nextOrders, nextDocs, nextSettings, nextOllamaModels] = await Promise.all([
+    const [
+      me,
+      nextStats,
+      nextConversations,
+      nextOrders,
+      nextDocs,
+      nextSettings,
+      nextOllamaModels,
+      nextLocalPages,
+    ] = await Promise.all([
       fetchChatbotFacebookMe(signal),
       fetchChatbotStats(signal),
       fetchChatbotConversations(signal),
@@ -122,6 +158,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         if (err.status === 502) return { models: [] };
         throw err;
       }),
+      fetchChatbotPages(signal).catch(() => []),
     ]);
 
     setFacebookMe(me);
@@ -140,20 +177,32 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     });
     setSelectedSenderId((current) => current || nextConversations[0]?.senderId || '');
 
+    let graphPages = [];
     if (me.loggedIn) {
       try {
-        const pages = await fetchFacebookManagedPages(signal);
-        setManagedPages(pages);
-        setManagedPagesLoaded(true);
+        graphPages = await fetchFacebookManagedPages(signal);
       } catch (err) {
         if (err.status !== 401) throw err;
-        setManagedPages([]);
-        setManagedPagesLoaded(true);
       }
-    } else {
-      setManagedPages([]);
-      setManagedPagesLoaded(true);
     }
+
+    const combinedPages = new Map();
+    [...graphPages, ...(nextLocalPages || []).map((page) => ({
+      ...page,
+      connected: true,
+      canManage: true,
+      source: 'local',
+    }))].forEach((page) => {
+      if (!page?.id) return;
+      const next = {
+        ...page,
+        connected: page.connected ?? Boolean(page.ownerId || page.source === 'local'),
+        canManage: page.canManage ?? page.source === 'local',
+      };
+      combinedPages.set(page.id, { ...(combinedPages.get(page.id) || {}), ...next });
+    });
+    setManagedPages([...combinedPages.values()]);
+    setManagedPagesLoaded(true);
   }, []);
 
   const loadMessages = useCallback(async (senderId) => {
@@ -230,10 +279,12 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     }
   };
 
-  const handleRevokeFacebookAccount = async () => {
-    if (!window.confirm('Revoke this Facebook account from the app? This will disconnect every connected Page and remove the session.')) return;
-    await revokeChatbotFacebookAccount();
-    clearStoredFacebookChatbotToken();
+  const handleRevokeFacebookAccount = async (group) => {
+    if (!window.confirm(`Revoke Facebook account "${group.ownerName}" from the app? This will disconnect every connected Page for this user and remove the session.`)) return;
+    await revokeChatbotFacebookAccountByUser(group.ownerId);
+    if (facebookMe.userId === group.ownerId) {
+      clearStoredFacebookChatbotToken();
+    }
     await refresh();
   };
 
@@ -244,12 +295,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   const handleDisconnectPage = async (page) => {
     if (!window.confirm(`Disconnect Page "${page.name}"? The bot will stop replying on this Page.`)) return;
-    await disconnectFacebookPage(page.id);
-    await refresh();
-  };
-
-  const handleDeletePage = async (page) => {
-    if (!window.confirm(`Delete Page "${page.name}" from the app? This will remove the webhook connection and local page record.`)) return;
     await disconnectFacebookPage(page.id);
     await refresh();
   };
@@ -301,6 +346,24 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       modelKey: `${updated.provider}:${updated.model}`,
     });
     setToast({ status: 'success', message: 'Đã lưu chat setting' });
+  };
+
+  const renderFacebookAccountActions = () => {
+    if (!facebookMeLoaded) {
+      return (
+        <button className="button" type="button" disabled>
+          Checking...
+        </button>
+      );
+    }
+
+    return (
+      <>
+        <button className="button" type="button" disabled={!facebookMe.configured} onClick={startFacebookLogin}>
+          Add account
+        </button>
+      </>
+    );
   };
 
   const renderSection = () => {
@@ -482,97 +545,97 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       );
     }
 
-    return (
-      <>
-        {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
-        {loading ? <section className="section-card empty-state empty-state--compact">Đang tải chatbot...</section> : null}
+      return (
+        <>
+          {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
+          {loading ? <section className="section-card empty-state empty-state--compact">Đang tải chatbot...</section> : null}
 
-        <section className="section-card">
-          <div className="section-card__header section-card__header--compact">
-            <div>
-              <h2 className="section-card__title">Page Connections</h2>
-              {facebookMeLoaded && facebookMe.loggedIn ? (
-                <p className="section-card__meta">Facebook user: {facebookMe.name || facebookMe.userId || '-'}</p>
-              ) : null}
+          <section className="section-card">
+            <div className="section-card__header section-card__header--compact">
+              <div>
+                <h2 className="section-card__title">Users and Pages</h2>
+              </div>
             </div>
-            <div className="actions">
-              {!facebookMeLoaded ? (
-                <button className="button" type="button" disabled>
-                  Checking...
-                </button>
-              ) : (
-                <>
-                  <button className="button" type="button" disabled={!facebookMe.configured} onClick={startFacebookLogin}>
-                    Add Facebook account
-                  </button>
-                  {facebookMe.loggedIn ? (
-                    <button className="button button--danger" type="button" onClick={handleRevokeFacebookAccount}>
-                      Revoke account
-                    </button>
-                  ) : null}
-                </>
-              )}
-            </div>
-        </div>
 
-          <div className="chatbot-page-grid">
-            {facebookMe.loggedIn ? managedPages.map((page) => (
-              <article className="mini-card" key={page.id}>
-                <span className="mini-card__avatar" aria-hidden="true">
-                  {getPageAvatarUrl(page) ? (
-                    <img src={getPageAvatarUrl(page)} alt="" />
-                  ) : (
-                    getPageAvatarText(page.name)
-                  )}
-                </span>
-                <div className="mini-card__content">
-                  <h3>{page.name}</h3>
-                  <p>
-                    {page.connected
-                      ? 'Webhook connected'
-                      : page.canManage
-                        ? 'Ready to connect'
-                        : 'Missing management permission'}
-                  </p>
-                </div>
-                <div className="mini-card__action mini-card__action--stack">
-                  {page.connected ? (
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => handleDisconnectPage(page)}
-                    >
-                      Disconnect
-                    </button>
-                  ) : (
-                    <button
-                      className="button button--small"
-                      type="button"
-                      disabled={!page.canManage}
-                      onClick={() => handleConnectPage(page.id)}
-                    >
-                      Connect
-                    </button>
-                  )}
-                  <button
-                    className="button button--ghost button--danger button--small"
-                    type="button"
-                    disabled={!page.connected}
-                    onClick={() => handleDeletePage(page)}
-                    title={page.connected ? 'Delete this Page from the app' : 'Connect the Page first to delete it'}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </article>
-            )) : null}
-            {facebookMeLoaded && managedPagesLoaded && facebookMe.loggedIn && managedPages.length === 0 ? (
+            {facebookMe.loggedIn && facebookUserGroups.length ? (
+              <div className="facebook-user-groups">
+                {facebookUserGroups.map((group) => (
+                  <article className="facebook-user-group" key={group.id}>
+                    <div className="facebook-user-group__head">
+                      <div className="facebook-user-group__identity">
+                        <span className="facebook-user-group__avatar" aria-hidden="true">
+                          {getOwnerAvatarText(group.ownerName)}
+                        </span>
+                        <div className="facebook-user-group__meta">
+                          <h3>
+                            <span>{group.ownerName}</span>
+                            <span className="chip chip--blue">{group.pages.length} pages</span>
+                          </h3>
+                          <p>{group.ownerId || 'Unknown user'}</p>
+                        </div>
+                      </div>
+                      <div className="facebook-user-group__actions">
+                        <button
+                          className="button button--danger button--icon"
+                          type="button"
+                          disabled={!group.ownerId}
+                          onClick={() => handleRevokeFacebookAccount(group)}
+                          aria-label={`Revoke ${group.ownerName}`}
+                          title="Revoke account"
+                        >
+                          <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+                            <path d="M9 3h6l1 2h4v2H4V5h4l1-2Z" />
+                            <path d="M6 9h12l-.8 12H6.8L6 9Zm4 2v8h2v-8h-2Zm4 0v8h2v-8h-2Z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="chatbot-page-grid chatbot-page-grid--nested">
+                      {group.pages.map((page) => (
+                        <article className="mini-card mini-card--nested" key={page.id}>
+                          <span className="mini-card__avatar" aria-hidden="true">
+                            {getPageAvatarUrl(page) ? (
+                              <img src={getPageAvatarUrl(page)} alt="" />
+                            ) : (
+                              getPageAvatarText(page.name)
+                            )}
+                          </span>
+                          <div className="mini-card__content">
+                            <h3>{page.name}</h3>
+                          </div>
+                          <div className="mini-card__action mini-card__action--stack">
+                            {page.connected ? (
+                              <button
+                                className="button button--ghost button--small"
+                                type="button"
+                                onClick={() => handleDisconnectPage(page)}
+                              >
+                                Disconnect
+                              </button>
+                            ) : (
+                              <button
+                                className="button button--small"
+                                type="button"
+                                disabled={!page.canManage}
+                                onClick={() => handleConnectPage(page.id)}
+                              >
+                                Connect
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
               <div className="section-card__meta">Facebook is connected, but no Pages are available yet. Check Page permissions or make sure this account manages at least one Page.</div>
-            ) : null}
-          </div>
-        </section>
-      </>
-    );
+            )}
+          </section>
+        </>
+      );
   };
 
   const toastNode = toast && typeof document !== 'undefined'
@@ -590,8 +653,19 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
       {activeSection !== 'chat' ? (
         <section className="page__hero" id="dashboard">
-          <h1 className="page__title">{heroTitle}</h1>
-          {heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
+          {activeSection === 'dashboard' ? (
+            <div className="page__hero-row">
+              <h1 className="page__title">{heroTitle}</h1>
+              <div className="page__hero-actions">
+                {renderFacebookAccountActions()}
+              </div>
+            </div>
+          ) : (
+            <>
+              <h1 className="page__title">{heroTitle}</h1>
+              {heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
+            </>
+          )}
         </section>
       ) : null}
       {renderSection()}
