@@ -576,6 +576,31 @@ async function facebookLogout(req, res) {
   res.json({ ok: true });
 }
 
+async function revokeFacebookAccount(req, res) {
+  const session = await currentFacebookSession(req);
+  if (!session) return res.status(401).json({ message: 'Facebook login is required' });
+
+  const pages = await FacebookPage.findAll({ where: { owner_id: session.userId } });
+
+  for (const page of pages) {
+    try {
+      const token = decryptToken(page.access_token_encrypted);
+      if (token) {
+        await fetch(`${GRAPH}/${page.id}/subscribed_apps?${new URLSearchParams({ access_token: token })}`, { method: 'DELETE' });
+      }
+    } catch (err) {
+      console.error('Unsubscribe Facebook page error:', err.message);
+    }
+    await page.destroy();
+  }
+
+  if (session.sid) {
+    await FacebookUserSession.destroy({ where: { sid: session.sid } });
+  }
+
+  return res.json({ ok: true, revokedPages: pages.length });
+}
+
 async function getFacebookMe(req, res) {
   const session = await currentFacebookSession(req);
   fbDebug('getFacebookMe', { loggedIn: Boolean(session), configured: fbConfigured() });
@@ -583,6 +608,7 @@ async function getFacebookMe(req, res) {
     configured: fbConfigured(),
     loggedIn: Boolean(session),
     name: session?.userName || null,
+    userId: session?.userId || null,
   });
 }
 
@@ -918,6 +944,7 @@ module.exports = {
   startFacebookOAuth,
   facebookCallback,
   facebookLogout,
+  revokeFacebookAccount,
   getFacebookMe,
   getManagedPages,
   connectPage,

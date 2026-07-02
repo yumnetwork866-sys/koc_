@@ -15,6 +15,7 @@ import {
   fetchChatbotStats,
   fetchFacebookManagedPages,
   getFacebookOauthUrl,
+  revokeChatbotFacebookAccount,
   sendChatbotMessage,
   fetchChatbotSettings,
   updateChatbotSettings,
@@ -78,7 +79,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const activeSection = location.pathname.split('/').filter(Boolean)[1] || 'dashboard';
-  const [facebookMe, setFacebookMe] = useState({ configured: false, loggedIn: false, name: null });
+  const [facebookMe, setFacebookMe] = useState({ configured: false, loggedIn: false, name: null, userId: null });
   const [managedPages, setManagedPages] = useState([]);
   const [chatSettings, setChatSettings] = useState({ provider: 'gemini', model: '', ollamaHost: '', models: [] });
   const [ollamaModels, setOllamaModels] = useState([]);
@@ -194,9 +195,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     const fbToken = hash.get('fb_token');
 
     const syncAfterOauth = async () => {
-      setToast({
-        status,
-        message: params.get('oauth_message') || (status === 'success' ? 'Facebook account connected' : 'Facebook connection failed'),
+    setToast({
+      status,
+      message: params.get('oauth_message') || (status === 'success' ? 'Facebook account connected' : 'Facebook connection failed'),
       });
 
       if (status === 'success') {
@@ -227,6 +228,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     } catch (err) {
       setError(err.message || 'Failed to start Facebook connection');
     }
+  };
+
+  const handleRevokeFacebookAccount = async () => {
+    if (!window.confirm('Revoke this Facebook account from the app? This will disconnect every connected Page and remove the session.')) return;
+    await revokeChatbotFacebookAccount();
+    clearStoredFacebookChatbotToken();
+    await refresh();
   };
 
   const handleConnectPage = async (pageId) => {
@@ -483,6 +491,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
           <div className="section-card__header section-card__header--compact">
             <div>
               <h2 className="section-card__title">Page Connections</h2>
+              {facebookMeLoaded && facebookMe.loggedIn ? (
+                <p className="section-card__meta">Facebook user: {facebookMe.name || facebookMe.userId || '-'}</p>
+              ) : null}
             </div>
             <div className="actions">
               {!facebookMeLoaded ? (
@@ -490,9 +501,15 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                   Checking...
                 </button>
               ) : (
-                <button className="button" type="button" disabled={!facebookMe.configured} onClick={startFacebookLogin}>
-                  Add Facebook
-                </button>
+                facebookMe.loggedIn ? (
+                  <button className="button button--danger" type="button" onClick={handleRevokeFacebookAccount}>
+                    Revoke account
+                  </button>
+                ) : (
+                  <button className="button" type="button" disabled={!facebookMe.configured} onClick={startFacebookLogin}>
+                    Add Facebook
+                  </button>
+                )
               )}
             </div>
         </div>
@@ -519,22 +536,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 </div>
                 <div className="mini-card__action mini-card__action--stack">
                   {page.connected ? (
-                    <>
-                      <button
-                        className="button button--ghost button--small"
-                        type="button"
-                        onClick={() => handleDisconnectPage(page)}
-                      >
-                        Disconnect
-                      </button>
-                      <button
-                        className="button button--ghost button--danger button--small"
-                        type="button"
-                        onClick={() => handleDeletePage(page)}
-                      >
-                        Delete
-                      </button>
-                    </>
+                    <button
+                      className="button button--ghost button--small"
+                      type="button"
+                      onClick={() => handleDisconnectPage(page)}
+                    >
+                      Disconnect
+                    </button>
                   ) : (
                     <button
                       className="button button--small"
@@ -545,6 +553,15 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                       Connect
                     </button>
                   )}
+                  <button
+                    className="button button--ghost button--danger button--small"
+                    type="button"
+                    disabled={!page.connected}
+                    onClick={() => handleDeletePage(page)}
+                    title={page.connected ? 'Delete this Page from the app' : 'Connect the Page first to delete it'}
+                  >
+                    Delete
+                  </button>
                 </div>
               </article>
             )) : null}

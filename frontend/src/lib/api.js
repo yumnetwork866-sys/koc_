@@ -179,6 +179,10 @@ export function logoutChatbotFacebook() {
   return apiRequest('/chatbot/facebook/logout', { method: 'POST', facebookToken: getStoredFacebookChatbotToken() });
 }
 
+export function revokeChatbotFacebookAccount() {
+  return apiRequest('/chatbot/facebook/revoke', { method: 'POST', facebookToken: getStoredFacebookChatbotToken() });
+}
+
 export function fetchFacebookManagedPages(signal) {
   return apiRequest('/chatbot/facebook/me/pages', { signal, facebookToken: getStoredFacebookChatbotToken() });
 }
