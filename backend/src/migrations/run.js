@@ -17,6 +17,7 @@ const migrations = [
   require('./008_add_facebook_user_avatar_url'),
   require('./009_add_facebook_page_avatar_url'),
   require('./010_drop_teams'),
+  require('./011_create_bookings'),
 ];
 
 const createMigrationRunner = ({

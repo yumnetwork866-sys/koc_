@@ -39,6 +39,64 @@ const User = sequelize.define('User', {
   },
 });
 
+const Booking = sequelize.define('Booking', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  staff_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  creator_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  booking_cost: {
+    type: DataTypes.DECIMAL(12, 2),
+    allowNull: false,
+    defaultValue: 0,
+  },
+  status: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'booked',
+    validate: {
+      isIn: [['draft', 'booked', 'waiting_video', 'video_posted', 'done', 'cancelled']],
+    },
+  },
+  deadline: {
+    type: DataTypes.DATEONLY,
+    allowNull: false,
+  },
+  note: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  video_platform_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  video_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  posted_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+}, {
+  tableName: 'bookings',
+  timestamps: false,
+  indexes: [
+    { fields: ['staff_id'] },
+    { fields: ['creator_id'] },
+    { fields: ['status'] },
+    { fields: ['deadline'] },
+  ],
+});
+
 const TikTokChannel = sequelize.define('TikTokChannel', {
   id: {
     type: DataTypes.INTEGER,
@@ -592,6 +650,11 @@ const ChatbotSetting = sequelize.define('ChatbotSetting', {
   timestamps: false,
 });
 
+User.hasMany(Booking, { foreignKey: 'staff_id', as: 'staff_bookings' });
+Booking.belongsTo(User, { foreignKey: 'staff_id', as: 'staff' });
+User.hasMany(Booking, { foreignKey: 'creator_id', as: 'creator_bookings' });
+Booking.belongsTo(User, { foreignKey: 'creator_id', as: 'creator' });
+
 TikTokChannel.hasMany(Video, { foreignKey: 'channel_id', as: 'videos' });
 Video.belongsTo(TikTokChannel, { foreignKey: 'channel_id', as: 'channel' });
 
@@ -623,6 +686,7 @@ ChatbotOrder.belongsTo(FacebookPage, { foreignKey: 'page_id', as: 'page' });
 
 module.exports = {
   User,
+  Booking,
   TikTokChannel,
   Video,
   VideoAssignment,

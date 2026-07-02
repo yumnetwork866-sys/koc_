@@ -10,6 +10,7 @@ export const sidebarSections = [
       { to: '/dashboard', label: 'Dashboard' },
       { to: '/manage/users', label: 'Users' },
       { to: '/manage/koc', label: 'KOC' },
+      { to: '/bookings', label: 'Bookings' },
       { to: '/manage/channels', label: 'Channels' },
       { to: '/videos', label: 'Videos' },
       { to: '/assignments', label: 'Assign' },
@@ -50,6 +51,14 @@ export const protectedRouteCards = [
     props: {
       heroTitle: 'KOC management',
       heroSubtitle: 'Quản lý KOC/TikTok creator, theo dõi profile, follower và trạng thái kết nối.',
+    },
+  },
+  {
+    path: '/bookings',
+    component: 'BookingManagement',
+    props: {
+      heroTitle: 'Booking management',
+      heroSubtitle: 'Tạo booking cho KOC, gắn chi phí, deadline và trạng thái video trong một luồng.',
     },
   },
   {

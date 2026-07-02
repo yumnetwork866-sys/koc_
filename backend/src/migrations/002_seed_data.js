@@ -1,4 +1,5 @@
 const {
+  Booking,
   Product,
   TikTokChannel,
   User,
@@ -55,6 +56,24 @@ const seedDatabase = async () => {
         name: 'Quân Editor',
         email: 'news@company.com',
         role: 'member',
+      },
+    });
+
+    const [kocOne] = await User.findOrCreate({
+      where: { email: 'koc1@creator.com' },
+      defaults: {
+        name: 'An KOC',
+        email: 'koc1@creator.com',
+        role: 'koc',
+      },
+    });
+
+    const [kocTwo] = await User.findOrCreate({
+      where: { email: 'koc2@creator.com' },
+      defaults: {
+        name: 'Bình KOC',
+        email: 'koc2@creator.com',
+        role: 'koc',
       },
     });
 
@@ -185,6 +204,41 @@ const seedDatabase = async () => {
       }
     }
 
+    await Booking.findOrCreate({
+      where: {
+        staff_id: leader.id,
+        creator_id: kocOne.id,
+        deadline: '2026-07-05',
+      },
+      defaults: {
+        staff_id: leader.id,
+        creator_id: kocOne.id,
+        booking_cost: 1500000,
+        status: 'waiting_video',
+        deadline: '2026-07-05',
+        note: 'Booking cho campaign skincare, ưu tiên hook 3 giây đầu.',
+        video_platform_id: 'tt_booking_001',
+        video_url: 'https://www.tiktok.com/@brandclinic.vn/video/1234567890',
+        posted_at: new Date(),
+      },
+    });
+
+    await Booking.findOrCreate({
+      where: {
+        staff_id: scriptWriter.id,
+        creator_id: kocTwo.id,
+        deadline: '2026-07-08',
+      },
+      defaults: {
+        staff_id: scriptWriter.id,
+        creator_id: kocTwo.id,
+        booking_cost: 1200000,
+        status: 'booked',
+        deadline: '2026-07-08',
+        note: 'Chờ KOC xác nhận lịch đăng.',
+      },
+    });
+
     await WeeklyReport.findOrCreate({
       where: {
         week_start: '2026-06-22',
@@ -213,6 +267,7 @@ module.exports = {
       await WeeklyReport.destroy({ where: {} });
       await VideoAssignment.destroy({ where: {} });
       await Video.destroy({ where: {} });
+      await Booking.destroy({ where: {} });
       await TikTokChannel.destroy({ where: {} });
       await Product.destroy({ where: {} });
       await User.destroy({ where: {} });

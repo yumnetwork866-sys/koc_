@@ -8,6 +8,7 @@ const PORT = process.env.PORT || 8000;
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
+const bookingRoutes = require('./routes/bookingRoutes');
 const videoRoutes = require('./routes/videoRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const channelRoutes = require('./routes/channelRoutes');
@@ -40,6 +41,7 @@ const createApp = () => {
   });
 
   app.use('/api/users', requireAdmin, userRoutes);
+  app.use('/api/bookings', requireAdmin, bookingRoutes);
   app.use('/api/videos', requireAdmin, videoRoutes);
   app.use('/api/reports', requireAdmin, reportRoutes);
   app.use('/api/channels', channelRoutes);

@@ -57,6 +57,10 @@ export function fetchUsers(signal) {
   return apiRequest('/users', { signal });
 }
 
+export function fetchBookings(signal) {
+  return apiRequest('/bookings', { signal });
+}
+
 export function fetchVideos(signal) {
   return apiRequest('/videos', { signal });
 }
@@ -103,6 +107,26 @@ export function createUser(payload) {
   return apiRequest('/users', {
     method: 'POST',
     body: payload,
+  });
+}
+
+export function createBooking(payload) {
+  return apiRequest('/bookings', {
+    method: 'POST',
+    body: payload,
+  });
+}
+
+export function updateBooking(bookingId, payload) {
+  return apiRequest(`/bookings/${bookingId}`, {
+    method: 'PUT',
+    body: payload,
+  });
+}
+
+export function deleteBooking(bookingId) {
+  return apiRequest(`/bookings/${bookingId}`, {
+    method: 'DELETE',
   });
 }
 

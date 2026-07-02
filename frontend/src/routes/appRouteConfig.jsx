@@ -6,6 +6,7 @@ import { protectedRouteCards, redirectRoutes } from './navigation';
 const AssignmentManagement = lazy(() => import('../components/AssignmentManagement'));
 const ChannelManagement = lazy(() => import('../components/ChannelManagement'));
 const ChatbotManagement = lazy(() => import('../components/ChatbotManagement'));
+const BookingManagement = lazy(() => import('../components/BookingManagement'));
 const Dashboard = lazy(() => import('../components/Dashboard'));
 const EmployeeTable = lazy(() => import('../components/EmployeeTable'));
 const KOCManagement = lazy(() => import('../components/KOCManagement'));
@@ -21,6 +22,7 @@ const componentMap = {
   Dashboard,
   EmployeeTable,
   KOCManagement,
+  BookingManagement,
   ChannelManagement,
   VideoTable,
   AssignmentManagement,
