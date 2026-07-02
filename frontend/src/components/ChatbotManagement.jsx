@@ -37,6 +37,8 @@ const formatTime = (value) => {
 
 const orderStatuses = ['new', 'confirmed', 'done', 'cancelled'];
 
+const getConversationKey = (conversation) => `${conversation?.pageId || 'unknown'}:${conversation?.senderId || ''}`;
+
 const getConversationAvatarText = (conversation) => {
   const source = String(conversation?.displayName || conversation?.senderId || '?').trim();
   const parts = source.split(/\s+/).filter(Boolean);
@@ -119,6 +121,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
   const pagePickerTriggerRef = useRef(null);
   const pagePickerMenuRef = useRef(null);
+  const messagesRequestRef = useRef(0);
   const [pagePickerMenuStyle, setPagePickerMenuStyle] = useState(null);
 
   const managedPageMap = useMemo(
@@ -138,9 +141,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     return conversations.filter((conversation) => conversation.pageId === selectedPageId);
   }, [conversations, selectedPageId]);
 
-  const selectedConversation = useMemo(
-    () => filteredConversations.find((conversation) => conversation.senderId === selectedSenderId),
-    [filteredConversations, selectedSenderId],
+  const selectedConversationKey = useMemo(
+    () => (selectedPageId && selectedSenderId ? `${selectedPageId}:${selectedSenderId}` : ''),
+    [selectedPageId, selectedSenderId],
   );
 
   const selectedChatPage = useMemo(
@@ -257,9 +260,11 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     setSelectedPageId((current) => (
       current && chatPageOptions.some((page) => page.id === current)
         ? current
-        : chatPageOptions[0].id
+        : conversations.find((conversation) => (
+          conversation.pageId && chatPageOptions.some((page) => page.id === conversation.pageId)
+        ))?.pageId || chatPageOptions[0].id
     ));
-  }, [chatPageOptions]);
+  }, [chatPageOptions, conversations]);
 
   useEffect(() => {
     setSelectedSenderId((current) => (
@@ -334,12 +339,19 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     if (activeSection !== 'chat') setPagePickerOpen(false);
   }, [activeSection]);
 
-  const loadMessages = useCallback(async (senderId, pageId) => {
-    if (!senderId) {
+  const loadMessages = useCallback(async (senderId, pageId, signal) => {
+    const requestId = messagesRequestRef.current + 1;
+    messagesRequestRef.current = requestId;
+
+    if (!senderId || !pageId) {
       setMessages([]);
       return;
     }
-    setMessages(await fetchChatbotMessages(senderId, pageId));
+
+    const nextMessages = await fetchChatbotMessages(senderId, pageId, signal);
+    if (messagesRequestRef.current === requestId) {
+      setMessages(nextMessages);
+    }
   }, []);
 
   useEffect(() => {
@@ -362,7 +374,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   const refresh = useCallback(async () => {
     await loadOverview();
-    if (selectedSenderId) await loadMessages(selectedSenderId, selectedPageId);
+    if (selectedPageId && selectedSenderId) await loadMessages(selectedSenderId, selectedPageId);
   }, [loadMessages, loadOverview, selectedPageId, selectedSenderId]);
 
   useEffect(() => {
@@ -396,7 +408,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   }, [location.hash, location.pathname, location.search, navigate, refresh]);
 
   useEffect(() => {
-    loadMessages(selectedSenderId, selectedPageId).catch((err) => setError(err.message || 'Không tải được hội thoại'));
+    const controller = new AbortController();
+
+    loadMessages(selectedSenderId, selectedPageId, controller.signal).catch((err) => {
+      if (err.name !== 'AbortError') setError(err.message || 'Không tải được hội thoại');
+    });
+
+    return () => controller.abort();
   }, [loadMessages, selectedPageId, selectedSenderId]);
 
   useEffect(() => {
@@ -443,14 +461,14 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const handleSendReply = async (event) => {
     event.preventDefault();
     const text = replyText.trim();
-    if (!selectedSenderId || !text) return;
+    if (!selectedPageId || !selectedSenderId || !text) return;
     await sendChatbotMessage({
       senderId: selectedSenderId,
-      pageId: selectedConversation?.pageId,
+      pageId: selectedPageId,
       text,
     });
     setReplyText('');
-    await Promise.all([loadMessages(selectedSenderId, selectedConversation?.pageId), loadOverview()]);
+    await Promise.all([loadMessages(selectedSenderId, selectedPageId), loadOverview()]);
   };
 
   const handleCreateDoc = async (event) => {
@@ -580,8 +598,11 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                   <button
                     key={`${conversation.pageId || 'page'}:${conversation.senderId}`}
                     type="button"
-                    className={`conversation-row${conversation.senderId === selectedSenderId ? ' conversation-row--active' : ''}`}
-                    onClick={() => setSelectedSenderId(conversation.senderId)}
+                    className={`conversation-row${getConversationKey(conversation) === selectedConversationKey ? ' conversation-row--active' : ''}`}
+                    onClick={() => {
+                      setSelectedPageId(conversation.pageId || '');
+                      setSelectedSenderId(conversation.senderId);
+                    }}
                   >
                     <span className="conversation-row__avatar" aria-hidden="true">
                       {conversation.avatarUrl ? (
@@ -626,9 +647,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     value={replyText}
                     onChange={(event) => setReplyText(event.target.value)}
                     placeholder="Nhập tin nhắn..."
-                    disabled={!selectedSenderId}
+                    disabled={!selectedPageId || !selectedSenderId}
                   />
-                  <button className="button" type="submit" disabled={!selectedSenderId || !replyText.trim()}>Gửi</button>
+                  <button className="button" type="submit" disabled={!selectedPageId || !selectedSenderId || !replyText.trim()}>Gửi</button>
                 </form>
               </div>
             </div>
