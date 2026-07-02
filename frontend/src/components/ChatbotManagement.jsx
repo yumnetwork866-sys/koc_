@@ -752,7 +752,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 ))}
               </div>
             ) : (
-              <div className="section-card__meta">Facebook is connected, but no Pages are available yet. Check Page permissions or make sure this account manages at least one Page.</div>
+              <div className="section-card__meta">No Pages are available yet.</div>
             )}
           </section>
         </>

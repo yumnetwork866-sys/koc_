@@ -9,6 +9,7 @@ async function apiRequest(path, options = {}) {
 
   const sessionToken = getStoredSession()?.token || null;
   const facebookChatbotToken = options.facebookToken || null;
+  const { signal, ...restOptions } = options;
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: 'no-store',
@@ -17,10 +18,11 @@ async function apiRequest(path, options = {}) {
       'Content-Type': 'application/json',
       ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
       ...(facebookChatbotToken ? { 'X-FB-Chatbot-Token': facebookChatbotToken } : {}),
-      ...(options.headers || {}),
+      ...(restOptions.headers || {}),
     },
-    ...options,
+    ...restOptions,
     body,
+    ...(signal ? { signal } : {}),
   });
 
   if (!response.ok) {
