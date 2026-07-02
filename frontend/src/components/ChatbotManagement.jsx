@@ -57,6 +57,16 @@ const getPageAvatarText = (name) => {
 
 const getOwnerAvatarText = (name) => getPageAvatarText(name);
 
+const getMessageDisplayName = (message) => {
+  if (message?.displayName) return String(message.displayName).trim();
+  if (message?.direction === 'out') {
+    return message?.via === 'manual' ? 'Bạn' : 'Bot';
+  }
+  return String(message?.senderId || 'Khách').trim();
+};
+
+const getMessageAvatarText = (message) => getPageAvatarText(getMessageDisplayName(message));
+
 const mergeModelOptions = (baseModels, ollamaModels, currentSetting) => {
   const map = new Map();
   [...(baseModels || []), ...(ollamaModels || [])].forEach((item) => {
@@ -598,8 +608,20 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 <div className="message-list">
                   {messages.map((message) => (
                     <article key={message.id} className={`message-bubble message-bubble--${message.direction}`}>
+                      <div className="message-bubble__head">
+                        <span className="message-bubble__avatar" aria-hidden="true">
+                          {message.avatarUrl ? (
+                            <img src={message.avatarUrl} alt="" />
+                          ) : (
+                            getMessageAvatarText(message)
+                          )}
+                        </span>
+                        <div className="message-bubble__meta">
+                          <strong>{getMessageDisplayName(message)}</strong>
+                          <span>{message.via} · {formatTime(message.ts)}</span>
+                        </div>
+                      </div>
                       <p>{message.text}</p>
-                      <span>{message.via} · {formatTime(message.ts)}</span>
                     </article>
                   ))}
                 </div>

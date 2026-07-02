@@ -1762,28 +1762,107 @@
 }
 
 .message-bubble {
+  display: grid;
+  gap: 10px;
   max-width: min(560px, 86%);
   padding: 12px 14px;
-  border-radius: 8px;
-  background: #f1f5f9;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
   color: #0f172a;
 }
 
 .message-bubble--out {
   align-self: flex-end;
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border-color: rgba(37, 99, 235, 0.28);
+  border-top-right-radius: 6px;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.2);
   color: #ffffff;
 }
 
-.message-bubble p {
-  margin: 0 0 8px;
-  line-height: 1.5;
+.message-bubble--in {
+  align-self: flex-start;
+  border-color: rgba(148, 163, 184, 0.26);
+  border-top-left-radius: 6px;
 }
 
-.message-bubble span {
+.message-bubble__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.message-bubble--out .message-bubble__head {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+.message-bubble__avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
   color: currentColor;
-  font-size: 0.74rem;
-  opacity: 0.76;
+  font-size: 0.68rem;
+  font-weight: 800;
+  overflow: hidden;
+}
+
+.message-bubble--in .message-bubble__avatar {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
+.message-bubble--out .message-bubble__avatar {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.message-bubble__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.message-bubble__meta {
+  display: grid;
+  min-width: 0;
+}
+
+.message-bubble__meta strong {
+  color: currentColor;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.message-bubble__meta span {
+  color: currentColor;
+  font-size: 0.72rem;
+  opacity: 0.72;
+}
+
+.message-bubble--in .message-bubble__meta strong {
+  color: #0f172a;
+}
+
+.message-bubble--in .message-bubble__meta span {
+  color: #64748b;
+  opacity: 1;
+}
+
+.message-bubble--out .message-bubble__meta span {
+  opacity: 0.85;
+}
+
+.message-bubble p {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .reply-box,

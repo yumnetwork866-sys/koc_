@@ -196,6 +196,8 @@ const TEMP_FACEBOOK_DEMO_USERS = [
 ];
 
 function toMessage(row) {
+  const isOutgoing = row.direction === 'out';
+  const displayName = row.display_name || (isOutgoing ? (row.via === 'manual' ? 'Bạn' : 'Bot') : row.sender_id);
   return {
     id: row.id,
     senderId: row.sender_id,
@@ -203,6 +205,8 @@ function toMessage(row) {
     direction: row.direction,
     text: row.text,
     via: row.via,
+    displayName,
+    avatarUrl: row.avatar_url || null,
     ts: new Date(row.created_at).getTime(),
   };
 }
@@ -490,7 +494,15 @@ async function callSendAPI(pageId, payload) {
 }
 
 async function sendText(pageId, senderId, text, quickReplies = [], via = 'bot') {
-  await ChatbotMessage.create({ sender_id: senderId, page_id: pageId, direction: 'out', text, via });
+  await ChatbotMessage.create({
+    sender_id: senderId,
+    page_id: pageId,
+    display_name: via === 'manual' ? 'Bạn' : 'Bot',
+    avatar_url: null,
+    direction: 'out',
+    text,
+    via,
+  });
   const message = { text };
   if (quickReplies.length) {
     message.quick_replies = quickReplies.map((title) => ({
