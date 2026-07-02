@@ -95,6 +95,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
+  const [facebookMeLoaded, setFacebookMeLoaded] = useState(false);
 
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.senderId === selectedSenderId),
@@ -107,6 +108,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   );
 
   const loadOverview = useCallback(async (signal) => {
+    setFacebookMeLoaded(false);
     const [me, nextStats, nextConversations, nextOrders, nextDocs, nextSettings, nextOllamaModels] = await Promise.all([
       fetchChatbotFacebookMe(signal),
       fetchChatbotStats(signal),
@@ -121,6 +123,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     ]);
 
     setFacebookMe(me);
+    setFacebookMeLoaded(true);
     if (!me.loggedIn) {
       clearStoredFacebookChatbotToken();
     }
@@ -288,7 +291,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   };
 
   const renderSection = () => {
-    const facebookStatusLabel = loading
+    const facebookStatusLabel = !facebookMeLoaded
       ? 'Đang kiểm tra kết nối Facebook...'
       : facebookMe.loggedIn
         ? `Đã kết nối tài khoản Facebook: ${facebookMe.name}`
@@ -484,7 +487,11 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
             <p className="section-card__subtitle">{facebookStatusLabel}</p>
           </div>
           <div className="actions">
-            {facebookMe.loggedIn ? (
+            {!facebookMeLoaded ? (
+              <button className="button" type="button" disabled>
+                Đang kiểm tra
+              </button>
+            ) : facebookMe.loggedIn ? (
               <button className="button button--secondary" type="button" onClick={handleLogoutFacebook}>Ngắt kết nối Facebook</button>
             ) : (
               <button className="button" type="button" disabled={!facebookMe.configured} onClick={startFacebookLogin}>Kết nối tài khoản Facebook</button>
