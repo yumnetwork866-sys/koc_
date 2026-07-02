@@ -116,7 +116,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
   const [facebookMeLoaded, setFacebookMeLoaded] = useState(false);
-  const [managedPagesLoaded, setManagedPagesLoaded] = useState(false);
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
   const pagePickerTriggerRef = useRef(null);
   const pagePickerMenuRef = useRef(null);
@@ -176,7 +175,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   const loadOverview = useCallback(async (signal) => {
     setFacebookMeLoaded(false);
-    setManagedPagesLoaded(false);
     const [
       me,
       nextStats,
@@ -248,7 +246,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       combinedPages.set(page.id, next);
     });
     setManagedPages([...combinedPages.values()]);
-    setManagedPagesLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -260,11 +257,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     setSelectedPageId((current) => (
       current && chatPageOptions.some((page) => page.id === current)
         ? current
-        : selectedConversation?.pageId && chatPageOptions.some((page) => page.id === selectedConversation.pageId)
-          ? selectedConversation.pageId
-          : chatPageOptions[0].id
+        : chatPageOptions[0].id
     ));
-  }, [chatPageOptions, selectedConversation?.pageId]);
+  }, [chatPageOptions]);
 
   useEffect(() => {
     setSelectedSenderId((current) => (
