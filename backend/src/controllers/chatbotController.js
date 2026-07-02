@@ -672,6 +672,13 @@ async function revokeFacebookAccountByUser(req, res) {
   const userId = String(req.params.userId || '').trim();
   if (!userId) return res.status(400).json({ message: 'Facebook user id is required' });
 
+  const session = await currentFacebookSession(req);
+  const isDemoUser = TEMP_FACEBOOK_DEMO_USERS.some((demoUser) => demoUser.userId === userId);
+  if (!session && !isDemoUser) return res.status(401).json({ message: 'Facebook login is required' });
+  if (session && session.userId !== userId && !isDemoUser) {
+    return res.status(403).json({ message: 'Cannot revoke a different Facebook account from this session' });
+  }
+
   const revokedPages = await revokeFacebookOwner(userId);
   return res.json({ ok: true, revokedPages });
 }
@@ -710,6 +717,8 @@ async function getManagedPages(req, res) {
     const pages = (data.data || []).map((page) => ({
       id: page.id,
       name: page.name,
+      ownerId: session.userId,
+      ownerName: session.userName,
       canManage: (page.tasks || []).includes('MANAGE'),
       connected: connected.has(page.id),
       avatarUrl: page.picture?.data?.url || page.picture?.url || null,

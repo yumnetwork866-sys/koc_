@@ -145,8 +145,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     const groups = new Map();
 
     managedPages.forEach((page) => {
-      const ownerId = String(page.ownerId || page.owner_id || page.userId || page.id || 'unknown').trim();
-      const ownerName = String(page.ownerName || page.owner_name || page.userName || 'Facebook user').trim();
+      const ownerId = String(page.ownerId || page.owner_id || page.userId || facebookMe.userId || '').trim();
+      const ownerName = String(page.ownerName || page.owner_name || page.userName || facebookMe.name || 'Facebook user').trim();
       const key = ownerId || ownerName;
       const current = groups.get(key) || {
         id: key,
@@ -163,7 +163,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       ...group,
       pages: group.pages.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
     })).sort((a, b) => a.ownerName.localeCompare(b.ownerName));
-  }, [managedPages]);
+  }, [facebookMe.name, facebookMe.userId, managedPages]);
 
   const loadOverview = useCallback(async (signal) => {
     setFacebookMeLoaded(false);
@@ -215,8 +215,14 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       }
     }
 
+    const ownedGraphPages = graphPages.map((page) => ({
+      ...page,
+      ownerId: page.ownerId || me.userId || '',
+      ownerName: page.ownerName || me.name || '',
+    }));
+
     const combinedPages = new Map();
-    [...graphPages, ...(nextLocalPages || []).map((page) => ({
+    [...ownedGraphPages, ...(nextLocalPages || []).map((page) => ({
       ...page,
       connected: true,
       canManage: true,
