@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   connectFacebookPage,
@@ -11,7 +12,6 @@ import {
   fetchChatbotMessages,
   fetchChatbotOrders,
   fetchChatbotOllamaModels,
-  fetchChatbotPages,
   fetchChatbotStats,
   fetchFacebookManagedPages,
   getFacebookOauthUrl,
@@ -81,7 +81,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const activeSection = location.pathname.split('/').filter(Boolean)[1] || 'dashboard';
   const [facebookMe, setFacebookMe] = useState({ configured: false, loggedIn: false, name: null });
   const [managedPages, setManagedPages] = useState([]);
-  const [connectedPages, setConnectedPages] = useState([]);
   const [chatSettings, setChatSettings] = useState({ provider: 'gemini', model: '', ollamaHost: '', models: [] });
   const [ollamaModels, setOllamaModels] = useState([]);
   const [settingsForm, setSettingsForm] = useState({ modelKey: '' });
@@ -108,9 +107,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   );
 
   const loadOverview = useCallback(async (signal) => {
-    const [me, pages, nextStats, nextConversations, nextOrders, nextDocs, nextSettings, nextOllamaModels] = await Promise.all([
+    const [me, nextStats, nextConversations, nextOrders, nextDocs, nextSettings, nextOllamaModels] = await Promise.all([
       fetchChatbotFacebookMe(signal),
-      fetchChatbotPages(signal),
       fetchChatbotStats(signal),
       fetchChatbotConversations(signal),
       fetchChatbotOrders(signal),
@@ -126,7 +124,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     if (!me.loggedIn) {
       clearStoredFacebookChatbotToken();
     }
-    setConnectedPages(pages);
     setStats(nextStats);
     setConversations(nextConversations);
     setOrders(nextOrders);
@@ -503,56 +500,57 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 </span>
                 <div className="mini-card__content">
                   <h3>{page.name}</h3>
-                  <p>{page.connected ? 'Đã kết nối webhook' : page.canManage ? 'Có thể kết nối' : 'Thiếu quyền quản lý'}</p>
+                  <p>
+                    {page.connected
+                      ? 'Đã kết nối webhook'
+                      : page.canManage
+                        ? 'Có thể kết nối'
+                        : 'Thiếu quyền quản lý'}
+                  </p>
                 </div>
                 <div className="mini-card__action">
-                  <button
-                    className="button button--small"
-                    type="button"
-                    disabled={!page.canManage || page.connected}
-                    onClick={() => handleConnectPage(page.id)}
-                  >
-                    {page.connected ? 'Connected' : 'Connect'}
-                  </button>
+                  {page.connected ? (
+                    <button
+                      className="button button--ghost button--small"
+                      type="button"
+                      onClick={() => handleDisconnectPage(page)}
+                    >
+                      Disconnect
+                    </button>
+                  ) : (
+                    <button
+                      className="button button--small"
+                      type="button"
+                      disabled={!page.canManage}
+                      onClick={() => handleConnectPage(page.id)}
+                    >
+                      Connect
+                    </button>
+                  )}
                 </div>
               </article>
             )) : null}
             {facebookMe.loggedIn && managedPages.length === 0 ? (
               <div className="section-card__meta">Tài khoản Facebook đã kết nối nhưng chưa có Page nào hiện ra. Hãy kiểm tra lại quyền Page hoặc đảm bảo tài khoản này đang quản lý ít nhất một Page.</div>
             ) : null}
-            {connectedPages.map((page) => (
-              <article className="mini-card" key={`connected-${page.id}`}>
-                <span className="mini-card__avatar" aria-hidden="true">
-                  {getPageAvatarUrl(page) ? (
-                    <img src={getPageAvatarUrl(page)} alt="" />
-                  ) : (
-                    getPageAvatarText(page.name)
-                  )}
-                </span>
-                <div className="mini-card__content">
-                  <h3>{page.name}</h3>
-                  <p>Owner: {page.ownerName || '-'}</p>
-                </div>
-                <div className="mini-card__action">
-                  <button className="button button--ghost button--small" type="button" onClick={() => handleDisconnectPage(page)}>
-                    Disconnect
-                  </button>
-                </div>
-              </article>
-            ))}
           </div>
         </section>
       </>
     );
   };
 
+  const toastNode = toast && typeof document !== 'undefined'
+    ? createPortal(
+      <div className={`toast ${toast.status === 'success' ? 'toast--success' : 'toast--error'}`} role="status">
+        {toast.message}
+      </div>,
+      document.body,
+    )
+    : null;
+
   return (
     <div className="page chatbot-page">
-      {toast ? (
-        <div className={`toast ${toast.status === 'success' ? 'toast--success' : 'toast--error'}`} role="status">
-          {toast.message}
-        </div>
-      ) : null}
+      {toastNode}
 
       {activeSection !== 'chat' ? (
         <section className="page__hero" id="dashboard">
