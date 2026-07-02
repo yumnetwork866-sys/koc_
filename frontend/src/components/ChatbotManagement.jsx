@@ -143,10 +143,22 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     return conversations.filter((conversation) => String(conversation.pageId) === selPageIdStr);
   }, [conversations, selectedPageId]);
 
+  const selectedConversation = useMemo(() => {
+    if (!selectedSenderId) return null;
+    return filteredConversations.find((conversation) => conversation.senderId === selectedSenderId)
+      || conversations.find((conversation) => (
+        conversation.senderId === selectedSenderId
+        && (!selectedPageId || String(conversation.pageId) === String(selectedPageId))
+      ))
+      || null;
+  }, [conversations, filteredConversations, selectedPageId, selectedSenderId]);
+
   const selectedConversationKey = useMemo(
-    () => (selectedPageId && selectedSenderId ? `${String(selectedPageId)}:${selectedSenderId}` : ''),
-    [selectedPageId, selectedSenderId],
+    () => (selectedConversation ? getConversationKey(selectedConversation) : ''),
+    [selectedConversation],
   );
+
+  const selectedMessagePageId = selectedConversation?.pageId || selectedPageId || '';
 
   const selectedChatPage = useMemo(
     () => chatPageOptions.find((page) => String(page.id) === String(selectedPageId)) || null,
@@ -245,7 +257,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       const next = {
         ...existing,
         ...page,
-        connected: Boolean(existing.connected || page.connected || page.ownerId || page.source === 'local'),
+        connected: Boolean(existing.connected || page.connected || page.source === 'local'),
         canManage: Boolean(existing.canManage || page.canManage || page.source === 'local'),
       };
       combinedPages.set(page.id, next);
@@ -267,7 +279,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       const foundConv = conversations.find((conversation) => (
         conversation.pageId && chatPageOptions.some((page) => String(page.id) === String(conversation.pageId))
       ));
-      return foundConv?.pageId || chatPageOptions[0]?.id || '';
+      return foundConv?.pageId || '';
     });
   }, [chatPageOptions, conversations]);
 
@@ -355,7 +367,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     }
 
     setMessagesLoading(true);
-    setMessages([]);
     try {
       const nextMessages = await fetchChatbotMessages(senderId, pageId, signal);
       if (messagesRequestRef.current === requestId) {
@@ -388,8 +399,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   const refresh = useCallback(async () => {
     await loadOverview();
-    if (selectedPageId && selectedSenderId) await loadMessages(selectedSenderId, selectedPageId);
-  }, [loadMessages, loadOverview, selectedPageId, selectedSenderId]);
+    if (selectedMessagePageId && selectedSenderId) await loadMessages(selectedSenderId, selectedMessagePageId);
+  }, [loadMessages, loadOverview, selectedMessagePageId, selectedSenderId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -424,12 +435,12 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   useEffect(() => {
     const controller = new AbortController();
 
-    loadMessages(selectedSenderId, selectedPageId, controller.signal).catch((err) => {
+    loadMessages(selectedSenderId, selectedMessagePageId, controller.signal).catch((err) => {
       if (err.name !== 'AbortError') setError(err.message || 'Không tải được hội thoại');
     });
 
     return () => controller.abort();
-  }, [loadMessages, selectedPageId, selectedSenderId]);
+  }, [loadMessages, selectedMessagePageId, selectedSenderId]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -475,15 +486,15 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const handleSendReply = async (event) => {
     event.preventDefault();
     const text = replyText.trim();
-    if (!selectedPageId || !selectedSenderId || !text) return;
+    if (!selectedMessagePageId || !selectedSenderId || !text) return;
     try {
       await sendChatbotMessage({
         senderId: selectedSenderId,
-        pageId: selectedPageId,
+        pageId: selectedMessagePageId,
         text,
       });
       setReplyText('');
-      await Promise.all([loadMessages(selectedSenderId, selectedPageId), loadOverview()]);
+      await Promise.all([loadMessages(selectedSenderId, selectedMessagePageId), loadOverview()]);
     } catch (err) {
       setError(err.message || 'Không gửi được tin nhắn');
     }
@@ -558,15 +569,15 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     aria-haspopup="listbox"
                     aria-expanded={pagePickerOpen}
                     onClick={() => setPagePickerOpen((current) => !current)}
-                    >
-                      <span className="mini-card__avatar chatbot-page-picker__avatar" aria-hidden="true">
-                        {selectedChatPage && getPageAvatarUrl(selectedChatPage) ? (
-                          <img src={getPageAvatarUrl(selectedChatPage)} alt="" />
-                        ) : (
-                          getPageAvatarText(selectedChatPage?.name || 'Page')
-                        )}
-                      </span>
-                    <span className="chatbot-page-picker__name">{selectedChatPage?.name?.trim() || selectedChatPage?.id || 'Select Page'}</span>
+                  >
+                    <span className="mini-card__avatar chatbot-page-picker__avatar" aria-hidden="true">
+                      {selectedChatPage && getPageAvatarUrl(selectedChatPage) ? (
+                        <img src={getPageAvatarUrl(selectedChatPage)} alt="" />
+                      ) : (
+                        getPageAvatarText(selectedChatPage?.name || 'All Pages')
+                      )}
+                    </span>
+                    <span className="chatbot-page-picker__name">{selectedChatPage?.name?.trim() || selectedChatPage?.id || 'All Pages'}</span>
                   </button>
                   {pagePickerOpen && typeof document !== 'undefined' ? createPortal(
                     <div
@@ -575,6 +586,21 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                       role="listbox"
                       style={pagePickerMenuStyle || undefined}
                     >
+                      <button
+                        className={`chatbot-page-picker__option${!selectedPageId ? ' chatbot-page-picker__option--active' : ''}`}
+                        type="button"
+                        role="option"
+                        aria-selected={!selectedPageId}
+                        onClick={() => {
+                          setSelectedPageId('');
+                          setPagePickerOpen(false);
+                        }}
+                      >
+                        <span className="mini-card__avatar chatbot-page-picker__avatar" aria-hidden="true">
+                          {getPageAvatarText('All Pages')}
+                        </span>
+                        <span className="chatbot-page-picker__name">All Pages</span>
+                      </button>
                       {chatPageOptions.map((page) => (
                         <button
                           key={page.id}
@@ -668,9 +694,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     value={replyText}
                     onChange={(event) => setReplyText(event.target.value)}
                     placeholder="Nhập tin nhắn..."
-                    disabled={!selectedPageId || !selectedSenderId}
+                    disabled={!selectedMessagePageId || !selectedSenderId}
                   />
-                  <button className="button" type="submit" disabled={!selectedPageId || !selectedSenderId || !replyText.trim()}>Gửi</button>
+                  <button className="button" type="submit" disabled={!selectedMessagePageId || !selectedSenderId || !replyText.trim()}>Gửi</button>
                 </form>
               </div>
             </div>
