@@ -288,6 +288,12 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   };
 
   const renderSection = () => {
+    const facebookStatusLabel = loading
+      ? 'Đang kiểm tra kết nối Facebook...'
+      : facebookMe.loggedIn
+        ? `Đã kết nối tài khoản Facebook: ${facebookMe.name}`
+        : 'Chưa kết nối tài khoản Facebook';
+
     if (activeSection === 'chat') {
       return (
         <>
@@ -475,9 +481,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
           <div className="section-card__header">
               <div>
             <h2 className="section-card__title">Kết nối Page</h2>
-            <p className="section-card__subtitle">
-              {facebookMe.loggedIn ? `Đã kết nối tài khoản Facebook: ${facebookMe.name}` : null}
-            </p>
+            <p className="section-card__subtitle">{facebookStatusLabel}</p>
           </div>
           <div className="actions">
             {facebookMe.loggedIn ? (
