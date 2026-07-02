@@ -16,6 +16,7 @@ const statements = [
     sid VARCHAR(255) PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,
     user_name VARCHAR(255),
+    avatar_url TEXT,
     user_token_encrypted TEXT NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

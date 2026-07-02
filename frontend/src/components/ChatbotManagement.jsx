@@ -82,7 +82,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const activeSection = location.pathname.split('/').filter(Boolean)[1] || 'dashboard';
-  const [facebookMe, setFacebookMe] = useState({ configured: false, loggedIn: false, name: null, userId: null });
+  const [facebookMe, setFacebookMe] = useState({
+    configured: false,
+    loggedIn: false,
+    name: null,
+    userId: null,
+    avatarUrl: null,
+  });
   const [managedPages, setManagedPages] = useState([]);
   const [chatSettings, setChatSettings] = useState({ provider: 'gemini', model: '', ollamaHost: '', models: [] });
   const [ollamaModels, setOllamaModels] = useState([]);
@@ -109,22 +115,11 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   );
 
   const chatPageOptions = useMemo(() => {
-    const map = new Map();
-
-    managedPages.forEach((page) => {
-      if (page?.id) map.set(page.id, page);
-    });
-
-    conversations.forEach((conversation) => {
-      if (!conversation.pageId || map.has(conversation.pageId)) return;
-      map.set(conversation.pageId, {
-        id: conversation.pageId,
-        name: `Page ${conversation.pageId}`,
-      });
-    });
-
-    return [...map.values()].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-  }, [conversations, managedPages]);
+    // Only show pages that are still connected so the chat view stays aligned with the dashboard.
+    return managedPages
+      .filter((page) => page?.connected)
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  }, [managedPages]);
 
   const filteredConversations = useMemo(() => {
     if (!selectedPageId) return conversations;
@@ -152,6 +147,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         id: key,
         ownerId,
         ownerName,
+        avatarUrl: facebookMe.avatarUrl || null,
         pages: [],
       };
 
@@ -163,7 +159,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       ...group,
       pages: group.pages.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
     })).sort((a, b) => a.ownerName.localeCompare(b.ownerName));
-  }, [facebookMe.name, facebookMe.userId, managedPages]);
+  }, [facebookMe.avatarUrl, facebookMe.name, facebookMe.userId, managedPages]);
 
   const loadOverview = useCallback(async (signal) => {
     setFacebookMeLoaded(false);
@@ -685,7 +681,11 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     <div className="facebook-user-group__head">
                       <div className="facebook-user-group__identity">
                         <span className="facebook-user-group__avatar" aria-hidden="true">
-                          {getOwnerAvatarText(group.ownerName)}
+                          {group.avatarUrl ? (
+                            <img src={group.avatarUrl} alt="" />
+                          ) : (
+                            getOwnerAvatarText(group.ownerName)
+                          )}
                         </span>
                         <div className="facebook-user-group__meta">
                           <h3>

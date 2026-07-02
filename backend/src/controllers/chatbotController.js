@@ -249,13 +249,14 @@ async function currentFacebookSession(req) {
       const fallbackSession = await FacebookUserSession.findByPk(demoUser.sid);
       if (fallbackSession && new Date(fallbackSession.expires_at).getTime() >= Date.now()) {
         fbDebug('currentFacebookSession:fallback-temp', { userId: fallbackSession.user_id, userName: fallbackSession.user_name });
-        return {
-          sid: fallbackSession.sid,
-          userId: fallbackSession.user_id,
-          userName: fallbackSession.user_name,
-          userToken: decryptToken(fallbackSession.user_token_encrypted),
-        };
-      }
+    return {
+      sid: fallbackSession.sid,
+      userId: fallbackSession.user_id,
+      userName: fallbackSession.user_name,
+      avatarUrl: fallbackSession.avatar_url || null,
+      userToken: decryptToken(fallbackSession.user_token_encrypted),
+    };
+  }
     }
     return null;
   }
@@ -272,6 +273,7 @@ async function currentFacebookSession(req) {
     sid: session.sid,
     userId: session.user_id,
     userName: session.user_name,
+    avatarUrl: session.avatar_url || null,
     userToken: decryptToken(session.user_token_encrypted),
   };
 }
@@ -598,13 +600,14 @@ async function facebookCallback(req, res) {
       fb_exchange_token: shortToken.access_token,
     });
     const userToken = longToken.access_token;
-    const me = await graphGet('me', { fields: 'id,name', access_token: userToken });
+    const me = await graphGet('me', { fields: 'id,name,picture{url}', access_token: userToken });
     const sid = crypto.randomBytes(24).toString('hex');
 
     await FacebookUserSession.create({
       sid,
       user_id: me.id,
       user_name: me.name,
+      avatar_url: me.picture?.data?.url || me.picture?.url || null,
       user_token_encrypted: encryptToken(userToken),
       expires_at: new Date(Date.now() + SESSION_TTL_MS),
     });
@@ -691,6 +694,7 @@ async function getFacebookMe(req, res) {
     loggedIn: Boolean(session),
     name: session?.userName || null,
     userId: session?.userId || null,
+    avatarUrl: session?.avatarUrl || null,
   });
 }
 

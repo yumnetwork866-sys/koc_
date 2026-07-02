@@ -14,6 +14,7 @@ const migrations = [
   require('./005_add_facebook_chatbot_tables'),
   require('./006_add_chatbot_settings'),
   require('./007_add_chatbot_message_profile_fields'),
+  require('./008_add_facebook_user_avatar_url'),
 ];
 
 const createMigrationRunner = ({

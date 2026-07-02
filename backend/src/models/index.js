@@ -434,6 +434,10 @@ const FacebookUserSession = sequelize.define('FacebookUserSession', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  avatar_url: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
   user_token_encrypted: {
     type: DataTypes.TEXT,
     allowNull: false,
