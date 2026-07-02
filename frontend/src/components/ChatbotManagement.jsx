@@ -230,10 +230,10 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       if (!page?.id) return;
       const existing = combinedPages.get(page.id) || {};
       const next = {
-        ...page,
         ...existing,
-        connected: existing.connected ?? page.connected ?? Boolean(page.ownerId || page.source === 'local'),
-        canManage: existing.canManage ?? page.canManage ?? page.source === 'local',
+        ...page,
+        connected: Boolean(existing.connected || page.connected || page.ownerId || page.source === 'local'),
+        canManage: Boolean(existing.canManage || page.canManage || page.source === 'local'),
       };
       combinedPages.set(page.id, next);
     });
