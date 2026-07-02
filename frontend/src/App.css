@@ -1393,7 +1393,14 @@
 }
 
 .mini-card__action {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
   flex: 0 0 auto;
+}
+
+.mini-card__action--stack {
+  min-width: 112px;
 }
 
 .mini-card h3 {
@@ -1907,6 +1914,7 @@
   }
 
   .mini-card__action {
+    justify-items: start;
     width: 100%;
   }
 

@@ -15,7 +15,6 @@ import {
   fetchChatbotStats,
   fetchFacebookManagedPages,
   getFacebookOauthUrl,
-  logoutChatbotFacebook,
   sendChatbotMessage,
   fetchChatbotSettings,
   updateChatbotSettings,
@@ -197,7 +196,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     const syncAfterOauth = async () => {
       setToast({
         status,
-        message: params.get('oauth_message') || (status === 'success' ? 'Đã kết nối tài khoản Facebook' : 'Kết nối tài khoản Facebook thất bại'),
+        message: params.get('oauth_message') || (status === 'success' ? 'Facebook account connected' : 'Facebook connection failed'),
       });
 
       if (status === 'success') {
@@ -205,7 +204,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         try {
           await refresh();
         } catch (err) {
-          if (err.name !== 'AbortError') setError(err.message || 'Không đồng bộ được trạng thái Facebook');
+          if (err.name !== 'AbortError') setError(err.message || 'Failed to sync Facebook status');
         }
       } else {
         clearStoredFacebookChatbotToken();
@@ -226,14 +225,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       setError('');
       window.location.assign(await getFacebookOauthUrl());
     } catch (err) {
-      setError(err.message || 'Không bắt đầu được kết nối tài khoản Facebook');
+      setError(err.message || 'Failed to start Facebook connection');
     }
-  };
-
-  const handleLogoutFacebook = async () => {
-    await logoutChatbotFacebook();
-    clearStoredFacebookChatbotToken();
-    await refresh();
   };
 
   const handleConnectPage = async (pageId) => {
@@ -242,7 +235,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   };
 
   const handleDisconnectPage = async (page) => {
-    if (!window.confirm(`Ngắt kết nối Page "${page.name}"? Bot sẽ không gửi trả lời qua Page này nữa.`)) return;
+    if (!window.confirm(`Disconnect Page "${page.name}"? The bot will stop replying on this Page.`)) return;
+    await disconnectFacebookPage(page.id);
+    await refresh();
+  };
+
+  const handleDeletePage = async (page) => {
+    if (!window.confirm(`Delete Page "${page.name}" from the app? This will remove the webhook connection and local page record.`)) return;
     await disconnectFacebookPage(page.id);
     await refresh();
   };
@@ -483,19 +482,19 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         <section className="section-card">
           <div className="section-card__header section-card__header--compact">
             <div>
-              <h2 className="section-card__title">Kết nối Page</h2>
+              <h2 className="section-card__title">Page Connections</h2>
             </div>
-          <div className="actions">
-            {!facebookMeLoaded ? (
-              <button className="button" type="button" disabled>
-                Đang kiểm tra
-              </button>
-            ) : facebookMe.loggedIn ? (
-              <button className="button button--secondary" type="button" onClick={handleLogoutFacebook}>Ngắt kết nối Facebook</button>
-            ) : (
-              <button className="button" type="button" disabled={!facebookMe.configured} onClick={startFacebookLogin}>Kết nối tài khoản Facebook</button>
-            )}
-          </div>
+            <div className="actions">
+              {!facebookMeLoaded ? (
+                <button className="button" type="button" disabled>
+                  Checking...
+                </button>
+              ) : (
+                <button className="button" type="button" disabled={!facebookMe.configured} onClick={startFacebookLogin}>
+                  Add Facebook
+                </button>
+              )}
+            </div>
         </div>
 
           <div className="chatbot-page-grid">
@@ -512,21 +511,30 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                   <h3>{page.name}</h3>
                   <p>
                     {page.connected
-                      ? 'Đã kết nối webhook'
+                      ? 'Webhook connected'
                       : page.canManage
-                        ? 'Có thể kết nối'
-                        : 'Thiếu quyền quản lý'}
+                        ? 'Ready to connect'
+                        : 'Missing management permission'}
                   </p>
                 </div>
-                <div className="mini-card__action">
+                <div className="mini-card__action mini-card__action--stack">
                   {page.connected ? (
-                    <button
-                      className="button button--ghost button--small"
-                      type="button"
-                      onClick={() => handleDisconnectPage(page)}
-                    >
-                      Disconnect
-                    </button>
+                    <>
+                      <button
+                        className="button button--ghost button--small"
+                        type="button"
+                        onClick={() => handleDisconnectPage(page)}
+                      >
+                        Disconnect
+                      </button>
+                      <button
+                        className="button button--ghost button--danger button--small"
+                        type="button"
+                        onClick={() => handleDeletePage(page)}
+                      >
+                        Delete
+                      </button>
+                    </>
                   ) : (
                     <button
                       className="button button--small"
@@ -541,7 +549,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
               </article>
             )) : null}
             {facebookMeLoaded && managedPagesLoaded && facebookMe.loggedIn && managedPages.length === 0 ? (
-              <div className="section-card__meta">Tài khoản Facebook đã kết nối nhưng chưa có Page nào hiện ra. Hãy kiểm tra lại quyền Page hoặc đảm bảo tài khoản này đang quản lý ít nhất một Page.</div>
+              <div className="section-card__meta">Facebook is connected, but no Pages are available yet. Check Page permissions or make sure this account manages at least one Page.</div>
             ) : null}
           </div>
         </section>
