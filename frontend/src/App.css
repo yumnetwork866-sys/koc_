@@ -661,6 +661,11 @@
   margin-bottom: 18px;
 }
 
+.section-card__header--compact {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
 .section-card__title {
   margin: 0;
   color: #0f172a;
@@ -1878,6 +1883,10 @@
 
   .section-card__header {
     margin-bottom: 14px;
+  }
+
+  .section-card__header--compact {
+    margin-bottom: 12px;
   }
 
   .section-card__title {
