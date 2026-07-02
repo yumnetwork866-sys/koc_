@@ -658,6 +658,15 @@ async function revokeFacebookOwner(userId) {
     : { owner_id: userId };
 
   const pages = await FacebookPage.findAll({ where: pageWhere });
+  const pageIds = pages.map((page) => page.id).filter(Boolean);
+
+  if (pageIds.length) {
+    await Promise.all([
+      ChatbotMessage.destroy({ where: { page_id: { [Op.in]: pageIds } } }),
+      ChatbotOrder.destroy({ where: { page_id: { [Op.in]: pageIds } } }),
+    ]);
+  }
+
   for (const page of pages) {
     try {
       const token = decryptToken(page.access_token_encrypted);

@@ -254,16 +254,17 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   useEffect(() => {
     if (!chatPageOptions.length) {
       setSelectedPageId('');
-      setSelectedSenderId('');
       return;
     }
 
     setSelectedPageId((current) => (
       current && chatPageOptions.some((page) => page.id === current)
         ? current
-        : chatPageOptions[0].id
+        : selectedConversation?.pageId && chatPageOptions.some((page) => page.id === selectedConversation.pageId)
+          ? selectedConversation.pageId
+          : chatPageOptions[0].id
     ));
-  }, [chatPageOptions]);
+  }, [chatPageOptions, selectedConversation?.pageId]);
 
   useEffect(() => {
     setSelectedSenderId((current) => (
