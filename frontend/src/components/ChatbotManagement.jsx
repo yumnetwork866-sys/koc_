@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -108,6 +108,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [facebookMeLoaded, setFacebookMeLoaded] = useState(false);
   const [managedPagesLoaded, setManagedPagesLoaded] = useState(false);
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
+  const pagePickerTriggerRef = useRef(null);
+  const pagePickerMenuRef = useRef(null);
+  const [pagePickerMenuStyle, setPagePickerMenuStyle] = useState(null);
 
   const managedPageMap = useMemo(
     () => new Map(managedPages.map((page) => [page.id, page])),
@@ -225,12 +228,14 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       source: 'local',
     }))].forEach((page) => {
       if (!page?.id) return;
+      const existing = combinedPages.get(page.id) || {};
       const next = {
         ...page,
-        connected: page.connected ?? Boolean(page.ownerId || page.source === 'local'),
-        canManage: page.canManage ?? page.source === 'local',
+        ...existing,
+        connected: existing.connected ?? page.connected ?? Boolean(page.ownerId || page.source === 'local'),
+        canManage: existing.canManage ?? page.canManage ?? page.source === 'local',
       };
-      combinedPages.set(page.id, { ...(combinedPages.get(page.id) || {}), ...next });
+      combinedPages.set(page.id, next);
     });
     setManagedPages([...combinedPages.values()]);
     setManagedPagesLoaded(true);
@@ -257,6 +262,67 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         : filteredConversations[0]?.senderId || ''
     ));
   }, [filteredConversations]);
+
+  useEffect(() => {
+    if (!pagePickerOpen) {
+      setPagePickerMenuStyle(null);
+      return undefined;
+    }
+
+    const updateMenuPosition = () => {
+      const trigger = pagePickerTriggerRef.current;
+      if (!trigger || typeof window === 'undefined') return;
+
+      const rect = trigger.getBoundingClientRect();
+      const menuWidth = Math.min(280, Math.max(window.innerWidth - 24, 180));
+      const viewportPadding = 12;
+      const openAbove = rect.bottom + 292 > window.innerHeight && rect.top > 292;
+      const left = Math.min(
+        Math.max(viewportPadding, rect.right - menuWidth),
+        Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding),
+      );
+      const top = openAbove
+        ? Math.max(viewportPadding, rect.top - 8 - 280)
+        : rect.bottom + 8;
+
+      setPagePickerMenuStyle({
+        position: 'fixed',
+        top: `${top}px`,
+        left: `${left}px`,
+        width: `${menuWidth}px`,
+        right: 'auto',
+        bottom: 'auto',
+        zIndex: 2000,
+        maxHeight: '280px',
+      });
+    };
+
+    const handlePointerDown = (event) => {
+      const trigger = pagePickerTriggerRef.current;
+      const menu = pagePickerMenuRef.current;
+      if (trigger?.contains(event.target) || menu?.contains(event.target)) return;
+      setPagePickerOpen(false);
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setPagePickerOpen(false);
+    };
+
+    updateMenuPosition();
+    window.addEventListener('resize', updateMenuPosition);
+    window.addEventListener('scroll', updateMenuPosition, true);
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [pagePickerOpen]);
 
   useEffect(() => {
     if (activeSection !== 'chat') setPagePickerOpen(false);
@@ -443,24 +509,30 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 <span>Page</span>
                 <div className="chatbot-page-picker__menu-wrap">
                   <button
+                    ref={pagePickerTriggerRef}
                     className="chatbot-page-picker__trigger"
                     type="button"
                     disabled={!chatPageOptions.length}
                     aria-haspopup="listbox"
                     aria-expanded={pagePickerOpen}
                     onClick={() => setPagePickerOpen((current) => !current)}
-                  >
-                    <span className="mini-card__avatar chatbot-page-picker__avatar" aria-hidden="true">
-                      {selectedChatPage && getPageAvatarUrl(selectedChatPage) ? (
-                        <img src={getPageAvatarUrl(selectedChatPage)} alt="" />
-                      ) : (
-                        getPageAvatarText(selectedChatPage?.name || 'Page')
-                      )}
-                    </span>
-                    <span className="chatbot-page-picker__name">{selectedChatPage?.name || 'Select Page'}</span>
+                    >
+                      <span className="mini-card__avatar chatbot-page-picker__avatar" aria-hidden="true">
+                        {selectedChatPage && getPageAvatarUrl(selectedChatPage) ? (
+                          <img src={getPageAvatarUrl(selectedChatPage)} alt="" />
+                        ) : (
+                          getPageAvatarText(selectedChatPage?.name || 'Page')
+                        )}
+                      </span>
+                    <span className="chatbot-page-picker__name">{selectedChatPage?.name?.trim() || selectedChatPage?.id || 'Select Page'}</span>
                   </button>
-                  {pagePickerOpen ? (
-                    <div className="chatbot-page-picker__menu" role="listbox">
+                  {pagePickerOpen && typeof document !== 'undefined' ? createPortal(
+                    <div
+                      ref={pagePickerMenuRef}
+                      className="chatbot-page-picker__menu"
+                      role="listbox"
+                      style={pagePickerMenuStyle || undefined}
+                    >
                       {chatPageOptions.map((page) => (
                         <button
                           key={page.id}
@@ -483,7 +555,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                           <span className="chatbot-page-picker__name">{page.name || page.id}</span>
                         </button>
                       ))}
-                    </div>
+                    </div>,
+                    document.body,
                   ) : null}
                 </div>
               </div>
