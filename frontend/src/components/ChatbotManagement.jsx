@@ -96,6 +96,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
   const [facebookMeLoaded, setFacebookMeLoaded] = useState(false);
+  const [managedPagesLoaded, setManagedPagesLoaded] = useState(false);
 
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.senderId === selectedSenderId),
@@ -109,6 +110,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   const loadOverview = useCallback(async (signal) => {
     setFacebookMeLoaded(false);
+    setManagedPagesLoaded(false);
     const [me, nextStats, nextConversations, nextOrders, nextDocs, nextSettings, nextOllamaModels] = await Promise.all([
       fetchChatbotFacebookMe(signal),
       fetchChatbotStats(signal),
@@ -140,13 +142,17 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
     if (me.loggedIn) {
       try {
-        setManagedPages(await fetchFacebookManagedPages(signal));
+        const pages = await fetchFacebookManagedPages(signal);
+        setManagedPages(pages);
+        setManagedPagesLoaded(true);
       } catch (err) {
         if (err.status !== 401) throw err;
         setManagedPages([]);
+        setManagedPagesLoaded(true);
       }
     } else {
       setManagedPages([]);
+      setManagedPagesLoaded(true);
     }
   }, []);
 
@@ -541,7 +547,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 </div>
               </article>
             )) : null}
-            {facebookMe.loggedIn && managedPages.length === 0 ? (
+            {facebookMeLoaded && managedPagesLoaded && facebookMe.loggedIn && managedPages.length === 0 ? (
               <div className="section-card__meta">Tài khoản Facebook đã kết nối nhưng chưa có Page nào hiện ra. Hãy kiểm tra lại quyền Page hoặc đảm bảo tài khoản này đang quản lý ít nhất một Page.</div>
             ) : null}
           </div>
