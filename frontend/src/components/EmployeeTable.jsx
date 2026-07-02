@@ -1,17 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createUser, deleteUser, fetchTeams, fetchUsers, updateUser } from '../lib/api';
+import { createUser, deleteUser, fetchUsers, updateUser } from '../lib/api';
 
 const initialForm = {
   name: '',
   email: '',
   password: '',
   role: 'member',
-  team_id: '',
 };
+
+const roleOptions = ['member', 'leader', 'koc', 'admin'];
 
 const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const [users, setUsers] = useState([]);
-  const [teams, setTeams] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -20,13 +20,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const [error, setError] = useState('');
 
   const loadData = async (signal) => {
-    const [loadedUsers, loadedTeams] = await Promise.all([
-      fetchUsers(signal),
-      fetchTeams(signal),
-    ]);
-
+    const loadedUsers = await fetchUsers(signal);
     setUsers(loadedUsers);
-    setTeams(loadedTeams);
   };
 
   useEffect(() => {
@@ -53,16 +48,9 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
     return () => controller.abort();
   }, []);
 
-  const teamNames = useMemo(() => {
-    return new Map(teams.map((team) => [team.id, team.name]));
-  }, [teams]);
-
   const rows = useMemo(() => {
-    return users.map((user) => ({
-      ...user,
-      teamName: teamNames.get(user.team_id) || 'Chưa gắn team',
-    }));
-  }, [users, teamNames]);
+    return users;
+  }, [users]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -80,7 +68,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       setError('');
       await createUser({
         ...form,
-        team_id: form.team_id ? Number(form.team_id) : null,
       });
       setForm(initialForm);
       await loadData();
@@ -142,7 +129,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Tạo user</h2>
-            <p className="section-card__meta">Role: admin, leader, member.</p>
+            <p className="section-card__meta">Role: admin, leader, member, koc.</p>
           </div>
         </div>
 
@@ -171,17 +158,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           <div className="field">
             <label htmlFor="role">Role</label>
             <select id="role" name="role" value={form.role} onChange={handleChange}>
-              <option value="member">member</option>
-              <option value="leader">leader</option>
-              <option value="admin">admin</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="team_id">Team</label>
-            <select id="team_id" name="team_id" value={form.team_id} onChange={handleChange}>
-              <option value="">Chưa gắn team</option>
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>{team.name}</option>
+              {roleOptions.map((role) => (
+                <option key={role} value={role}>{role}</option>
               ))}
             </select>
           </div>
@@ -197,11 +175,11 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Danh sách user</h2>
-            <p className="section-card__meta">Leader sẽ dùng danh sách này để gắn video cho nhân sự.</p>
+            <p className="section-card__meta">Leader sẽ dùng danh sách này để gắn video cho nhân sự, KOC là creator bên ngoài.</p>
           </div>
           <div className="chip-row">
             <span className="chip chip--blue">Users: {rows.length}</span>
-            <span className="chip chip--positive">Teams: {teams.length}</span>
+            <span className="chip chip--positive">KOC: {rows.filter((user) => user.role === 'koc').length}</span>
           </div>
         </div>
 
@@ -218,7 +196,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                   <th>Tên</th>
                   <th>Email</th>
                   <th>Role</th>
-                  <th>Team</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -234,12 +211,11 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                         onChange={(event) => handleRoleChange(user, event.target.value)}
                         disabled={updatingRoleId === user.id}
                       >
-                        <option value="member">member</option>
-                        <option value="leader">leader</option>
-                        <option value="admin">admin</option>
+                        {roleOptions.map((role) => (
+                          <option key={role} value={role}>{role}</option>
+                        ))}
                       </select>
                     </td>
-                    <td>{user.teamName}</td>
                     <td>
                       <button
                         type="button"

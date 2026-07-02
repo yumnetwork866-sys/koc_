@@ -9,7 +9,7 @@ export const TermsContent = () => (
       terms of any third-party platforms you choose to connect.
     </p>
     <p>
-      The service helps authorized teams connect supported platforms, organize content operations, and review
+      The service helps authorized users connect supported platforms, organize content operations, and review
       channel, messaging, and performance data. When you choose to connect a platform, that provider presents its
       own consent flow and you may deny or revoke access at any time.
     </p>
@@ -49,8 +49,8 @@ export const PrivacyContent = () => (
     </p>
     <h2>Information we collect</h2>
     <p>
-      We collect the information needed to operate the service: workspace account details (name, email, role and
-      team), support messages, and operational records such as assignments and reports. If you choose to connect a
+      We collect the information needed to operate the service: workspace account details (name, email, and role),
+      support messages, and operational records such as assignments and reports. If you choose to connect a
       platform, we collect the data approved through that platform&apos;s consent flow, which may include account
       identifiers, profile details, public metrics, messages, and media metadata depending on the platform and
       scopes granted.

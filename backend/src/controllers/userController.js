@@ -1,6 +1,7 @@
-const { Team, User } = require('../models');
+const { User } = require('../models');
 const { hashPassword } = require('../lib/password');
 const MIN_PASSWORD_LENGTH = 8;
+const ALLOWED_ROLES = new Set(['admin', 'leader', 'member', 'koc']);
 
 const serializeUser = (user) => {
   const safeUser = user.get({ plain: true });
@@ -12,7 +13,6 @@ const serializeUser = (user) => {
 const getUsers = async (req, res) => {
   try {
     const users = await User.findAll({
-      include: [{ model: Team, as: 'team' }],
       order: [['id', 'ASC']],
     });
     res.json(users);
@@ -24,9 +24,7 @@ const getUsers = async (req, res) => {
 // Get user by ID
 const getUserById = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id, {
-      include: [{ model: Team, as: 'team' }],
-    });
+    const user = await User.findByPk(req.params.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -39,17 +37,20 @@ const getUserById = async (req, res) => {
 // Create new user
 const createUser = async (req, res) => {
   try {
-    const { name, email, password, role, team_id: teamId } = req.body;
+    const { name, email, password, role } = req.body;
 
     if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
       return res.status(400).json({ message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    }
+
+    if (role && !ALLOWED_ROLES.has(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
     }
 
     const user = await User.create({
       name,
       email,
       role,
-      team_id: teamId,
       password_hash: await hashPassword(password),
     });
     res.status(201).json(serializeUser(user));
@@ -61,8 +62,20 @@ const createUser = async (req, res) => {
 // Update user
 const updateUser = async (req, res) => {
   try {
-    const [updated] = await User.update(req.body, {
-      where: { id: req.params.id }
+    if (req.body.role && !ALLOWED_ROLES.has(req.body.role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+
+    const payload = {
+      name: req.body.name,
+      email: req.body.email,
+      role: req.body.role,
+    };
+
+    const [updated] = await User.update(payload, {
+      where: { id: req.params.id },
+      individualHooks: true,
+      validate: true,
     });
     if (updated) {
       const updatedUser = await User.findByPk(req.params.id);

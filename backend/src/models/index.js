@@ -1,22 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db/config');
 
-const Team = sequelize.define('Team', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-  },
-}, {
-  tableName: 'teams',
-  timestamps: false,
-});
-
 const User = sequelize.define('User', {
   id: {
     type: DataTypes.INTEGER,
@@ -39,16 +23,12 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: true,
   },
-  team_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-  },
   role: {
     type: DataTypes.STRING,
     allowNull: false,
     defaultValue: 'member',
     validate: {
-      isIn: [['admin', 'leader', 'member']],
+      isIn: [['admin', 'leader', 'member', 'koc']],
     },
   },
 }, {
@@ -612,9 +592,6 @@ const ChatbotSetting = sequelize.define('ChatbotSetting', {
   timestamps: false,
 });
 
-User.belongsTo(Team, { foreignKey: 'team_id', as: 'team' });
-Team.hasMany(User, { foreignKey: 'team_id', as: 'users' });
-
 TikTokChannel.hasMany(Video, { foreignKey: 'channel_id', as: 'videos' });
 Video.belongsTo(TikTokChannel, { foreignKey: 'channel_id', as: 'channel' });
 
@@ -646,7 +623,6 @@ ChatbotOrder.belongsTo(FacebookPage, { foreignKey: 'page_id', as: 'page' });
 
 module.exports = {
   User,
-  Team,
   TikTokChannel,
   Video,
   VideoAssignment,

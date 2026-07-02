@@ -57,10 +57,6 @@ export function fetchUsers(signal) {
   return apiRequest('/users', { signal });
 }
 
-export function fetchTeams(signal) {
-  return apiRequest('/teams', { signal });
-}
-
 export function fetchVideos(signal) {
   return apiRequest('/videos', { signal });
 }
@@ -101,13 +97,6 @@ export function fetchProducts(signal) {
 
 export function fetchAssignments(signal) {
   return apiRequest('/assignments', { signal });
-}
-
-export function createTeam(payload) {
-  return apiRequest('/teams', {
-    method: 'POST',
-    body: payload,
-  });
 }
 
 export function createUser(payload) {

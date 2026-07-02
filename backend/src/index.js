@@ -8,7 +8,6 @@ const PORT = process.env.PORT || 8000;
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
-const teamRoutes = require('./routes/teamRoutes');
 const videoRoutes = require('./routes/videoRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const channelRoutes = require('./routes/channelRoutes');
@@ -41,7 +40,6 @@ const createApp = () => {
   });
 
   app.use('/api/users', requireAdmin, userRoutes);
-  app.use('/api/teams', requireAdmin, teamRoutes);
   app.use('/api/videos', requireAdmin, videoRoutes);
   app.use('/api/reports', requireAdmin, reportRoutes);
   app.use('/api/channels', channelRoutes);
@@ -89,7 +87,6 @@ const startServer = async () => {
         name: adminAccount.username,
         email: adminAccount.email,
         role: 'admin',
-        team_id: null,
       },
     });
 

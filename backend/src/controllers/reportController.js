@@ -71,10 +71,9 @@ const deleteReport = async (req, res) => {
 
 const getKpis = async (req, res) => {
   try {
-    const [overviewRows, teamKpis, userKpis, productKpis] = await Promise.all([
+    const [overviewRows, userKpis, productKpis] = await Promise.all([
       sequelize.query(`
         SELECT
-          (SELECT COUNT(*) FROM teams)::int AS "totalTeams",
           (SELECT COUNT(*) FROM users)::int AS "totalUsers",
           COUNT(*)::int AS "totalVideos",
           COALESCE(SUM(views), 0)::bigint AS "totalViews",
@@ -82,28 +81,6 @@ const getKpis = async (req, res) => {
           COALESCE(SUM(comments), 0)::bigint AS "totalComments",
           COALESCE(SUM(shares), 0)::bigint AS "totalShares"
         FROM videos
-      `, { type: QueryTypes.SELECT }),
-      sequelize.query(`
-        WITH team_videos AS (
-          SELECT DISTINCT u.team_id, va.video_id
-          FROM users u
-          JOIN video_assignments va ON va.user_id = u.id
-          WHERE u.team_id IS NOT NULL
-        )
-        SELECT
-          t.id,
-          t.name,
-          COUNT(tv.video_id)::int AS "totalVideos",
-          COALESCE(SUM(v.views), 0)::bigint AS "totalViews",
-          COALESCE(SUM(v.likes), 0)::bigint AS "totalLikes",
-          COALESCE(SUM(v.comments), 0)::bigint AS "totalComments",
-          COALESCE(SUM(v.shares), 0)::bigint AS "totalShares",
-          COALESCE(ROUND(AVG(v.views)), 0)::bigint AS "avgViewsPerVideo"
-        FROM teams t
-        LEFT JOIN team_videos tv ON tv.team_id = t.id
-        LEFT JOIN videos v ON v.id = tv.video_id
-        GROUP BY t.id, t.name
-        ORDER BY t.id ASC
       `, { type: QueryTypes.SELECT }),
       sequelize.query(`
         WITH user_videos AS (
@@ -115,7 +92,6 @@ const getKpis = async (req, res) => {
           u.name,
           u.email,
           u.role,
-          u.team_id,
           COUNT(uv.video_id)::int AS "videoCount",
           COALESCE(SUM(v.views), 0)::bigint AS "totalViews",
           COALESCE(ROUND(AVG(v.views)), 0)::bigint AS "avgViewsPerVideo",
@@ -136,7 +112,7 @@ const getKpis = async (req, res) => {
           ORDER BY v_top.views DESC, v_top.id ASC
           LIMIT 1
         ) top_video ON true
-        GROUP BY u.id, u.name, u.email, u.role, u.team_id, top_video.id, top_video.title, top_video.views
+        GROUP BY u.id, u.name, u.email, u.role, top_video.id, top_video.title, top_video.views
         ORDER BY u.id ASC
       `, { type: QueryTypes.SELECT }),
       sequelize.query(`
@@ -156,7 +132,6 @@ const getKpis = async (req, res) => {
 
     res.json({
       overview: toNumbers(overviewRows[0], ['totalViews', 'totalLikes', 'totalComments', 'totalShares']),
-      teams: teamKpis.map((team) => toNumbers(team, ['totalViews', 'totalLikes', 'totalComments', 'totalShares', 'avgViewsPerVideo'])),
       users: userKpis.map((user) => toNumbers(user, ['totalViews', 'avgViewsPerVideo'])),
       products: productKpis.map((product) => toNumbers(product, ['totalViews', 'avgViewsPerVideo'])),
     });

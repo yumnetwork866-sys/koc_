@@ -1,6 +1,5 @@
 const {
   Product,
-  Team,
   TikTokChannel,
   User,
   Video,
@@ -13,10 +12,6 @@ const products = ['Sẹo', 'Rạn', 'Follicas', 'Lumilab', 'Mụn'];
 
 const seedDatabase = async () => {
   try {
-    const [contentMkt] = await Team.findOrCreate({ where: { name: 'Content MKT' } });
-    const [contentAi] = await Team.findOrCreate({ where: { name: 'Content AI' } });
-    const [news] = await Team.findOrCreate({ where: { name: 'Tin tức' } });
-
     const adminAccount = getAdminAccount();
     const [admin] = await User.findOrCreate({
       where: { email: adminAccount.email },
@@ -24,7 +19,6 @@ const seedDatabase = async () => {
         name: adminAccount.username,
         email: adminAccount.email,
         role: 'admin',
-        team_id: null,
       },
     });
 
@@ -34,7 +28,6 @@ const seedDatabase = async () => {
         name: 'Mai Leader',
         email: 'leader@company.com',
         role: 'leader',
-        team_id: contentMkt.id,
       },
     });
 
@@ -44,7 +37,6 @@ const seedDatabase = async () => {
         name: 'Nam Script',
         email: 'script@company.com',
         role: 'member',
-        team_id: contentMkt.id,
       },
     });
 
@@ -54,7 +46,6 @@ const seedDatabase = async () => {
         name: 'Linh AI',
         email: 'ai@company.com',
         role: 'member',
-        team_id: contentAi.id,
       },
     });
 
@@ -64,7 +55,6 @@ const seedDatabase = async () => {
         name: 'Quân Editor',
         email: 'news@company.com',
         role: 'member',
-        team_id: news.id,
       },
     });
 
@@ -226,7 +216,6 @@ module.exports = {
       await TikTokChannel.destroy({ where: {} });
       await Product.destroy({ where: {} });
       await User.destroy({ where: {} });
-      await Team.destroy({ where: {} });
       console.log('Database cleared');
     } catch (error) {
       console.error('Error clearing database:', error);

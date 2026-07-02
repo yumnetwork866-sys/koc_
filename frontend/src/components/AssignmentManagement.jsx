@@ -149,7 +149,7 @@ const AssignmentManagement = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Assignments hiện có</h2>
-            <p className="section-card__meta">Dashboard KPI theo user/team lấy từ danh sách này.</p>
+            <p className="section-card__meta">Dashboard KPI theo user lấy từ danh sách này.</p>
           </div>
         </div>
 
@@ -165,7 +165,6 @@ const AssignmentManagement = ({ heroTitle, heroSubtitle }) => {
                 <tr>
                   <th>Video</th>
                   <th>User</th>
-                  <th>Team</th>
                   <th>Role</th>
                 </tr>
               </thead>
@@ -174,7 +173,6 @@ const AssignmentManagement = ({ heroTitle, heroSubtitle }) => {
                   <tr key={assignment.id}>
                     <td><span className="row-title">{assignment.video?.title || assignment.video_id}</span></td>
                     <td>{assignment.user?.name || assignment.user_id}</td>
-                    <td>{assignment.user?.team?.name || assignment.user?.team_id || '-'}</td>
                     <td><span className="chip">{assignment.assignment_role}</span></td>
                   </tr>
                 ))}

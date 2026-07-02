@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Team, User } = require('../models');
+const { User } = require('../models');
 const { verifyPassword } = require('../lib/password');
 const { createSessionToken } = require('../lib/session');
 
@@ -21,7 +21,6 @@ const login = async (req, res) => {
       where: {
         [Op.or]: [{ email: identifier }, { name: identifier }],
       },
-      include: [{ model: Team, as: 'team' }],
     });
 
     const passwordIsValid = user?.password_hash

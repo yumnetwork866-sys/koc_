@@ -38,7 +38,7 @@ const Login = () => {
       <section className="page__hero">
         <span className="page__eyebrow">Login admin</span>
         <h1 className="page__title">Performance Report</h1>
-        <p className="page__subtitle">Đăng nhập để quản lý team, user, kênh, video và báo cáo tuần.</p>
+        <p className="page__subtitle">Đăng nhập để quản lý user, KOC, kênh, video và báo cáo tuần.</p>
       </section>
 
       {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}

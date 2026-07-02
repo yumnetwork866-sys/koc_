@@ -5,7 +5,7 @@ import { PLATFORMS } from '../lib/platforms';
 const productHighlights = [
   {
     title: 'Platform reporting',
-    description: 'Connect supported platforms, sync approved metrics, and review performance by team or workspace.',
+    description: 'Connect supported platforms, sync approved metrics, and review performance by user or workspace.',
   },
   {
     title: 'Messaging automation',
@@ -24,7 +24,7 @@ const processSteps = [
   },
   {
     title: 'Organize',
-    description: 'Map videos to the right teams and owners.',
+    description: 'Map videos to the right owners.',
   },
   {
     title: 'Report',

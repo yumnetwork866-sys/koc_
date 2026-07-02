@@ -1,11 +1,11 @@
-const { Team, User, Video, VideoAssignment } = require('../models');
+const { User, Video, VideoAssignment } = require('../models');
 
 const getAssignments = async (req, res) => {
   try {
     const assignments = await VideoAssignment.findAll({
       include: [
         { model: Video, as: 'video' },
-        { model: User, as: 'user', include: [{ model: Team, as: 'team' }] },
+        { model: User, as: 'user' },
       ],
       order: [['id', 'DESC']],
     });
@@ -21,7 +21,7 @@ const createAssignment = async (req, res) => {
     const createdAssignment = await VideoAssignment.findByPk(assignment.id, {
       include: [
         { model: Video, as: 'video' },
-        { model: User, as: 'user', include: [{ model: Team, as: 'team' }] },
+        { model: User, as: 'user' },
       ],
     });
     res.status(201).json(createdAssignment);

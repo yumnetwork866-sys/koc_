@@ -8,8 +8,8 @@ export const sidebarSections = [
     title: 'TikTok',
     items: [
       { to: '/dashboard', label: 'Dashboard' },
-      { to: '/manage/teams', label: 'Teams' },
       { to: '/manage/users', label: 'Users' },
+      { to: '/manage/koc', label: 'KOC' },
       { to: '/manage/channels', label: 'Channels' },
       { to: '/videos', label: 'Videos' },
       { to: '/assignments', label: 'Assign' },
@@ -33,15 +33,7 @@ export const protectedRouteCards = [
     component: 'Dashboard',
     props: {
       heroTitle: 'Content performance dashboard',
-      heroSubtitle: 'Theo dõi KPI theo team, user, sản phẩm và nền tảng từ dữ liệu OAuth, import hoặc crawler.',
-    },
-  },
-  {
-    path: '/manage/teams',
-    component: 'TeamManagement',
-    props: {
-      heroTitle: 'Team management',
-      heroSubtitle: 'Tạo và kiểm soát các team Content MKT, Content AI, Tin tức để dashboard tính KPI đúng ownership.',
+      heroSubtitle: 'Theo dõi KPI theo user, KOC, sản phẩm và nền tảng từ dữ liệu OAuth, import hoặc crawler.',
     },
   },
   {
@@ -50,6 +42,14 @@ export const protectedRouteCards = [
     props: {
       heroTitle: 'User management',
       heroSubtitle: 'Quản lý admin, leader và member trước khi leader gắn video cho từng người.',
+    },
+  },
+  {
+    path: '/manage/koc',
+    component: 'KOCManagement',
+    props: {
+      heroTitle: 'KOC management',
+      heroSubtitle: 'Quản lý KOC/TikTok creator, theo dõi profile, follower và trạng thái kết nối.',
     },
   },
   {
@@ -73,7 +73,7 @@ export const protectedRouteCards = [
     component: 'AssignmentManagement',
     props: {
       heroTitle: 'Assign video ownership',
-      heroSubtitle: 'Leader gắn video cho script, editor, uploader, actor hoặc AI creator để tính KPI theo user/team.',
+      heroSubtitle: 'Leader gắn video cho script, editor, uploader, actor hoặc AI creator để tính KPI theo user.',
     },
   },
   {
@@ -119,7 +119,7 @@ export const protectedRouteCards = [
 ];
 
 export const redirectRoutes = [
-  { path: '/manage', to: '/manage/teams' },
+  { path: '/manage', to: '/manage/users' },
   { path: '/chatbot', to: '/chatbot/dashboard' },
   { path: '/chatbot/rag', to: '/chatbot/chat-setting' },
 ];

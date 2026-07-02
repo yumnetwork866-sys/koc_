@@ -1,8 +1,7 @@
 const statements = [
-  `CREATE TABLE IF NOT EXISTS teams (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL UNIQUE)`,
   `CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255), team_id INTEGER REFERENCES teams(id),
+    password_hash VARCHAR(255),
     role VARCHAR(255) NOT NULL DEFAULT 'member'
   )`,
   `CREATE TABLE IF NOT EXISTS tiktok_channels (
@@ -49,7 +48,7 @@ const up = async ({ sequelize, transaction }) => {
 
 const down = async ({ sequelize, transaction }) => {
   await sequelize.query(
-    'DROP TABLE IF EXISTS weekly_reports, video_daily_stats, video_assignments, video_products, products, videos, tiktok_channels, users, teams CASCADE',
+    'DROP TABLE IF EXISTS weekly_reports, video_daily_stats, video_assignments, video_products, products, videos, tiktok_channels, users CASCADE',
     { transaction },
   );
 };

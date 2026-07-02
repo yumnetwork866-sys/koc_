@@ -1,7 +1,6 @@
 const { sequelize } = require('../models');
 
 const TEMP = {
-  teamName: 'Facebook Ops Temp',
   users: [
     {
       email: 'temp.user.one@example.com',
@@ -51,7 +50,6 @@ async function removeExistingRows(transaction) {
   await exec('DELETE FROM facebook_pages WHERE id = ANY($1::text[])', [pageIds], transaction);
   await exec('DELETE FROM facebook_user_sessions WHERE sid = ANY($1::text[])', [userSids], transaction);
   await exec('DELETE FROM users WHERE email = ANY($1::text[])', [userEmails], transaction);
-  await exec('DELETE FROM teams WHERE name = $1', [TEMP.teamName], transaction);
   await exec('DELETE FROM chatbot_settings WHERE id = 1', undefined, transaction);
 }
 
@@ -61,23 +59,13 @@ async function seed() {
   await sequelize.transaction(async (transaction) => {
     await removeExistingRows(transaction);
 
-    const [[team]] = await exec(
-      `
-        INSERT INTO teams (name)
-        VALUES ($1)
-        RETURNING id, name
-      `,
-      [TEMP.teamName],
-      transaction,
-    );
-
     for (const userSeed of TEMP.users) {
       await exec(
         `
-          INSERT INTO users (name, email, team_id, role, password_hash)
-          VALUES ($1, $2, $3, $4, $5)
+          INSERT INTO users (name, email, role, password_hash)
+          VALUES ($1, $2, $3, $4)
         `,
-        [userSeed.name, userSeed.email, team.id, 'member', null],
+        [userSeed.name, userSeed.email, 'member', null],
         transaction,
       );
 

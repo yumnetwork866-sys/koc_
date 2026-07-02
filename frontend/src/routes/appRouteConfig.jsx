@@ -8,10 +8,10 @@ const ChannelManagement = lazy(() => import('../components/ChannelManagement'));
 const ChatbotManagement = lazy(() => import('../components/ChatbotManagement'));
 const Dashboard = lazy(() => import('../components/Dashboard'));
 const EmployeeTable = lazy(() => import('../components/EmployeeTable'));
+const KOCManagement = lazy(() => import('../components/KOCManagement'));
 const HomePage = lazy(() => import('../components/HomePage'));
 const Login = lazy(() => import('../components/Login'));
 const ReportFilter = lazy(() => import('../components/ReportFilter'));
-const TeamManagement = lazy(() => import('../components/TeamManagement'));
 const VideoTable = lazy(() => import('../components/VideoTable'));
 const TermsPage = lazy(() => import('../pages/legal/TermsPage'));
 const PrivacyPage = lazy(() => import('../pages/legal/PrivacyPage'));
@@ -19,8 +19,8 @@ const DataDeletionPage = lazy(() => import('../pages/legal/DataDeletionPage'));
 
 const componentMap = {
   Dashboard,
-  TeamManagement,
   EmployeeTable,
+  KOCManagement,
   ChannelManagement,
   VideoTable,
   AssignmentManagement,

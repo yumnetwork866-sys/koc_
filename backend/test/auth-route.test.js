@@ -21,7 +21,6 @@ const makeResponse = () => ({
 
 test('auth route wires POST /login to the login controller', (t) => {
   const restoreModels = mockModule(modelsPath, {
-    Team: {},
     User: {},
   });
 
@@ -48,7 +47,6 @@ test('POST /login controller returns a token for valid admin credentials', async
   process.env.SESSION_SECRET = 'session-secret';
 
   const restoreModels = mockModule(modelsPath, {
-    Team: {},
     User: {
       unscoped() {
         return {

@@ -49,11 +49,15 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
       .slice(0, 5);
   }, [kpis]);
 
-  const chartData = (kpis?.teams || []).map((team) => ({
-    name: team.name,
-    views: team.totalViews,
-    videos: team.totalVideos,
-  }));
+  const chartData = (kpis?.users || [])
+    .slice()
+    .sort((a, b) => Number(b.totalViews || 0) - Number(a.totalViews || 0))
+    .slice(0, 6)
+    .map((user) => ({
+      name: user.name,
+      views: user.totalViews,
+      videos: user.videoCount,
+    }));
 
   return (
     <div className="page">
@@ -115,7 +119,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">KPI theo team</h2>
+            <h2 className="section-card__title">KPI theo user</h2>
             <p className="section-card__meta">Tổng video, view, like, comment, share và avg view/video.</p>
           </div>
         </div>
@@ -146,7 +150,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
           </div>
         ) : (
           <div className="empty-state">
-            <div>Chưa có dữ liệu team.</div>
+            <div>Chưa có dữ liệu user.</div>
           </div>
         )}
       </section>
