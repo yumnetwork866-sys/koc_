@@ -501,15 +501,16 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                   Checking...
                 </button>
               ) : (
-                facebookMe.loggedIn ? (
-                  <button className="button button--danger" type="button" onClick={handleRevokeFacebookAccount}>
-                    Revoke account
-                  </button>
-                ) : (
+                <>
                   <button className="button" type="button" disabled={!facebookMe.configured} onClick={startFacebookLogin}>
-                    Add Facebook
+                    Add Facebook account
                   </button>
-                )
+                  {facebookMe.loggedIn ? (
+                    <button className="button button--danger" type="button" onClick={handleRevokeFacebookAccount}>
+                      Revoke account
+                    </button>
+                  ) : null}
+                </>
               )}
             </div>
         </div>

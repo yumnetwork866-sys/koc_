@@ -1129,12 +1129,13 @@
 }
 
 .button--danger {
-  color: #991b1b;
+  background: #dc2626;
+  color: #ffffff;
 }
 
 .button--danger:hover {
   box-shadow: none;
-  background: rgba(239, 68, 68, 0.12);
+  background: #b91c1c;
 }
 
 .action-menu {
