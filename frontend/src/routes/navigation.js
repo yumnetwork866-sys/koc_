@@ -90,7 +90,7 @@ export const protectedRouteCards = [
     component: 'ReportFilter',
     props: {
       heroTitle: 'AI weekly report',
-      heroSubtitle: 'Sinh báo cáo tuần từ video trong khoảng ngày, lưu vào weekly_reports để leader/admin xem lại.',
+      heroSubtitle: 'Sinh báo cáo tuần từ video.',
     },
   },
   {

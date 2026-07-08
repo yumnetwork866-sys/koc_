@@ -73,6 +73,13 @@ export function fetchKpis(signal) {
   return apiRequest('/reports/kpis', { signal });
 }
 
+export function chatWithAssistant(message) {
+  return apiRequest('/assistant/chat', {
+    method: 'POST',
+    body: { message },
+  });
+}
+
 export function fetchChannels(signal) {
   return apiRequest('/channels', { signal });
 }
