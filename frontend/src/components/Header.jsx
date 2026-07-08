@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import AppLogo from './AppLogo';
 import { clearStoredSession, hasValidSession } from '../lib/session';
 import { topNavItems } from '../routes/navigation';
 
@@ -30,7 +31,8 @@ const Header = () => {
     <header className="topbar">
       <div className="topbar__inner">
         <Link to="/" className="brand" aria-label="Go to home">
-          <div>
+          <AppLogo size="sm" />
+          <div className="brand__text">
             <div className="brand__name">Content Performance Report</div>
           </div>
         </Link>

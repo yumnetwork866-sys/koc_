@@ -279,9 +279,14 @@
 .brand {
   display: flex;
   align-items: center;
+  gap: 12px;
   min-width: 0;
   color: inherit;
   text-decoration: none;
+}
+
+.brand__text {
+  min-width: 0;
 }
 
 .brand__name {
@@ -289,6 +294,55 @@
   font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0;
+}
+
+.app-logo {
+  display: block;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.app-logo--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.app-logo--md {
+  width: 44px;
+  height: 44px;
+}
+
+.app-logo--lg {
+  width: 56px;
+  height: 56px;
+}
+
+.legal-page__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  width: fit-content;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+.legal-page__brand-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.legal-page__brand-label {
+  color: #0f172a;
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.legal-page__brand-subtitle {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
 .brand__tagline {
@@ -598,6 +652,10 @@
 
 .legal-page__hero {
   margin-bottom: 0;
+}
+
+.legal-page__hero .page__eyebrow {
+  margin-top: 2px;
 }
 
 .legal-page__card {
