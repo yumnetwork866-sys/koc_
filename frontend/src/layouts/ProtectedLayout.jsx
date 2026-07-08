@@ -10,7 +10,9 @@ const ProtectedLayout = () => {
       <div className="app-shell__layout">
         <Sidebar />
         <main className="app-shell__content">
-          <Outlet />
+          <div className="app-shell__content-frame">
+            <Outlet />
+          </div>
         </main>
         <AiChatBubble />
       </div>

@@ -1,17 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { chatWithAssistant } from '../lib/api';
-
-const defaultPrompts = ['Báo cáo tổng quan', 'Đánh giá KOC'];
-const CALLOUT_TEXT = 'Xin chào, mình có thể giúp gì cho bạn?';
-
-const initialMessages = [
-  {
-    id: 'welcome',
-    role: 'assistant',
-    text: 'Xin chào, mình có thể giúp gì cho bạn?',
-  },
-];
+import { useI18n } from '../lib/language';
 
 const createMessage = (role, text, extra = {}) => ({
   id: `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -183,8 +173,15 @@ const renderMarkdownContent = (value) => {
 };
 
 const AiChatBubble = () => {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState([
+    {
+      id: 'welcome',
+      role: 'assistant',
+      text: t('ai.greeting'),
+    },
+  ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -201,6 +198,14 @@ const AiChatBubble = () => {
   }, []);
 
   useEffect(() => {
+    setMessages((current) => {
+      if (current.length !== 1 || current[0]?.id !== 'welcome') return current;
+      if (current[0]?.text === t('ai.greeting')) return current;
+      return [{ ...current[0], text: t('ai.greeting') }];
+    });
+  }, [t]);
+
+  useEffect(() => {
     if (!showCallout || open) {
       setTypedCalloutText('');
       return undefined;
@@ -208,16 +213,17 @@ const AiChatBubble = () => {
 
     setTypedCalloutText('');
     let index = 0;
+    const calloutText = t('ai.greeting');
     const interval = window.setInterval(() => {
       index += 1;
-      setTypedCalloutText(CALLOUT_TEXT.slice(0, index));
-      if (index >= CALLOUT_TEXT.length) {
+      setTypedCalloutText(calloutText.slice(0, index));
+      if (index >= calloutText.length) {
         window.clearInterval(interval);
       }
     }, 28);
 
     return () => window.clearInterval(interval);
-  }, [open, showCallout]);
+  }, [open, showCallout, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -257,7 +263,7 @@ const AiChatBubble = () => {
     el.scrollTop = el.scrollHeight;
   }, [messages, loading, open]);
 
-  const quickPrompts = useMemo(() => defaultPrompts, []);
+  const quickPrompts = useMemo(() => t('ai.quickPrompts'), [t]);
 
   const appendAssistantMessage = (text, extra = {}) => {
     setMessages((prev) => [...prev, createMessage('assistant', text, extra)]);
@@ -274,12 +280,12 @@ const AiChatBubble = () => {
 
     try {
       const response = await chatWithAssistant(text);
-      appendAssistantMessage(response.answer || 'Mình chưa lấy được câu trả lời lúc này.', {
-        suggestions: Array.isArray(response.suggestions) ? response.suggestions : defaultPrompts,
+      appendAssistantMessage(response.answer || t('ai.fallbackAnswer'), {
+        suggestions: Array.isArray(response.suggestions) ? response.suggestions : quickPrompts,
       });
     } catch (error) {
-      appendAssistantMessage(error.message || 'Mình đang gặp lỗi khi lấy dữ liệu, bạn thử lại sau nhé.', {
-        suggestions: defaultPrompts,
+      appendAssistantMessage(error.message || t('ai.fallbackError'), {
+        suggestions: quickPrompts,
       });
     } finally {
       setLoading(false);
@@ -299,12 +305,12 @@ const AiChatBubble = () => {
         <div className="ai-chat-callout" role="status" aria-live="polite">
           <span className="ai-chat-callout__text">
             {typedCalloutText}
-            {typedCalloutText.length < CALLOUT_TEXT.length ? <span className="ai-chat-callout__cursor">|</span> : null}
+            {typedCalloutText.length < t('ai.greeting').length ? <span className="ai-chat-callout__cursor">|</span> : null}
           </span>
           <button
             type="button"
             className="ai-chat-callout__close"
-            aria-label="Đóng gợi ý"
+            aria-label={t('ai.closeHint')}
             onClick={() => setShowCallout(false)}
           >
             ×
@@ -314,24 +320,24 @@ const AiChatBubble = () => {
       ) : null}
 
       {open ? (
-        <section ref={panelRef} className="ai-chat-panel" aria-label="AI assistant">
+        <section ref={panelRef} className="ai-chat-panel" aria-label={t('ai.assistant')}>
           <header className="ai-chat-panel__header">
             <div className="ai-chat-panel__brand">
               <div>
-                <strong>AI Assistant</strong>
+                <strong>{t('ai.assistant')}</strong>
               </div>
             </div>
             <button
               type="button"
               className="ai-chat-panel__close"
-              aria-label="Đóng chat"
+              aria-label={t('ai.closeLabel')}
               onClick={() => setOpen(false)}
             >
               ×
             </button>
           </header>
 
-          <div className="ai-chat-panel__chips" aria-label="Quick prompts">
+          <div className="ai-chat-panel__chips" aria-label={t('ai.assistant')}>
             {quickPrompts.map((prompt) => (
               <button
                 key={prompt}
@@ -377,7 +383,7 @@ const AiChatBubble = () => {
             ))}
             {loading ? (
               <div className="ai-chat-message ai-chat-message--assistant ai-chat-message--loading">
-                <div className="ai-chat-loading" aria-label="Đang phân tích dữ liệu" role="status">
+                <div className="ai-chat-loading" aria-label={t('ai.loading')} role="status">
                   <span />
                   <span />
                   <span />
@@ -392,11 +398,11 @@ const AiChatBubble = () => {
               type="text"
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder="Nhập câu hỏi..."
-              aria-label="Nhập câu hỏi AI"
+              placeholder={t('ai.placeholder')}
+              aria-label={t('ai.inputLabel')}
             />
             <button type="submit" className="button button--primary" disabled={loading || !input.trim()}>
-              Gửi
+              {t('ai.send')}
             </button>
           </form>
         </section>
@@ -406,7 +412,7 @@ const AiChatBubble = () => {
         type="button"
         className="ai-chat-launcher"
         data-ai-launcher="true"
-        aria-label="Mở AI assistant"
+        aria-label={t('ai.openLabel')}
         aria-expanded={open}
         onClick={() => {
           setOpen((value) => !value);

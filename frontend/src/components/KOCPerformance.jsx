@@ -1,21 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchKpis } from '../lib/api';
-
-const sortOptions = [
-  { value: 'totalViews_desc', label: 'Total views' },
-  { value: 'videoCount_desc', label: 'Video count' },
-  { value: 'avgViewsPerVideo_desc', label: 'Avg views/video' },
-  { value: 'over10kRate_desc', label: '>10k rate' },
-];
-
-const formatNumber = (value) => Number(value || 0).toLocaleString();
+import { useI18n } from '../lib/language';
 
 const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
+  const { t, language } = useI18n();
   const [kpis, setKpis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('totalViews_desc');
+
+  const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
+
+  const sortOptions = [
+    { value: 'totalViews_desc', label: t('koc.sortTotalViews') },
+    { value: 'videoCount_desc', label: t('koc.sortVideoCount') },
+    { value: 'avgViewsPerVideo_desc', label: t('koc.sortAvgViewsPerVideo') },
+    { value: 'over10kRate_desc', label: t('koc.sortOver10kRate') },
+  ];
 
   useEffect(() => {
     const controller = new AbortController();
@@ -28,7 +30,7 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
         setKpis(loadedKpis);
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setError(err.message || 'Failed to load KOC performance data');
+          setError(err.message || t('koc.errorLoad'));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -40,7 +42,7 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
     load();
 
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   const kocRows = useMemo(() => {
     return [...(kpis?.users || [])].filter((user) => user.role === 'koc');
@@ -97,23 +99,23 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
   return (
     <div className="page">
       <section className="page__hero">
-        <h1 className="page__title">{heroTitle}</h1>
-        <p className="page__subtitle">{heroSubtitle}</p>
+        <h1 className="page__title">{t('koc.heroTitle') || heroTitle}</h1>
+        <p className="page__subtitle">{t('koc.heroSubtitle') || heroSubtitle}</p>
         <div className="page__stats page__stats--four">
           <article className="stat-card">
-            <p className="stat-card__label">KOC</p>
+            <p className="stat-card__label">{t('koc.koc')}</p>
             <p className="stat-card__value">{formatNumber(summary.totalUsers)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Videos</p>
+            <p className="stat-card__label">{t('koc.videos')}</p>
             <p className="stat-card__value">{formatNumber(summary.totalVideos)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Total views</p>
+            <p className="stat-card__label">{t('koc.totalViews')}</p>
             <p className="stat-card__value">{formatNumber(summary.totalViews)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Avg views/video</p>
+            <p className="stat-card__label">{t('koc.avgViewsPerVideo')}</p>
             <p className="stat-card__value">{formatNumber(summary.avgViewsPerVideo)}</p>
           </article>
         </div>
@@ -128,28 +130,28 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Filter and sort</h2>
-            <p className="section-card__meta">Search by name or email, then sort by views, video count, average, or hit rate.</p>
+            <h2 className="section-card__title">{t('koc.filterSort')}</h2>
+            <p className="section-card__meta">{t('koc.filterSortMeta')}</p>
           </div>
           <div className="chip-row">
-            <span className="chip chip--blue">Visible: {formatNumber(sortedRows.length)}</span>
-            <span className="chip chip--positive">All KOC: {formatNumber(kocRows.length)}</span>
+            <span className="chip chip--blue">{t('koc.visible')}: {formatNumber(sortedRows.length)}</span>
+            <span className="chip chip--positive">{t('koc.allKoc')}: {formatNumber(kocRows.length)}</span>
           </div>
         </div>
 
         <form className="filter-panel filter-panel--compact" onSubmit={(event) => event.preventDefault()}>
           <div className="field field--full">
-            <label htmlFor="koc-search">Search</label>
+            <label htmlFor="koc-search">{t('common.search')}</label>
             <input
               id="koc-search"
               type="search"
-              placeholder="Search KOC by name or email"
+              placeholder={t('koc.searchPlaceholder')}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
           <div className="field">
-            <label htmlFor="koc-sort">Sort by</label>
+            <label htmlFor="koc-sort">{t('common.sortBy')}</label>
             <select id="koc-sort" value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
               {sortOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -160,7 +162,7 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
           </div>
           <div className="actions">
             <button className="button button--ghost" type="button" onClick={clearFilters}>
-              Clear
+              {t('koc.clear')}
             </button>
           </div>
         </form>
@@ -170,15 +172,15 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
         <article className="section-card">
           <div className="section-card__header section-card__header--compact">
             <div>
-              <h2 className="section-card__title">Top KOC</h2>
-              <p className="section-card__meta">Xếp hạng theo hiệu quả hiện tại.</p>
+              <h2 className="section-card__title">{t('koc.topKoc')}</h2>
+              <p className="section-card__meta">{t('koc.topKocMeta')}</p>
             </div>
           </div>
 
           {loading ? (
             <div className="empty-state">
               <div className="loading-dot" />
-              <div>Đang tải KOC performance</div>
+              <div>{t('koc.loading')}</div>
             </div>
           ) : sortedRows.length ? (
             <div className="metric-list">
@@ -191,28 +193,28 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
                       <span>
                         {index + 1}. {user.name}
                       </span>
-                      <span>{formatNumber(user.totalViews)} views</span>
+                      <span>{formatNumber(user.totalViews)} {t('koc.totalViews')}</span>
                     </div>
                     <div className="progress">
                       <div className="progress__bar progress__bar--teal" style={{ width: `${progress}%` }} />
                     </div>
                     <div className="row-subtitle">
-                      {user.videoCount} video | Avg {formatNumber(user.avgViewsPerVideo)} | {user.over10kRate}% &gt;10k
+                      {user.videoCount} {t('koc.videos')} | {t('koc.avg') || 'Avg'} {formatNumber(user.avgViewsPerVideo)} | {user.over10kRate}% {t('koc.over10kRate')}
                     </div>
                   </article>
                 );
               })}
             </div>
           ) : (
-            <div className="empty-state empty-state--compact">Chưa có KOC phù hợp bộ lọc.</div>
+            <div className="empty-state empty-state--compact">{t('koc.noMatch')}</div>
           )}
         </article>
 
         <article className="section-card">
           <div className="section-card__header section-card__header--compact">
             <div>
-              <h2 className="section-card__title">Top video</h2>
-              <p className="section-card__meta">Video có view cao nhất của từng KOC.</p>
+              <h2 className="section-card__title">{t('koc.topVideo')}</h2>
+              <p className="section-card__meta">{t('koc.topVideoMeta')}</p>
             </div>
           </div>
 
@@ -222,16 +224,16 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
                 <article className="metric-item" key={user.id}>
                   <div className="metric-item__head">
                     <span>{user.name}</span>
-                    <span>{user.topVideo ? formatNumber(user.topVideo.views) : 0} views</span>
+                    <span>{user.topVideo ? formatNumber(user.topVideo.views) : 0} {t('koc.totalViews')}</span>
                   </div>
                   <div className="row-subtitle">
-                    {user.topVideo?.title || 'Chưa có video'}{user.topVideo ? '' : ' | No data'}
+                    {user.topVideo?.title || t('koc.noVideo')}{user.topVideo ? '' : ` | ${t('common.noData')}`}
                   </div>
                 </article>
               ))}
             </div>
           ) : (
-            <div className="empty-state empty-state--compact">Chưa có video để so sánh.</div>
+            <div className="empty-state empty-state--compact">{t('koc.noVideoData')}</div>
           )}
         </article>
       </section>
@@ -239,28 +241,28 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">KOC performance table</h2>
-            <p className="section-card__meta">So sánh từng KOC theo video count, total views, avg views/video và top video.</p>
+            <h2 className="section-card__title">{t('koc.tableTitle')}</h2>
+            <p className="section-card__meta">{t('koc.tableMeta')}</p>
           </div>
         </div>
 
         {loading ? (
           <div className="empty-state">
             <div className="loading-dot" />
-            <div>Đang tải bảng hiệu quả KOC</div>
+            <div>{t('koc.loadingTable')}</div>
           </div>
         ) : sortedRows.length ? (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>KOC</th>
-                  <th>Email</th>
-                  <th>Videos</th>
-                  <th>Total views</th>
-                  <th>Avg views/video</th>
-                  <th>&gt;10k rate</th>
-                  <th>Top video</th>
+                  <th>{t('koc.koc')}</th>
+                  <th>{t('koc.email')}</th>
+                  <th>{t('koc.videos')}</th>
+                  <th>{t('koc.totalViews')}</th>
+                  <th>{t('koc.avgViewsPerVideo')}</th>
+                  <th>{t('koc.over10kRate')}</th>
+                  <th>{t('koc.topVideo')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -277,9 +279,9 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
                     <td>{formatNumber(user.avgViewsPerVideo)}</td>
                     <td>{user.over10kRate}%</td>
                     <td>
-                      <span className="row-title">{user.topVideo?.title || 'Chưa có video'}</span>
+                      <span className="row-title">{user.topVideo?.title || t('koc.noVideo')}</span>
                       <span className="row-subtitle">
-                        {user.topVideo ? `${formatNumber(user.topVideo.views)} views` : 'No data'}
+                        {user.topVideo ? `${formatNumber(user.topVideo.views)} ${t('koc.totalViews')}` : t('common.noData')}
                       </span>
                     </td>
                   </tr>
@@ -288,7 +290,7 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
             </table>
           </div>
         ) : (
-          <div className="empty-state empty-state--compact">Không tìm thấy KOC nào khớp bộ lọc.</div>
+          <div className="empty-state empty-state--compact">{t('koc.noData')}</div>
         )}
       </section>
 
@@ -296,17 +298,17 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
         <section className="section-card">
           <div className="section-card__header section-card__header--compact">
             <div>
-              <h2 className="section-card__title">Spotlight</h2>
-              <p className="section-card__meta">KOC đang dẫn đầu theo bộ lọc hiện tại.</p>
+              <h2 className="section-card__title">{t('koc.spotlight')}</h2>
+              <p className="section-card__meta">{t('koc.spotlightMeta')}</p>
             </div>
           </div>
           <div className="metric-item">
             <div className="metric-item__head">
               <span>{summary.topKoc.name}</span>
-              <span>{formatNumber(summary.topKoc.totalViews)} views</span>
+              <span>{formatNumber(summary.topKoc.totalViews)} {t('koc.totalViews')}</span>
             </div>
             <div className="row-subtitle">
-              {summary.topKoc.videoCount} video | Avg {formatNumber(summary.topKoc.avgViewsPerVideo)} | {summary.topKoc.over10kRate}% &gt;10k | Top video: {summary.topKoc.topVideo?.title || 'Chưa có'}
+              {summary.topKoc.videoCount} {t('koc.videos')} | {t('koc.avg')} {formatNumber(summary.topKoc.avgViewsPerVideo)} | {summary.topKoc.over10kRate}% {t('koc.over10kRate')} | Top video: {summary.topKoc.topVideo?.title || t('koc.noVideo')}
             </div>
           </div>
         </section>

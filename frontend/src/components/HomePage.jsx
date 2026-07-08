@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { PLATFORMS } from '../lib/platforms';
+import { useI18n } from '../lib/language';
 
 const productHighlights = [
   {
@@ -33,6 +34,7 @@ const processSteps = [
 ];
 
 const HomePage = () => {
+  const { t } = useI18n();
   const privacyContactEmail = import.meta.env.VITE_PRIVACY_CONTACT_EMAIL || 'privacy@yumnetwork.vn';
   const platformHighlights = PLATFORMS.map((platform) => ({
     title: platform.label,
@@ -44,15 +46,17 @@ const HomePage = () => {
     <div className="page home-page">
       <section className="page__hero home-page__hero" id="overview">
         <div className="home-page__hero-copy">
-          <h1 className="page__title">Manage, review, and report</h1>
+          <h1 className="page__title">{t('home.heroTitle')}</h1>
           <div className="home-page__hero-badges" aria-label="Quick summary">
-            <span className="home-page__badge">Overview</span>
-            <span className="home-page__badge">Workflow</span>
-            <span className="home-page__badge">Access</span>
+            {t('home.heroBadges')?.map((badge) => (
+              <span className="home-page__badge" key={badge}>
+                {badge}
+              </span>
+            ))}
           </div>
           <div className="home-page__actions">
             <Link to="/dashboard" className="button">
-              Go to dashboard
+              {t('home.goToDashboard')}
             </Link>
           </div>
         </div>
@@ -60,23 +64,23 @@ const HomePage = () => {
         <aside className="section-card home-page__hero-card" aria-label="Platform summary">
           <div className="section-card__header home-page__hero-card-header">
             <div>
-              <p className="home-page__card-kicker">At a glance</p>
-              <h2 className="section-card__title">Who it serves</h2>
+              <p className="home-page__card-kicker">{t('home.atAGlance')}</p>
+              <h2 className="section-card__title">{t('home.whoItServes')}</h2>
             </div>
           </div>
 
           <div className="home-page__summary-grid">
             <div className="stat-card">
-              <p className="stat-card__label">Primary users</p>
-              <p className="stat-card__value stat-card__value--small">Ops and reviewers</p>
+              <p className="stat-card__label">{t('home.primaryUsers')}</p>
+              <p className="stat-card__value stat-card__value--small">{t('home.primaryUsersValue')}</p>
             </div>
             <div className="stat-card">
-              <p className="stat-card__label">Main action</p>
-              <p className="stat-card__value stat-card__value--small">Track and review</p>
+              <p className="stat-card__label">{t('home.mainAction')}</p>
+              <p className="stat-card__value stat-card__value--small">{t('home.mainActionValue')}</p>
             </div>
             <div className="stat-card">
-              <p className="stat-card__label">Entry point</p>
-              <p className="stat-card__value stat-card__value--small">Public site to app</p>
+              <p className="stat-card__label">{t('home.entryPoint')}</p>
+              <p className="stat-card__value stat-card__value--small">{t('home.entryPointValue')}</p>
             </div>
           </div>
         </aside>
@@ -85,8 +89,8 @@ const HomePage = () => {
       <section className="home-page__section" id="platforms">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Supported platforms</h2>
-            <p className="section-card__meta">The workspace adapts to any platform you connect later.</p>
+            <h2 className="section-card__title">{t('home.supportedPlatforms')}</h2>
+            <p className="section-card__meta">{t('home.supportedPlatformsMeta')}</p>
           </div>
         </div>
 
@@ -118,8 +122,8 @@ const HomePage = () => {
         <article className="section-card" id="process">
           <div className="section-card__header">
             <div>
-              <h2 className="section-card__title">Workflow</h2>
-              <p className="section-card__meta">A generic flow for platform setup, content operations, and reporting.</p>
+              <h2 className="section-card__title">{t('home.workflow')}</h2>
+              <p className="section-card__meta">{t('home.workflowMeta')}</p>
             </div>
           </div>
 
@@ -139,8 +143,8 @@ const HomePage = () => {
         <article className="section-card" id="access">
           <div className="section-card__header">
             <div>
-              <h2 className="section-card__title">Access and data</h2>
-              <p className="section-card__meta">Governance and handling for connected platforms.</p>
+              <h2 className="section-card__title">{t('home.accessAndData')}</h2>
+              <p className="section-card__meta">{t('home.accessAndDataMeta')}</p>
             </div>
           </div>
 
@@ -160,23 +164,23 @@ const HomePage = () => {
       <section className="section-card home-page__contact" id="contact">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Privacy and support</h2>
-            <p className="section-card__meta">Request access, correction, deletion, or support for any connected platform.</p>
+            <h2 className="section-card__title">{t('home.privacyAndSupport')}</h2>
+            <p className="section-card__meta">{t('home.privacyAndSupportMeta')}</p>
           </div>
         </div>
         <div className="home-page__contact-grid">
           <div>
-            <p className="home-page__contact-label">Privacy requests</p>
+            <p className="home-page__contact-label">{t('home.privacyRequests')}</p>
             <a className="home-page__contact-link" href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>
           </div>
           <div>
-            <p className="home-page__contact-label">Platform data</p>
-            <Link className="home-page__contact-link" to="/privacy">Read our Privacy Policy</Link>
+            <p className="home-page__contact-label">{t('home.platformData')}</p>
+            <Link className="home-page__contact-link" to="/privacy">{t('home.readPrivacyPolicy')}</Link>
           </div>
         </div>
       </section>
 
-      <section className="home-page__legal-links" aria-label="Legal links">
+      <section className="home-page__legal-links" aria-label={t('home.legalLinks')}>
         <Link to="/terms">Terms of Service</Link>
         <Link to="/privacy">Privacy Policy</Link>
         <Link to="/data-deletion">Data Deletion</Link>

@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginAdmin } from '../lib/api';
 import { saveStoredSession } from '../lib/session';
+import { useI18n } from '../lib/language';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [form, setForm] = useState({
     identifier: '',
     password: '',
@@ -27,7 +29,7 @@ const Login = () => {
       saveStoredSession(session);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Không đăng nhập được');
+      setError(err.message || t('login.error'));
     } finally {
       setLoading(false);
     }
@@ -36,8 +38,8 @@ const Login = () => {
   return (
     <div className="page login-page">
       <section className="page__hero">
-        <h1 className="page__title">Performance Report</h1>
-        <p className="page__subtitle">Đăng nhập để quản lý user, KOC, kênh, video và báo cáo tuần.</p>
+        <h1 className="page__title">{t('login.title')}</h1>
+        <p className="page__subtitle">{t('login.subtitle')}</p>
       </section>
 
       {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
@@ -45,7 +47,7 @@ const Login = () => {
       <section className="section-card login-card">
         <form className="filter-panel filter-panel--compact" onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor="identifier">Username or Email</label>
+            <label htmlFor="identifier">{t('login.identifier')}</label>
             <input
               id="identifier"
               name="identifier"
@@ -57,12 +59,12 @@ const Login = () => {
             />
           </div>
           <div className="field">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t('login.password')}</label>
             <input id="password" name="password" type="password" value={form.password} onChange={handleChange} required />
           </div>
           <div className="actions">
             <button className="button" type="submit" disabled={loading}>
-              {loading ? 'Đang đăng nhập' : 'Đăng nhập'}
+              {loading ? t('login.submitting') : t('login.submit')}
             </button>
           </div>
         </form>

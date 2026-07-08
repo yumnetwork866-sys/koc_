@@ -9,13 +9,15 @@ import {
   YAxis,
 } from 'recharts';
 import { fetchKpis } from '../lib/api';
-
-const formatNumber = (value) => Number(value || 0).toLocaleString();
+import { useI18n } from '../lib/language';
 
 const Dashboard = ({ heroTitle, heroSubtitle }) => {
+  const { t, language } = useI18n();
   const [kpis, setKpis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -28,7 +30,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
         setKpis(loadedKpis);
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setError(err.message || 'Failed to load dashboard data');
+          setError(err.message || t('dashboard.errorLoad') || 'Failed to load dashboard data');
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -61,24 +63,24 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
   return (
     <div className="page">
       <section className="page__hero">
-        <h1 className="page__title">{heroTitle}</h1>
-        <p className="page__subtitle">{heroSubtitle}</p>
+        <h1 className="page__title">{t('dashboard.heroTitle') || heroTitle}</h1>
+        <p className="page__subtitle">{t('dashboard.heroSubtitle') || heroSubtitle}</p>
 
         <div className="page__stats page__stats--four">
           <article className="stat-card">
-            <p className="stat-card__label">Tổng video</p>
+            <p className="stat-card__label">{t('dashboard.totalVideos')}</p>
             <p className="stat-card__value">{formatNumber(kpis?.overview?.totalVideos)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Tổng view</p>
+            <p className="stat-card__label">{t('dashboard.totalViews')}</p>
             <p className="stat-card__value">{formatNumber(kpis?.overview?.totalViews)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Tổng like</p>
+            <p className="stat-card__label">{t('dashboard.totalLikes')}</p>
             <p className="stat-card__value">{formatNumber(kpis?.overview?.totalLikes)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Tổng share</p>
+            <p className="stat-card__label">{t('dashboard.totalShares')}</p>
             <p className="stat-card__value">{formatNumber(kpis?.overview?.totalShares)}</p>
           </article>
         </div>
@@ -86,7 +88,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
 
       {error ? (
         <section className="section-card empty-state">
-          <div>Không tải được dashboard.</div>
+          <div>{t('dashboard.errorLoad') || 'Không tải được dashboard.'}</div>
           <div className="section-card__meta">{error}</div>
         </section>
       ) : null}
@@ -94,15 +96,15 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">KPI theo user</h2>
-            <p className="section-card__meta">Tổng video, view, like, comment, share và avg view/video.</p>
+            <h2 className="section-card__title">{t('dashboard.kpiByUser')}</h2>
+            <p className="section-card__meta">{t('dashboard.kpiByUserMeta')}</p>
           </div>
         </div>
 
         {loading ? (
           <div className="empty-state">
             <div className="loading-dot" />
-            <div>Đang tải KPI</div>
+            <div>{t('dashboard.loadingKpi')}</div>
           </div>
         ) : chartData.length ? (
           <div style={{ height: '320px' }}>
@@ -125,7 +127,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
           </div>
         ) : (
           <div className="empty-state">
-            <div>Chưa có dữ liệu user.</div>
+            <div>{t('dashboard.noUserData')}</div>
           </div>
         )}
       </section>
@@ -133,9 +135,9 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
       <section className="grid-two">
         <article className="section-card">
           <div className="section-card__header">
-            <div>
-              <h2 className="section-card__title">Top user</h2>
-              <p className="section-card__meta">Xếp theo tổng view video đã được gắn.</p>
+          <div>
+              <h2 className="section-card__title">{t('dashboard.topUser')}</h2>
+              <p className="section-card__meta">{t('dashboard.topUserMeta')}</p>
             </div>
           </div>
           <div className="metric-list">
@@ -143,22 +145,22 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
               <div className="metric-item" key={user.id}>
                 <div className="metric-item__head">
                   <span>{user.name}</span>
-                  <span>{formatNumber(user.totalViews)} views</span>
+                  <span>{formatNumber(user.totalViews)} {t('dashboard.viewsLabel')}</span>
                 </div>
                 <div className="row-subtitle">
-                  {user.videoCount} video | Avg {formatNumber(user.avgViewsPerVideo)} | {user.over10kRate}% &gt;10k
+                  {user.videoCount} {t('dashboard.videoLabel')} | {t('dashboard.avgLabel')} {formatNumber(user.avgViewsPerVideo)} | {user.over10kRate}% {t('dashboard.over10kLabel')}
                 </div>
               </div>
             ))}
-            {!topUsers.length && <div className="empty-state empty-state--compact">Chưa có dữ liệu user.</div>}
+            {!topUsers.length && <div className="empty-state empty-state--compact">{t('dashboard.noUserData')}</div>}
           </div>
         </article>
 
         <article className="section-card">
           <div className="section-card__header">
             <div>
-              <h2 className="section-card__title">KPI theo sản phẩm</h2>
-              <p className="section-card__meta">Sẹo, Rạn, Follicas, Lumilab, Mụn.</p>
+              <h2 className="section-card__title">{t('dashboard.topProduct')}</h2>
+              <p className="section-card__meta">{t('dashboard.topProductMeta')}</p>
             </div>
           </div>
           <div className="metric-list">
@@ -166,7 +168,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
               <div className="metric-item" key={product.id}>
                 <div className="metric-item__head">
                   <span>{product.name}</span>
-                  <span>{formatNumber(product.totalViews)} views</span>
+                  <span>{formatNumber(product.totalViews)} {t('dashboard.viewsLabel')}</span>
                 </div>
                 <div className="progress">
                   <div
@@ -175,7 +177,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
                   />
                 </div>
                 <div className="row-subtitle">
-                  {product.totalVideos} video | Avg {formatNumber(product.avgViewsPerVideo)}
+                  {product.totalVideos} {t('dashboard.videoLabel')} | {t('dashboard.avgLabel')} {formatNumber(product.avgViewsPerVideo)}
                 </div>
               </div>
             ))}

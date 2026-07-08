@@ -7,9 +7,11 @@ import {
   revokeChannelAuthorization,
   syncChannelVideos,
 } from '../lib/api';
+import { useI18n } from '../lib/language';
 import { getPlatformLabel } from '../lib/platforms';
 
 const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
+  const { t } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
   const [channels, setChannels] = useState([]);
@@ -45,7 +47,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
         await loadChannels(controller.signal);
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setError(err.message || 'Failed to load channels');
+          setError(err.message || t('channel.errorLoad'));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -67,7 +69,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
 
     setToast({
       status: oauthStatus,
-      message: oauthMessage || (oauthStatus === 'success' ? 'TikTok channel connected' : 'TikTok OAuth failed'),
+      message: oauthMessage || (oauthStatus === 'success' ? t('channel.successConnected') : t('channel.successOauthFailed')),
     });
 
     const timeoutId = window.setTimeout(() => {
@@ -102,7 +104,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       setError('');
       window.location.assign(await getTikTokOauthUrl());
     } catch (err) {
-      setError(err.message || 'Không thể bắt đầu kết nối TikTok');
+      setError(err.message || t('channel.errorStartOauth'));
     }
   };
 
@@ -112,9 +114,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
   };
 
   const handleDeleteChannel = async (channel) => {
-    const confirmed = window.confirm(
-      `Xóa channel "${channel.display_name}"? Video liên quan cũng sẽ bị xóa.`
-    );
+    const confirmed = window.confirm(t('channel.confirmDelete', { name: channel.display_name }));
 
     if (!confirmed) {
       return;
@@ -126,7 +126,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       await deleteChannel(channel.id);
       await loadChannels();
     } catch (err) {
-      setError(err.message || 'Không xóa được channel');
+      setError(err.message || t('channel.errorDelete'));
     } finally {
       setDeletingChannelId(null);
     }
@@ -139,11 +139,11 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       const result = await syncChannelVideos(channel.id);
       setToast({
         status: 'success',
-        message: result?.message || 'Synced videos successfully',
+        message: result?.message || t('channel.successSynced'),
       });
       await loadChannels();
     } catch (err) {
-      setError(err.message || 'Không sync được video');
+      setError(err.message || t('channel.errorSync'));
     } finally {
       setSyncingChannelId(null);
       setOpenActions({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
@@ -151,9 +151,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
   };
 
   const handleRevokeChannelAuthorization = async (channel) => {
-    const confirmed = window.confirm(
-      `Disconnect channel "${channel.display_name}"? Kênh sẽ ngắt liên kết với TikTok nhưng dữ liệu local vẫn giữ nguyên.`
-    );
+    const confirmed = window.confirm(t('channel.confirmDisconnect', { name: channel.display_name }));
 
     if (!confirmed) {
       return;
@@ -164,11 +162,11 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       const result = await revokeChannelAuthorization(channel.id);
       setToast({
         status: 'success',
-        message: result?.message || 'Channel disconnected',
+        message: result?.message || t('channel.successDisconnected'),
       });
       await loadChannels();
     } catch (err) {
-      setError(err.message || 'Không disconnect được channel');
+      setError(err.message || t('channel.errorDisconnect'));
     } finally {
       setOpenActions({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
     }
@@ -201,19 +199,19 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       ) : null}
 
       <section className="page__hero">
-        <h1 className="page__title">{heroTitle}</h1>
-        <p className="page__subtitle">{heroSubtitle}</p>
+        <h1 className="page__title">{t('channel.heroTitle') || heroTitle}</h1>
+        <p className="page__subtitle">{t('channel.heroSubtitle') || heroSubtitle}</p>
         <div className="page__stats">
           <article className="stat-card">
-            <p className="stat-card__label">Channels</p>
+            <p className="stat-card__label">{t('channel.channels')}</p>
             <p className="stat-card__value">{channels.length}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">OAuth</p>
+            <p className="stat-card__label">{t('channel.oauth')}</p>
             <p className="stat-card__value">{sourceCounts.oauth || 0}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Import/Crawl</p>
+            <p className="stat-card__label">{t('channel.importCrawl')}</p>
             <p className="stat-card__value">{(sourceCounts.import || 0) + (sourceCounts.crawler || 0)}</p>
           </article>
         </div>
@@ -224,7 +222,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Thêm kênh</h2>
+            <h2 className="section-card__title">{t('channel.addChannel')}</h2>
           </div>
           <div className="actions">
             <button
@@ -232,13 +230,13 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
               type="button"
               onClick={() => setIsOauthOpen(true)}
             >
-              Thêm kênh
+              {t('channel.addChannel')}
             </button>
           </div>
         </div>
         <div className="oauth-cta">
           <div className="oauth-cta__copy">
-            <p className="oauth-cta__subtitle">Kết nối kênh bằng OAuth để đồng bộ dữ liệu tự động.</p>
+            <p className="oauth-cta__subtitle">{t('channel.oauthCta')}</p>
           </div>
         </div>
       </section>
@@ -246,26 +244,26 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Danh sách kênh</h2>
+            <h2 className="section-card__title">{t('channel.list')}</h2>
           </div>
         </div>
 
         {loading ? (
           <div className="empty-state">
             <div className="loading-dot" />
-            <div>Đang tải kênh</div>
+            <div>{t('channel.loading')}</div>
           </div>
         ) : (
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Channel</th>
-                  <th>Platform</th>
-                  <th>Nguồn</th>
-                  <th>Videos</th>
-                  <th>Profile</th>
-                  <th>Actions</th>
+                  <th>{t('channel.channelColumn')}</th>
+                  <th>{t('channel.platformColumn')}</th>
+                  <th>{t('channel.sourceColumn')}</th>
+                  <th>{t('channel.videosColumn')}</th>
+                  <th>{t('channel.profileColumn')}</th>
+                  <th>{t('channel.actionsColumn')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -294,7 +292,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                             <div className="row-subtitle">@{channel.username}</div>
                           ) : null}
                           {channel.sync_source === 'oauth' && !channel.is_connected ? (
-                            <div className="row-subtitle">Disconnected</div>
+                            <div className="row-subtitle">{t('channel.disconnected')}</div>
                           ) : null}
                         </div>
                       </div>
@@ -332,7 +330,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                               onClick={() => handleSyncChannelVideos(channel)}
                               disabled={syncingChannelId === channel.id || !channel.is_connected}
                             >
-                              {syncingChannelId === channel.id ? 'Đang sync' : 'Sync video'}
+                              {syncingChannelId === channel.id ? t('channel.syncing') : t('channel.syncVideo')}
                             </button>
                             <button
                               className="action-menu__item"
@@ -341,7 +339,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                               onClick={() => handleRevokeChannelAuthorization(channel)}
                               disabled={!channel.is_connected}
                             >
-                              Disconnect
+                              {t('channel.disconnect')}
                             </button>
                             <button
                               className="action-menu__item action-menu__item--danger"
@@ -350,7 +348,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                               onClick={() => handleDeleteChannel(channel)}
                               disabled={deletingChannelId === channel.id}
                             >
-                              {deletingChannelId === channel.id ? 'Đang xóa' : 'Xóa kênh'}
+                              {deletingChannelId === channel.id ? t('channel.deleting') : t('channel.delete')}
                             </button>
                           </div>
                         ) : null}
@@ -375,18 +373,18 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
           >
             <div className="section-card__header">
               <div>
-                <h2 className="section-card__title" id="oauth-title">Kết nối TikTok</h2>
+                <h2 className="section-card__title" id="oauth-title">{t('channel.oauthTitle')}</h2>
                 <p className="section-card__meta">
-                  Bạn sẽ được chuyển sang TikTok để đăng nhập và cấp quyền cho web.
+                  {t('channel.oauthMeta')}
                 </p>
               </div>
             </div>
             <div className="modal-card__actions">
               <button className="button" type="button" onClick={startOauth}>
-                Tiếp tục với TikTok
+                {t('channel.continueWithTikTok')}
               </button>
               <button className="button button--ghost" type="button" onClick={() => setIsOauthOpen(false)}>
-                Hủy
+                {t('channel.cancel')}
               </button>
             </div>
           </div>

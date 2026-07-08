@@ -5,18 +5,18 @@ import {
   fetchBookings,
   fetchUsers,
 } from '../lib/api';
+import { useI18n } from '../lib/language';
 
-  const initialForm = {
-    staff_id: '',
-    creator_id: '',
-    booking_cost: '',
-    deadline: '',
-    video_url: '',
-  };
-
-const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN');
+const initialForm = {
+  staff_id: '',
+  creator_id: '',
+  booking_cost: '',
+  deadline: '',
+  video_url: '',
+};
 
 const BookingManagement = ({ heroTitle, heroSubtitle }) => {
+  const { t, language } = useI18n();
   const [bookings, setBookings] = useState([]);
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(initialForm);
@@ -45,7 +45,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
         await loadData(controller.signal);
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setError(err.message || 'Không tải được danh sách booking');
+          setError(err.message || t('booking.errorLoad'));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -61,6 +61,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
 
   const kocUsers = useMemo(() => users.filter((user) => user.role === 'koc'), [users]);
   const staffUsers = useMemo(() => users.filter((user) => user.role !== 'koc'), [users]);
+  const localizedFormatMoney = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
 
   const userNameById = useMemo(() => {
     return new Map(users.map((user) => [String(user.id), user.name]));
@@ -105,14 +106,14 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
       resetForm();
       await loadData();
     } catch (err) {
-      setError(err.message || 'Không tạo được booking');
+      setError(err.message || t('booking.errorCreate'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (booking) => {
-    const confirmed = window.confirm(`Xóa booking #${booking.id}?`);
+    const confirmed = window.confirm(t('booking.deleteConfirm', { id: booking.id }));
     if (!confirmed) {
       return;
     }
@@ -123,7 +124,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
       await deleteBooking(booking.id);
       await loadData();
     } catch (err) {
-      setError(err.message || 'Không xóa được booking');
+      setError(err.message || t('booking.errorDelete'));
     } finally {
       setDeletingId(null);
     }
@@ -132,24 +133,24 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
   return (
     <div className="page">
       <section className="page__hero">
-        <h1 className="page__title">{heroTitle}</h1>
-        <p className="page__subtitle">{heroSubtitle}</p>
+        <h1 className="page__title">{t('booking.heroTitle') || heroTitle}</h1>
+        <p className="page__subtitle">{t('booking.heroSubtitle') || heroSubtitle}</p>
         <div className="page__stats page__stats--four">
           <article className="stat-card">
-            <p className="stat-card__label">Bookings</p>
+            <p className="stat-card__label">{t('booking.bookings')}</p>
             <p className="stat-card__value">{stats.total}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">KOC</p>
+            <p className="stat-card__label">{t('booking.koc')}</p>
             <p className="stat-card__value">{kocUsers.length}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Staff</p>
+            <p className="stat-card__label">{t('booking.staff')}</p>
             <p className="stat-card__value">{staffUsers.length}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Total cost</p>
-            <p className="stat-card__value">{formatMoney(stats.totalCost)}</p>
+            <p className="stat-card__label">{t('booking.totalCost')}</p>
+            <p className="stat-card__value">{localizedFormatMoney(stats.totalCost)}</p>
           </article>
         </div>
       </section>
@@ -163,32 +164,32 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Tạo booking</h2>
-            <p className="section-card__meta">Chọn staff, KOC, chi phí book, deadline và thông tin video nếu đã có.</p>
+            <h2 className="section-card__title">{t('booking.createBooking')}</h2>
+            <p className="section-card__meta">{t('booking.createBookingMeta')}</p>
           </div>
         </div>
 
         <form className="filter-panel" onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor="staff_id">Nhân sự booking</label>
+            <label htmlFor="staff_id">{t('booking.bookingStaff')}</label>
             <select id="staff_id" name="staff_id" value={form.staff_id} onChange={handleChange} required>
-              <option value="">Chọn nhân sự</option>
+              <option value="">{t('booking.selectStaff')}</option>
               {staffUsers.map((user) => (
                 <option key={user.id} value={user.id}>{user.name} ({user.role})</option>
               ))}
             </select>
           </div>
           <div className="field">
-            <label htmlFor="creator_id">KOC</label>
+            <label htmlFor="creator_id">{t('booking.koc')}</label>
             <select id="creator_id" name="creator_id" value={form.creator_id} onChange={handleChange} required>
-              <option value="">Chọn KOC</option>
+              <option value="">{t('booking.selectKoc')}</option>
               {kocUsers.map((user) => (
                 <option key={user.id} value={user.id}>{user.name}</option>
               ))}
             </select>
           </div>
           <div className="field">
-            <label htmlFor="booking_cost">Chi phí book</label>
+            <label htmlFor="booking_cost">{t('booking.bookingCost')}</label>
             <input
               id="booking_cost"
               name="booking_cost"
@@ -201,22 +202,22 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             />
           </div>
           <div className="field">
-            <label htmlFor="deadline">Deadline</label>
+            <label htmlFor="deadline">{t('booking.deadline')}</label>
             <input id="deadline" name="deadline" type="date" value={form.deadline} onChange={handleChange} required />
           </div>
           <div className="field">
-            <label htmlFor="video_url">Video link</label>
+            <label htmlFor="video_url">{t('booking.videoLink')}</label>
             <input
               id="video_url"
               name="video_url"
               value={form.video_url}
               onChange={handleChange}
-              placeholder="https://www.tiktok.com/..."
+              placeholder={t('booking.placeholderVideoLink')}
             />
           </div>
           <div className="actions">
             <button className="button" type="submit" disabled={saving}>
-              {saving ? 'Đang tạo' : 'Tạo booking'}
+              {saving ? t('booking.submitting') : t('booking.submit')}
             </button>
           </div>
         </form>
@@ -225,14 +226,14 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Danh sách booking</h2>
+            <h2 className="section-card__title">{t('booking.list')}</h2>
           </div>
         </div>
 
         {loading ? (
           <div className="empty-state">
             <div className="loading-dot" />
-            <div>Đang tải booking</div>
+            <div>{t('booking.loading')}</div>
           </div>
         ) : bookings.length ? (
           <div className="table-wrap">
@@ -240,12 +241,12 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Staff</th>
-                  <th>KOC</th>
-                  <th>Cost</th>
-                  <th>Deadline</th>
-                  <th>Video</th>
-                  <th>Actions</th>
+                  <th>{t('booking.staffColumn')}</th>
+                  <th>{t('booking.kocColumn')}</th>
+                  <th>{t('booking.costColumn')}</th>
+                  <th>{t('booking.deadlineColumn')}</th>
+                  <th>{t('booking.videoColumn')}</th>
+                  <th>{t('booking.actionsColumn')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -254,32 +255,32 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                     <td><span className="row-title">#{booking.id}</span></td>
                     <td>{booking.staff?.name || userNameById.get(String(booking.staff_id)) || booking.staff_id}</td>
                     <td>{booking.creator?.name || userNameById.get(String(booking.creator_id)) || booking.creator_id}</td>
-                    <td>{formatMoney(booking.booking_cost)}</td>
+                    <td>{localizedFormatMoney(booking.booking_cost)}</td>
                     <td>{booking.deadline || '-'}</td>
                     <td>
                       <div className="row-subtitle">
-                        {booking.video_url ? booking.video_url : 'Chưa có video link'}
+                        {booking.video_url ? booking.video_url : t('booking.noVideo')}
                       </div>
                     </td>
-                    <td>
-                      <div className="actions actions--inline">
-                        <button
-                          type="button"
-                          className="button button--ghost"
-                          onClick={() => handleDelete(booking)}
-                          disabled={deletingId === booking.id}
-                        >
-                          {deletingId === booking.id ? 'Đang xóa' : 'Xóa'}
-                        </button>
-                      </div>
-                    </td>
+                  <td>
+                    <div className="actions actions--inline">
+                      <button
+                        type="button"
+                        className="button button--ghost"
+                        onClick={() => handleDelete(booking)}
+                        disabled={deletingId === booking.id}
+                      >
+                        {deletingId === booking.id ? t('booking.deleting') : t('booking.delete')}
+                      </button>
+                    </div>
+                  </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <div className="empty-state empty-state--compact">Chưa có booking nào.</div>
+          <div className="empty-state empty-state--compact">{t('booking.noData')}</div>
         )}
       </section>
     </div>
