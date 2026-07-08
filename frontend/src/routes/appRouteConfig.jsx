@@ -9,6 +9,7 @@ const ChatbotManagement = lazy(() => import('../components/ChatbotManagement'));
 const BookingManagement = lazy(() => import('../components/BookingManagement'));
 const Dashboard = lazy(() => import('../components/Dashboard'));
 const EmployeeTable = lazy(() => import('../components/EmployeeTable'));
+const KOCPerformance = lazy(() => import('../components/KOCPerformance'));
 const HomePage = lazy(() => import('../components/HomePage'));
 const Login = lazy(() => import('../components/Login'));
 const ReportFilter = lazy(() => import('../components/ReportFilter'));
@@ -20,6 +21,7 @@ const DataDeletionPage = lazy(() => import('../pages/legal/DataDeletionPage'));
 const componentMap = {
   Dashboard,
   EmployeeTable,
+  KOCPerformance,
   BookingManagement,
   ChannelManagement,
   VideoTable,

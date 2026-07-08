@@ -4,29 +4,15 @@ import {
   deleteBooking,
   fetchBookings,
   fetchUsers,
-  updateBooking,
 } from '../lib/api';
 
-const bookingStatuses = [
-  'draft',
-  'booked',
-  'waiting_video',
-  'video_posted',
-  'done',
-  'cancelled',
-];
-
-const initialForm = {
-  staff_id: '',
-  creator_id: '',
-  booking_cost: '',
-  status: 'booked',
-  deadline: '',
-  note: '',
-  video_platform_id: '',
-  video_url: '',
-  posted_at: '',
-};
+  const initialForm = {
+    staff_id: '',
+    creator_id: '',
+    booking_cost: '',
+    deadline: '',
+    video_url: '',
+  };
 
 const formatMoney = (value) => Number(value || 0).toLocaleString('vi-VN');
 
@@ -36,7 +22,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [updatingId, setUpdatingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState('');
 
@@ -86,13 +71,9 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
       (acc, booking) => {
         acc.total += 1;
         acc.totalCost += Number(booking.booking_cost || 0);
-        acc.statusCounts[booking.status] = (acc.statusCounts[booking.status] || 0) + 1;
-        if (booking.status === 'video_posted' || booking.status === 'done') {
-          acc.posted += 1;
-        }
         return acc;
       },
-      { total: 0, totalCost: 0, posted: 0, statusCounts: {} },
+      { total: 0, totalCost: 0 },
     );
   }, [bookings]);
 
@@ -118,12 +99,8 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
         staff_id: Number(form.staff_id),
         creator_id: Number(form.creator_id),
         booking_cost: Number(form.booking_cost),
-        status: form.status,
         deadline: form.deadline,
-        note: form.note || null,
-        video_platform_id: form.video_platform_id || null,
         video_url: form.video_url || null,
-        posted_at: form.posted_at || null,
       });
       resetForm();
       await loadData();
@@ -131,19 +108,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
       setError(err.message || 'Không tạo được booking');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleUpdateStatus = async (booking, status) => {
-    try {
-      setUpdatingId(booking.id);
-      setError('');
-      const updated = await updateBooking(booking.id, { status });
-      setBookings((current) => current.map((item) => (item.id === booking.id ? updated : item)));
-    } catch (err) {
-      setError(err.message || 'Không cập nhật được booking');
-    } finally {
-      setUpdatingId(null);
     }
   };
 
@@ -165,19 +129,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
     }
   };
 
-  const statusLabel = (status) => {
-    const labels = {
-      draft: 'Draft',
-      booked: 'Booked',
-      waiting_video: 'Chờ video',
-      video_posted: 'Đã air video',
-      done: 'Done',
-      cancelled: 'Cancelled',
-    };
-
-    return labels[status] || status;
-  };
-
   return (
     <div className="page">
       <section className="page__hero">
@@ -189,16 +140,16 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             <p className="stat-card__value">{stats.total}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">KOC posted</p>
-            <p className="stat-card__value">{stats.posted}</p>
+            <p className="stat-card__label">KOC</p>
+            <p className="stat-card__value">{kocUsers.length}</p>
+          </article>
+          <article className="stat-card">
+            <p className="stat-card__label">Staff</p>
+            <p className="stat-card__value">{staffUsers.length}</p>
           </article>
           <article className="stat-card">
             <p className="stat-card__label">Total cost</p>
             <p className="stat-card__value">{formatMoney(stats.totalCost)}</p>
-          </article>
-          <article className="stat-card">
-            <p className="stat-card__label">Waiting video</p>
-            <p className="stat-card__value">{stats.statusCounts.waiting_video || 0}</p>
           </article>
         </div>
       </section>
@@ -254,24 +205,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             <input id="deadline" name="deadline" type="date" value={form.deadline} onChange={handleChange} required />
           </div>
           <div className="field">
-            <label htmlFor="status">Trạng thái</label>
-            <select id="status" name="status" value={form.status} onChange={handleChange}>
-              {bookingStatuses.map((status) => (
-                <option key={status} value={status}>{statusLabel(status)}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="video_platform_id">Video ID</label>
-            <input
-              id="video_platform_id"
-              name="video_platform_id"
-              value={form.video_platform_id}
-              onChange={handleChange}
-              placeholder="TikTok video id"
-            />
-          </div>
-          <div className="field">
             <label htmlFor="video_url">Video link</label>
             <input
               id="video_url"
@@ -279,21 +212,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
               value={form.video_url}
               onChange={handleChange}
               placeholder="https://www.tiktok.com/..."
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="posted_at">Posted at</label>
-            <input id="posted_at" name="posted_at" type="datetime-local" value={form.posted_at} onChange={handleChange} />
-          </div>
-          <div className="field field--full">
-            <label htmlFor="note">Ghi chú</label>
-            <textarea
-              id="note"
-              name="note"
-              rows="3"
-              value={form.note}
-              onChange={handleChange}
-              placeholder="Deadline video, hook, yêu cầu nội dung..."
             />
           </div>
           <div className="actions">
@@ -308,7 +226,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Danh sách booking</h2>
-            <p className="section-card__meta">Theo dõi booking từ lúc tạo tới lúc KOC gửi video.</p>
           </div>
         </div>
 
@@ -327,7 +244,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                   <th>KOC</th>
                   <th>Cost</th>
                   <th>Deadline</th>
-                  <th>Status</th>
                   <th>Video</th>
                   <th>Actions</th>
                 </tr>
@@ -340,41 +256,13 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                     <td>{booking.creator?.name || userNameById.get(String(booking.creator_id)) || booking.creator_id}</td>
                     <td>{formatMoney(booking.booking_cost)}</td>
                     <td>{booking.deadline || '-'}</td>
-                    <td><span className="chip">{statusLabel(booking.status)}</span></td>
                     <td>
-                      <div className="row-subtitle">
-                        {booking.video_platform_id ? `ID: ${booking.video_platform_id}` : 'Chưa có video ID'}
-                      </div>
                       <div className="row-subtitle">
                         {booking.video_url ? booking.video_url : 'Chưa có video link'}
                       </div>
                     </td>
                     <td>
                       <div className="actions actions--inline">
-                        <button
-                          type="button"
-                          className="button button--ghost"
-                          onClick={() => handleUpdateStatus(booking, 'waiting_video')}
-                          disabled={updatingId === booking.id}
-                        >
-                          Chờ video
-                        </button>
-                        <button
-                          type="button"
-                          className="button button--ghost"
-                          onClick={() => handleUpdateStatus(booking, 'video_posted')}
-                          disabled={updatingId === booking.id}
-                        >
-                          Đã air
-                        </button>
-                        <button
-                          type="button"
-                          className="button button--ghost"
-                          onClick={() => handleUpdateStatus(booking, 'done')}
-                          disabled={updatingId === booking.id}
-                        >
-                          Done
-                        </button>
                         <button
                           type="button"
                           className="button button--ghost"

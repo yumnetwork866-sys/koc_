@@ -9,6 +9,7 @@ export const sidebarSections = [
     items: [
       { to: '/dashboard', label: 'Dashboard' },
       { to: '/manage/users', label: 'Users' },
+      { to: '/manage/koc-performance', label: 'KOC performance' },
       { to: '/bookings', label: 'Bookings' },
       { to: '/manage/channels', label: 'Channels' },
       { to: '/videos', label: 'Videos' },
@@ -42,6 +43,14 @@ export const protectedRouteCards = [
     props: {
       heroTitle: 'User management',
       heroSubtitle: 'Quản lý admin, leader và member trước khi leader gắn video cho từng người.',
+    },
+  },
+  {
+    path: '/manage/koc-performance',
+    component: 'KOCPerformance',
+    props: {
+      heroTitle: 'KOC performance',
+      heroSubtitle: 'Đo hiệu quả từng KOC theo video count, total views, average views/video và top video.',
     },
   },
   {
@@ -120,7 +129,7 @@ export const protectedRouteCards = [
 
 export const redirectRoutes = [
   { path: '/manage', to: '/manage/users' },
-  { path: '/manage/koc', to: '/manage/users' },
+  { path: '/manage/koc', to: '/manage/koc-performance' },
   { path: '/chatbot', to: '/chatbot/dashboard' },
   { path: '/chatbot/rag', to: '/chatbot/chat-setting' },
 ];
