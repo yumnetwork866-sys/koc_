@@ -248,26 +248,30 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
           </div>
         </div>
 
-        {loading ? (
-          <div className="empty-state">
-            <div className="loading-dot" />
-            <div>{t('channel.loading')}</div>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t('channel.channelColumn')}</th>
-                  <th>{t('channel.platformColumn')}</th>
-                  <th>{t('channel.sourceColumn')}</th>
-                  <th>{t('channel.videosColumn')}</th>
-                  <th>{t('channel.profileColumn')}</th>
-                  <th>{t('channel.actionsColumn')}</th>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t('channel.channelColumn')}</th>
+                <th>{t('channel.platformColumn')}</th>
+                <th>{t('channel.sourceColumn')}</th>
+                <th className="cell-number">{t('channel.videosColumn')}</th>
+                <th>{t('channel.profileColumn')}</th>
+                <th className="cell-actions">{t('channel.actionsColumn')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={6}>
+                    <div className="empty-state table-empty-state">
+                      <div className="loading-dot" />
+                      <div>{t('channel.loading')}</div>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {channels.map((channel) => (
+              ) : channels.length ? (
+                channels.map((channel) => (
                   <tr key={channel.id}>
                     <td>
                       <div className="channel-cell">
@@ -299,9 +303,9 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                     </td>
                     <td>{getPlatformLabel(channel.platform || 'tiktok')}</td>
                     <td><span className="chip">{channel.sync_source}</span></td>
-                    <td>{channel.videos?.length || 0}</td>
+                    <td className="cell-number">{channel.videos?.length || 0}</td>
                     <td>{channel.profile_url ? <a href={channel.profile_url}>{channel.profile_url}</a> : '-'}</td>
-                    <td>
+                    <td className="cell-actions">
                       <div className="action-menu">
                         <button
                           className="action-menu__trigger"
@@ -355,11 +359,17 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              ) : (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={6}>
+                    <div className="empty-state empty-state--compact table-empty-state">{t('channel.noData')}</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {isOauthOpen ? (

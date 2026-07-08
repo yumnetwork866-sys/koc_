@@ -246,27 +246,31 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
           </div>
         </div>
 
-        {loading ? (
-          <div className="empty-state">
-            <div className="loading-dot" />
-            <div>{t('koc.loadingTable')}</div>
-          </div>
-        ) : sortedRows.length ? (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t('koc.koc')}</th>
-                  <th>{t('koc.email')}</th>
-                  <th>{t('koc.videos')}</th>
-                  <th>{t('koc.totalViews')}</th>
-                  <th>{t('koc.avgViewsPerVideo')}</th>
-                  <th>{t('koc.over10kRate')}</th>
-                  <th>{t('koc.topVideo')}</th>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t('koc.koc')}</th>
+                <th>{t('koc.email')}</th>
+                <th className="cell-number">{t('koc.videos')}</th>
+                <th className="cell-number">{t('koc.totalViews')}</th>
+                <th className="cell-number">{t('koc.avgViewsPerVideo')}</th>
+                <th className="cell-number">{t('koc.over10kRate')}</th>
+                <th>{t('koc.topVideo')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={7}>
+                    <div className="empty-state table-empty-state">
+                      <div className="loading-dot" />
+                      <div>{t('koc.loadingTable')}</div>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {sortedRows.map((user, index) => (
+              ) : sortedRows.length ? (
+                sortedRows.map((user, index) => (
                   <tr key={user.id}>
                     <td>
                       <span className="row-title">
@@ -274,10 +278,10 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
                       </span>
                     </td>
                     <td>{user.email}</td>
-                    <td>{formatNumber(user.videoCount)}</td>
-                    <td>{formatNumber(user.totalViews)}</td>
-                    <td>{formatNumber(user.avgViewsPerVideo)}</td>
-                    <td>{user.over10kRate}%</td>
+                    <td className="cell-number">{formatNumber(user.videoCount)}</td>
+                    <td className="cell-number">{formatNumber(user.totalViews)}</td>
+                    <td className="cell-number">{formatNumber(user.avgViewsPerVideo)}</td>
+                    <td className="cell-number">{user.over10kRate}%</td>
                     <td>
                       <span className="row-title">{user.topVideo?.title || t('koc.noVideo')}</span>
                       <span className="row-subtitle">
@@ -285,13 +289,17 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
                       </span>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state empty-state--compact">{t('koc.noData')}</div>
-        )}
+                ))
+              ) : (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={7}>
+                    <div className="empty-state empty-state--compact table-empty-state">{t('koc.noData')}</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {summary.topKoc ? (

@@ -182,24 +182,28 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           </div>
         </div>
 
-        {loading ? (
-          <div className="empty-state">
-            <div className="loading-dot" />
-            <div>Đang tải user</div>
-          </div>
-        ) : rows.length ? (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Tên</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Actions</th>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Tên</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th className="cell-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={4}>
+                    <div className="empty-state table-empty-state">
+                      <div className="loading-dot" />
+                      <div>Đang tải user</div>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((user) => (
+              ) : rows.length ? (
+                rows.map((user) => (
                   <tr key={user.id}>
                     <td><span className="row-title">{user.name}</span></td>
                     <td>{user.email}</td>
@@ -215,10 +219,10 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                         ))}
                       </select>
                     </td>
-                    <td>
+                    <td className="cell-actions">
                       <button
                         type="button"
-                        className="button button--ghost"
+                        className="button button--ghost button--small"
                         onClick={() => handleDelete(user)}
                         disabled={deletingId === user.id}
                       >
@@ -226,13 +230,17 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state">Chưa có user nào.</div>
-        )}
+                ))
+              ) : (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={4}>
+                    <div className="empty-state empty-state--compact table-empty-state">Chưa có user nào.</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

@@ -801,19 +801,27 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((order) => (
-                  <tr key={order.id}>
-                    <td>{order.senderId}</td>
-                    <td>{order.raw}</td>
-                    <td>{order.phone || '-'}</td>
-                    <td>
-                      <select value={order.status} onChange={(event) => handleOrderStatus(order.id, event.target.value)}>
-                        {orderStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
-                      </select>
+                {orders.length ? (
+                  orders.map((order) => (
+                    <tr key={order.id}>
+                      <td>{order.senderId}</td>
+                      <td>{order.raw}</td>
+                      <td>{order.phone || '-'}</td>
+                      <td>
+                        <select value={order.status} onChange={(event) => handleOrderStatus(order.id, event.target.value)}>
+                          {orderStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                      </td>
+                      <td>{formatTime(order.ts)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr className="table-state-row">
+                    <td className="table-state-cell" colSpan={5}>
+                      <div className="empty-state empty-state--compact table-empty-state">Chưa có đơn hàng nào.</div>
                     </td>
-                    <td>{formatTime(order.ts)}</td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

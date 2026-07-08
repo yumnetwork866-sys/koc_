@@ -152,35 +152,43 @@ const AssignmentManagement = ({ heroTitle, heroSubtitle }) => {
           </div>
         </div>
 
-        {loading ? (
-          <div className="empty-state">
-            <div className="loading-dot" />
-            <div>Đang tải assignments</div>
-          </div>
-        ) : assignments.length ? (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Video</th>
-                  <th>User</th>
-                  <th>Role</th>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Video</th>
+                <th>User</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={3}>
+                    <div className="empty-state table-empty-state">
+                      <div className="loading-dot" />
+                      <div>Đang tải assignments</div>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {assignments.map((assignment) => (
+              ) : assignments.length ? (
+                assignments.map((assignment) => (
                   <tr key={assignment.id}>
                     <td><span className="row-title">{assignment.video?.title || assignment.video_id}</span></td>
                     <td>{assignment.user?.name || assignment.user_id}</td>
                     <td><span className="chip">{assignment.assignment_role}</span></td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state">Chưa có assignment nào.</div>
-        )}
+                ))
+              ) : (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={3}>
+                    <div className="empty-state empty-state--compact table-empty-state">Chưa có assignment nào.</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

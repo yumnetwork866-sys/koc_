@@ -230,58 +230,66 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
           </div>
         </div>
 
-        {loading ? (
-          <div className="empty-state">
-            <div className="loading-dot" />
-            <div>{t('booking.loading')}</div>
-          </div>
-        ) : bookings.length ? (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>{t('booking.staffColumn')}</th>
-                  <th>{t('booking.kocColumn')}</th>
-                  <th>{t('booking.costColumn')}</th>
-                  <th>{t('booking.deadlineColumn')}</th>
-                  <th>{t('booking.videoColumn')}</th>
-                  <th>{t('booking.actionsColumn')}</th>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th className="cell-number">ID</th>
+                <th>{t('booking.staffColumn')}</th>
+                <th>{t('booking.kocColumn')}</th>
+                <th className="cell-number">{t('booking.costColumn')}</th>
+                <th>{t('booking.deadlineColumn')}</th>
+                <th>{t('booking.videoColumn')}</th>
+                <th className="cell-actions">{t('booking.actionsColumn')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={7}>
+                    <div className="empty-state table-empty-state">
+                      <div className="loading-dot" />
+                      <div>{t('booking.loading')}</div>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {bookings.map((booking) => (
+              ) : bookings.length ? (
+                bookings.map((booking) => (
                   <tr key={booking.id}>
-                    <td><span className="row-title">#{booking.id}</span></td>
+                    <td className="cell-number"><span className="row-title">#{booking.id}</span></td>
                     <td>{booking.staff?.name || userNameById.get(String(booking.staff_id)) || booking.staff_id}</td>
                     <td>{booking.creator?.name || userNameById.get(String(booking.creator_id)) || booking.creator_id}</td>
-                    <td>{localizedFormatMoney(booking.booking_cost)}</td>
+                    <td className="cell-number">{localizedFormatMoney(booking.booking_cost)}</td>
                     <td>{booking.deadline || '-'}</td>
                     <td>
                       <div className="row-subtitle">
                         {booking.video_url ? booking.video_url : t('booking.noVideo')}
                       </div>
                     </td>
-                  <td>
-                    <div className="actions actions--inline">
-                      <button
-                        type="button"
-                        className="button button--ghost"
-                        onClick={() => handleDelete(booking)}
-                        disabled={deletingId === booking.id}
-                      >
-                        {deletingId === booking.id ? t('booking.deleting') : t('booking.delete')}
-                      </button>
-                    </div>
-                  </td>
+                    <td className="cell-actions">
+                      <div className="actions actions--inline">
+                        <button
+                          type="button"
+                          className="button button--ghost button--small"
+                          onClick={() => handleDelete(booking)}
+                          disabled={deletingId === booking.id}
+                        >
+                          {deletingId === booking.id ? t('booking.deleting') : t('booking.delete')}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state empty-state--compact">{t('booking.noData')}</div>
-        )}
+                ))
+              ) : (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={7}>
+                    <div className="empty-state empty-state--compact table-empty-state">{t('booking.noData')}</div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

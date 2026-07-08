@@ -224,28 +224,32 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
           </div>
         </div>
 
-        {loading ? (
-          <div className="empty-state">
-            <div className="loading-dot" />
-            <div>Đang tải video</div>
-          </div>
-        ) : filteredVideos.length ? (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Video</th>
-                  <th>Platform</th>
-                  <th>Channel</th>
-                  <th>Products</th>
-                  <th>Campaign</th>
-                  <th>Views</th>
-                  <th>Engagement</th>
-                  <th>Assignments</th>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Video</th>
+                <th>Platform</th>
+                <th>Channel</th>
+                <th>Products</th>
+                <th>Campaign</th>
+                <th className="cell-number">Views</th>
+                <th className="cell-number">Engagement</th>
+                <th className="cell-number">Assignments</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={8}>
+                    <div className="empty-state table-empty-state">
+                      <div className="loading-dot" />
+                      <div>Đang tải video</div>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredVideos.map((video) => (
+              ) : filteredVideos.length ? (
+                filteredVideos.map((video) => (
                   <tr key={video.id}>
                     <td>
                       <div className="video-cell">
@@ -315,19 +319,23 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                       </div>
                     </td>
                     <td>{video.campaign || '-'}</td>
-                    <td>{formatNumber(video.views)}</td>
-                    <td>{formatNumber(video.likes)} likes | {formatNumber(video.comments)} comments | {formatNumber(video.shares)} shares</td>
-                    <td>{video.assignments?.length || 0}</td>
+                    <td className="cell-number">{formatNumber(video.views)}</td>
+                    <td className="cell-number">{formatNumber(video.likes)} likes | {formatNumber(video.comments)} comments | {formatNumber(video.shares)} shares</td>
+                    <td className="cell-number">{video.assignments?.length || 0}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="empty-state">
-            <div>Không có video khớp bộ lọc.</div>
-          </div>
-        )}
+                ))
+              ) : (
+                <tr className="table-state-row">
+                  <td className="table-state-cell" colSpan={8}>
+                    <div className="empty-state empty-state--compact table-empty-state">
+                      <div>Không có video khớp bộ lọc.</div>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );
