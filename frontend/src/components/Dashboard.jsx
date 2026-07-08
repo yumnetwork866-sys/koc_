@@ -9,7 +9,6 @@ import {
   YAxis,
 } from 'recharts';
 import { fetchKpis } from '../lib/api';
-import { PLATFORMS } from '../lib/platforms';
 
 const formatNumber = (value) => Number(value || 0).toLocaleString();
 
@@ -62,7 +61,6 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
   return (
     <div className="page">
       <section className="page__hero">
-        <span className="page__eyebrow">Dashboard tổng</span>
         <h1 className="page__title">{heroTitle}</h1>
         <p className="page__subtitle">{heroSubtitle}</p>
 
@@ -92,29 +90,6 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
           <div className="section-card__meta">{error}</div>
         </section>
       ) : null}
-
-      <section className="section-card">
-        <div className="section-card__header">
-          <div>
-            <h2 className="section-card__title">Platform overview</h2>
-            <p className="section-card__meta">TikTok đang active, YouTube và Facebook chỉ ở trạng thái placeholder.</p>
-          </div>
-        </div>
-
-        <div className="platform-grid">
-          {PLATFORMS.map((platform) => (
-            <article className={`platform-card platform-card--${platform.status}`} key={platform.key}>
-              <div className="metric-item__head">
-                <span>{platform.label}</span>
-                <span className={`chip ${platform.status === 'active' ? 'chip--positive' : 'chip--amber'}`}>
-                  {platform.status}
-                </span>
-              </div>
-              <div className="row-subtitle">{platform.description}</div>
-            </article>
-          ))}
-        </div>
-      </section>
 
       <section className="section-card">
         <div className="section-card__header">

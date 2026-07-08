@@ -44,7 +44,7 @@ const HomePage = () => {
     <div className="page home-page">
       <section className="page__hero home-page__hero" id="overview">
         <div className="home-page__hero-copy">
-          <h1 className="page__title">Content Operations Dashboard</h1>
+          <h1 className="page__title">Manage, review, and report</h1>
           <div className="home-page__hero-badges" aria-label="Quick summary">
             <span className="home-page__badge">Overview</span>
             <span className="home-page__badge">Workflow</span>

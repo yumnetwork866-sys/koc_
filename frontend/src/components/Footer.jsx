@@ -6,7 +6,7 @@ const Footer = () => {
     <footer className="footer">
       <div className="footer__inner">
         <div className="footer__brand">
-          <span className="footer__meta">Content Performance Report</span>
+          <span className="footer__meta">YUM Network</span>
         </div>
 
         <div className="footer__card">

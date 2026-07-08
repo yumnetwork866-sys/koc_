@@ -9,7 +9,6 @@ export const sidebarSections = [
     items: [
       { to: '/dashboard', label: 'Dashboard' },
       { to: '/manage/users', label: 'Users' },
-      { to: '/manage/koc', label: 'KOC' },
       { to: '/bookings', label: 'Bookings' },
       { to: '/manage/channels', label: 'Channels' },
       { to: '/videos', label: 'Videos' },
@@ -43,14 +42,6 @@ export const protectedRouteCards = [
     props: {
       heroTitle: 'User management',
       heroSubtitle: 'Quản lý admin, leader và member trước khi leader gắn video cho từng người.',
-    },
-  },
-  {
-    path: '/manage/koc',
-    component: 'KOCManagement',
-    props: {
-      heroTitle: 'KOC management',
-      heroSubtitle: 'Quản lý KOC/TikTok creator, theo dõi profile, follower và trạng thái kết nối.',
     },
   },
   {
@@ -129,6 +120,7 @@ export const protectedRouteCards = [
 
 export const redirectRoutes = [
   { path: '/manage', to: '/manage/users' },
+  { path: '/manage/koc', to: '/manage/users' },
   { path: '/chatbot', to: '/chatbot/dashboard' },
   { path: '/chatbot/rag', to: '/chatbot/chat-setting' },
 ];

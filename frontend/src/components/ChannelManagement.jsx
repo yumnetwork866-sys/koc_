@@ -7,7 +7,7 @@ import {
   revokeChannelAuthorization,
   syncChannelVideos,
 } from '../lib/api';
-import { PLATFORMS, getPlatformLabel } from '../lib/platforms';
+import { getPlatformLabel } from '../lib/platforms';
 
 const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
   const location = useLocation();
@@ -201,7 +201,6 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       ) : null}
 
       <section className="page__hero">
-        <span className="page__eyebrow">Kênh</span>
         <h1 className="page__title">{heroTitle}</h1>
         <p className="page__subtitle">{heroSubtitle}</p>
         <div className="page__stats">
@@ -217,16 +216,6 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
             <p className="stat-card__label">Import/Crawl</p>
             <p className="stat-card__value">{(sourceCounts.import || 0) + (sourceCounts.crawler || 0)}</p>
           </article>
-        </div>
-        <div className="platform-strip">
-          {PLATFORMS.map((platform) => (
-            <span
-              key={platform.key}
-              className={`chip ${platform.status === 'active' ? 'chip--positive' : 'chip--amber'}`}
-            >
-              {platform.label}{platform.status === 'placeholder' ? ' placeholder' : ''}
-            </span>
-          ))}
         </div>
       </section>
 

@@ -33,7 +33,7 @@ const Header = () => {
         <Link to="/" className="brand" aria-label="Go to home">
           <AppLogo size="sm" />
           <div className="brand__text">
-            <div className="brand__name">Content Performance Report</div>
+            <div className="brand__name">YUM Network</div>
           </div>
         </Link>
 

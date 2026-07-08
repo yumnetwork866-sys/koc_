@@ -114,7 +114,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   return (
     <div className="page">
       <section className="page__hero">
-        <span className="page__eyebrow">Quản lý user</span>
         <h1 className="page__title">{heroTitle}</h1>
         <p className="page__subtitle">{heroSubtitle}</p>
       </section>

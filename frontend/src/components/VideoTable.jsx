@@ -93,7 +93,6 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
   return (
     <div className="page">
       <section className="page__hero">
-        <span className="page__eyebrow">Video Library</span>
         <h1 className="page__title">{heroTitle}</h1>
         <p className="page__subtitle">{heroSubtitle}</p>
         <div className="page__stats page__stats--four">

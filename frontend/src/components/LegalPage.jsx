@@ -5,15 +5,13 @@ const LegalPage = ({ title, updatedAt, children }) => {
   return (
     <div className="page legal-page">
       <section className="page__hero legal-page__hero">
-        <div className="legal-page__brand">
-          <AppLogo size="lg" className="legal-page__brand-logo" />
-          <div className="legal-page__brand-copy">
+        <div className="legal-page__hero-row">
+          <h1 className="page__title legal-page__title">{title}</h1>
+          <div className="legal-page__brand">
             <span className="legal-page__brand-label">YUM Network</span>
-            <span className="legal-page__brand-subtitle">Official site</span>
+            <AppLogo size="md" className="legal-page__brand-logo" />
           </div>
         </div>
-        <span className="page__eyebrow">Legal</span>
-        <h1 className="page__title">{title}</h1>
         <p className="page__subtitle">Last updated: {updatedAt}</p>
       </section>
 
