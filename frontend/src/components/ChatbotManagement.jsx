@@ -942,7 +942,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       {activeSection !== 'chat' ? (
         <section className="page__hero" id="dashboard">
           {activeSection === 'dashboard' ? (
-            <div className="page__hero-row">
+            <div className="page__hero-row page__hero-row--spread page__hero-row--bottom">
               <h1 className="page__title">{heroTitle}</h1>
               <div className="page__hero-actions">
                 {renderFacebookAccountActions()}
