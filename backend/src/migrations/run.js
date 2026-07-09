@@ -104,7 +104,7 @@ const createMigrationRunner = ({
     backup,
     migrate,
     rollback,
-    seed: () => seed.up(),
+    seed: async () => { await migrate(); await seed.up(); },
     init: async () => { await migrate(); await seed.up(); },
     reset: async () => { await seed.down(); await rollbackAll(); },
   };

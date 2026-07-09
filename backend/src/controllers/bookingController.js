@@ -6,6 +6,23 @@ const compactPayload = (payload) => Object.fromEntries(
   Object.entries(payload).filter(([, value]) => value !== undefined),
 );
 
+const normalizeBookingVideoUrl = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    if (!value.length) return null;
+    return JSON.stringify(value);
+  }
+
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+};
+
 const bookingInclude = [
   { model: User, as: 'staff' },
   { model: User, as: 'creator' },
@@ -45,7 +62,7 @@ const createBooking = async (req, res) => {
       deadline: req.body.deadline,
       note: req.body.note || null,
       video_platform_id: req.body.video_platform_id || null,
-      video_url: req.body.video_url || null,
+      video_url: normalizeBookingVideoUrl(req.body.video_url),
       posted_at: req.body.posted_at || null,
     });
 
@@ -75,7 +92,7 @@ const updateBooking = async (req, res) => {
       deadline: req.body.deadline,
       note: req.body.note,
       video_platform_id: req.body.video_platform_id,
-      video_url: req.body.video_url,
+      video_url: normalizeBookingVideoUrl(req.body.video_url),
       posted_at: req.body.posted_at,
     });
 

@@ -158,6 +158,36 @@ const seedDatabase = async () => {
           [editor.id, 'editor'],
         ],
       },
+      {
+        platform_video_id: 'tt_005',
+        title: 'Routine buổi sáng cho da dầu mụn',
+        views: 16300,
+        likes: 1240,
+        comments: 73,
+        shares: 102,
+        content_type: 'routine',
+        campaign: 'Morning Care',
+        products: ['Mụn'],
+        assignments: [
+          [scriptWriter.id, 'script'],
+          [leader.id, 'uploader'],
+        ],
+      },
+      {
+        platform_video_id: 'tt_006',
+        title: '3 dấu hiệu cần đổi sản phẩm chăm da',
+        views: 9400,
+        likes: 710,
+        comments: 48,
+        shares: 55,
+        content_type: 'tips',
+        campaign: 'Skin Check',
+        products: ['Sẹo', 'Lumilab'],
+        assignments: [
+          [aiCreator.id, 'ai_creator'],
+          [editor.id, 'editor'],
+        ],
+      },
     ];
 
     for (const [index, sample] of samples.entries()) {
@@ -218,7 +248,18 @@ const seedDatabase = async () => {
         deadline: '2026-07-05',
         note: 'Booking cho campaign skincare, ưu tiên hook 3 giây đầu.',
         video_platform_id: 'tt_booking_001',
-        video_url: 'https://www.tiktok.com/@brandclinic.vn/video/1234567890',
+        video_url: JSON.stringify([
+          {
+            title: 'Cách xử lý sẹo sau mụn trong 30 ngày',
+            platform_video_id: 'tt_001',
+            video_url: 'https://www.tiktok.com/@brandclinic.vn/video/tt_001',
+          },
+          {
+            title: 'Routine buổi sáng cho da dầu mụn',
+            platform_video_id: 'tt_005',
+            video_url: 'https://www.tiktok.com/@brandclinic.vn/video/tt_005',
+          },
+        ]),
         posted_at: new Date(),
       },
     });
@@ -236,6 +277,36 @@ const seedDatabase = async () => {
         status: 'booked',
         deadline: '2026-07-08',
         note: 'Chờ KOC xác nhận lịch đăng.',
+      },
+    });
+
+    await Booking.findOrCreate({
+      where: {
+        staff_id: aiCreator.id,
+        creator_id: kocOne.id,
+        deadline: '2026-07-10',
+      },
+      defaults: {
+        staff_id: aiCreator.id,
+        creator_id: kocOne.id,
+        booking_cost: 1750000,
+        status: 'video_posted',
+        deadline: '2026-07-10',
+        note: 'Booking đã post, cần đối chiếu hiệu quả và comment chất lượng.',
+        video_platform_id: 'tt_booking_002',
+        video_url: JSON.stringify([
+          {
+            title: 'Routine Follicas cho tóc yếu',
+            platform_video_id: 'tt_002',
+            video_url: 'https://www.tiktok.com/@brandclinic.vn/video/tt_002',
+          },
+          {
+            title: '3 dấu hiệu cần đổi sản phẩm chăm da',
+            platform_video_id: 'tt_006',
+            video_url: 'https://www.tiktok.com/@brandclinic.vn/video/tt_006',
+          },
+        ]),
+        posted_at: new Date(),
       },
     });
 
