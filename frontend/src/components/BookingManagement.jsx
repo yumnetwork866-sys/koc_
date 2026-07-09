@@ -434,7 +434,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             <thead>
               <tr>
                 <th className="cell-number">ID</th>
-                <th>{t('booking.staffColumn')}</th>
                 <th>{t('booking.kocColumn')}</th>
                 <th className="cell-number">{t('booking.costColumn')}</th>
                 <th>{t('booking.deadlineColumn')}</th>
@@ -445,7 +444,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={7}>
+                  <td className="table-state-cell" colSpan={6}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('booking.loading')}</div>
@@ -459,7 +458,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                   return (
                     <tr key={booking.id}>
                       <td className="cell-number"><span className="row-title">#{booking.id}</span></td>
-                      <td>{booking.staff?.name || userNameById.get(String(booking.staff_id)) || booking.staff_id}</td>
                       <td>{booking.creator?.name || userNameById.get(String(booking.creator_id)) || booking.creator_id}</td>
                       <td className="cell-number">{localizedFormatMoney(booking.booking_cost)}</td>
                       <td>{booking.deadline || '-'}</td>
@@ -502,7 +500,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                 })
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={7}>
+                  <td className="table-state-cell" colSpan={6}>
                     <div className="empty-state empty-state--compact table-empty-state">{t('booking.noData')}</div>
                   </td>
                 </tr>
