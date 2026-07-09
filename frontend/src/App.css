@@ -2116,6 +2116,22 @@
   outline: none;
 }
 
+.ai-chat-panel__send {
+  display: inline-grid;
+  place-items: center;
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.ai-chat-panel__send-icon {
+  width: 18px;
+  height: 18px;
+}
+
 .ai-chat-panel__composer input:focus-visible,
 .ai-chat-chip:focus-visible,
 .ai-chat-suggestion:focus-visible,

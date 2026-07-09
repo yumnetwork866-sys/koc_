@@ -401,8 +401,21 @@ const AiChatBubble = () => {
               placeholder={t('ai.placeholder')}
               aria-label={t('ai.inputLabel')}
             />
-            <button type="submit" className="button button--primary" disabled={loading || !input.trim()}>
-              {t('ai.send')}
+            <button
+              type="submit"
+              className="button button--primary ai-chat-panel__send"
+              disabled={loading || !input.trim()}
+              aria-label={t('ai.send')}
+            >
+              <svg viewBox="0 0 24 24" className="ai-chat-panel__send-icon" aria-hidden="true" focusable="false">
+                <path
+                  d="M5 12.5 19 5l-3.5 14-3.4-5-7.1-1.5Z"
+                  fill="currentColor"
+                  stroke="currentColor"
+                  strokeLinejoin="round"
+                  strokeWidth="1.2"
+                />
+              </svg>
             </button>
           </form>
         </section>
