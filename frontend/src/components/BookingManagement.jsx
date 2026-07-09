@@ -527,7 +527,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                   {t('booking.videoModalTitle')}
                 </h2>
               </div>
-              <label className="booking-video-picker__select-all">
+              <label className="booking-video-picker__select-all-inline">
                 <input
                   type="checkbox"
                   checked={isAllFilteredSelected}
