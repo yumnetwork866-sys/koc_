@@ -13,7 +13,6 @@ export const sidebarSections = [
       { to: '/bookings', label: 'Bookings' },
       { to: '/manage/channels', label: 'Channels' },
       { to: '/videos', label: 'Videos' },
-      { to: '/assignments', label: 'Assign' },
       { to: '/reports', label: 'Reports' },
     ],
   },
@@ -75,14 +74,6 @@ export const protectedRouteCards = [
     props: {
       heroTitle: 'Video library',
       heroSubtitle: 'Kiểm tra toàn bộ video, metric nền tảng, sản phẩm, campaign và content type.',
-    },
-  },
-  {
-    path: '/assignments',
-    component: 'AssignmentManagement',
-    props: {
-      heroTitle: 'Assign video ownership',
-      heroSubtitle: 'Leader gắn video cho script, editor, uploader, actor hoặc AI creator để tính KPI theo user.',
     },
   },
   {

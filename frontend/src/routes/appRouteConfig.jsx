@@ -3,7 +3,6 @@ import { Navigate } from 'react-router-dom';
 import { LoginRoute } from './guards';
 import { protectedRouteCards, redirectRoutes } from './navigation';
 
-const AssignmentManagement = lazy(() => import('../components/AssignmentManagement'));
 const ChannelManagement = lazy(() => import('../components/ChannelManagement'));
 const ChatbotManagement = lazy(() => import('../components/ChatbotManagement'));
 const BookingManagement = lazy(() => import('../components/BookingManagement'));
@@ -25,7 +24,6 @@ const componentMap = {
   BookingManagement,
   ChannelManagement,
   VideoTable,
-  AssignmentManagement,
   ReportFilter,
   ChatbotManagement,
 };

@@ -7,8 +7,8 @@
 
 .app-shell__layout {
   width: 100%;
-  max-width: var(--layout-max-width);
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: var(--space-4) var(--space-5) var(--space-8);
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -32,11 +32,13 @@
 .app-shell__content-frame {
   width: 100%;
   min-width: 0;
+  max-width: none;
 }
 
 .home-page {
   display: grid;
   gap: 24px;
+  padding-inline: clamp(0px, 2.2vw, 32px);
 }
 
 .home-page__hero {
@@ -3207,6 +3209,10 @@
 }
 
 @media (max-width: 640px) {
+  .home-page {
+    padding-inline: 0;
+  }
+
   .app-shell__layout {
     padding: 12px 14px 24px;
     gap: 16px;

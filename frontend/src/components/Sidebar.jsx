@@ -32,12 +32,6 @@ const sidebarIcons = {
     'M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z',
     'M10 9l5 3-5 3V9Z',
   ],
-  assign: [
-    'M7 7h10',
-    'M7 12h6',
-    'M7 17h4',
-    'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z',
-  ],
   reports: [
     'M7 3h8l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z',
     'M15 3v5h5',
@@ -73,7 +67,6 @@ const routeIconMap = {
   '/bookings': 'bookings',
   '/manage/channels': 'channels',
   '/videos': 'videos',
-  '/assignments': 'assign',
   '/reports': 'reports',
   '/chatbot/dashboard': 'dashboard',
   '/chatbot/chat': 'chat',

@@ -446,6 +446,9 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                 <th>{t('booking.kocColumn')}</th>
                 <th className="cell-number">{t('booking.costColumn')}</th>
                 <th>{t('booking.deadlineColumn')}</th>
+                <th className="cell-number">{t('booking.viewsColumn')}</th>
+                <th className="cell-number">{t('booking.likesColumn')}</th>
+                <th className="cell-number">{t('booking.sharesColumn')}</th>
                 <th>{t('booking.videoColumn')}</th>
                 <th className="cell-actions">{t('booking.actionsColumn')}</th>
               </tr>
@@ -453,7 +456,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={6}>
+                  <td className="table-state-cell" colSpan={9}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('booking.loading')}</div>
@@ -463,6 +466,12 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
               ) : bookings.length ? (
                 bookings.map((booking) => {
                   const bookingVideos = parseBookingVideos(booking.video_url);
+                  const bookingVideoStats = bookingVideos.reduce((acc, video) => {
+                    acc.views += Number(video.views || 0);
+                    acc.likes += Number(video.likes || 0);
+                    acc.shares += Number(video.shares || 0);
+                    return acc;
+                  }, { views: 0, likes: 0, shares: 0 });
 
                   return (
                     <tr key={booking.id}>
@@ -470,6 +479,9 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                       <td>{getKocDisplayName(booking.creator?.name || userNameById.get(String(booking.creator_id)) || booking.creator_id)}</td>
                       <td className="cell-number">{localizedFormatMoney(booking.booking_cost)}</td>
                       <td>{booking.deadline || '-'}</td>
+                      <td className="cell-number">{localizedFormatMoney(bookingVideoStats.views)}</td>
+                      <td className="cell-number">{localizedFormatMoney(bookingVideoStats.likes)}</td>
+                      <td className="cell-number">{localizedFormatMoney(bookingVideoStats.shares)}</td>
                       <td>
                         <div className="booking-video-list">
                           {bookingVideos.length ? (
@@ -509,7 +521,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                 })
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={6}>
+                  <td className="table-state-cell" colSpan={9}>
                     <div className="empty-state empty-state--compact table-empty-state">{t('booking.noData')}</div>
                   </td>
                 </tr>
