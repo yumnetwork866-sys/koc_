@@ -8,11 +8,9 @@ const ManagementHub = () => {
       <div className="hub-stack">
         <EmployeeTable
           heroTitle="User management"
-          heroSubtitle="Quản lý admin, leader và member trước khi leader gắn video cho từng người."
         />
         <ChannelManagement
           heroTitle="Channel management"
-          heroSubtitle="Thêm kênh bằng OAuth, import file hoặc crawler public theo username."
         />
       </div>
     </div>

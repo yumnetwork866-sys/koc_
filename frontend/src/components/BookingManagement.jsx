@@ -340,7 +340,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
     <div className="page">
       <section className="page__hero">
         <h1 className="page__title">{t('booking.heroTitle') || heroTitle}</h1>
-        <p className="page__subtitle">{t('booking.heroSubtitle') || heroSubtitle}</p>
         <div className="page__stats page__stats--four">
           <article className="stat-card">
             <p className="stat-card__label">{t('booking.bookings')}</p>
@@ -371,7 +370,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">{t('booking.createBooking')}</h2>
-            <p className="section-card__meta">{t('booking.createBookingMeta')}</p>
           </div>
         </div>
 

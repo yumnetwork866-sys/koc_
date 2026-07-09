@@ -33,7 +33,7 @@ export const protectedRouteCards = [
     component: 'Dashboard',
     props: {
       heroTitle: 'Content performance dashboard',
-      heroSubtitle: 'Theo dõi KPI theo user, KOC, sản phẩm và nền tảng từ dữ liệu OAuth, import hoặc crawler.',
+      heroSubtitle: '',
     },
   },
   {
@@ -41,7 +41,7 @@ export const protectedRouteCards = [
     component: 'EmployeeTable',
     props: {
       heroTitle: 'User management',
-      heroSubtitle: 'Quản lý admin, leader và member trước khi leader gắn video cho từng người.',
+      heroSubtitle: '',
     },
   },
   {
@@ -49,7 +49,7 @@ export const protectedRouteCards = [
     component: 'KOCPerformance',
     props: {
       heroTitle: 'KOC performance',
-      heroSubtitle: 'Đo hiệu quả từng KOC theo video count, total views, average views/video và top video.',
+      heroSubtitle: '',
     },
   },
   {
@@ -57,7 +57,7 @@ export const protectedRouteCards = [
     component: 'BookingManagement',
     props: {
       heroTitle: 'Booking management',
-      heroSubtitle: 'Tạo booking cho KOC, gắn chi phí, deadline và trạng thái video trong một luồng.',
+      heroSubtitle: '',
     },
   },
   {
@@ -65,7 +65,7 @@ export const protectedRouteCards = [
     component: 'ChannelManagement',
     props: {
       heroTitle: 'Channel management',
-      heroSubtitle: 'Thêm kênh bằng OAuth, import file hoặc crawler public theo username.',
+      heroSubtitle: '',
     },
   },
   {
@@ -73,7 +73,7 @@ export const protectedRouteCards = [
     component: 'VideoTable',
     props: {
       heroTitle: 'Video library',
-      heroSubtitle: 'Kiểm tra toàn bộ video, metric nền tảng, sản phẩm, campaign và content type.',
+      heroSubtitle: '',
     },
   },
   {
@@ -81,7 +81,7 @@ export const protectedRouteCards = [
     component: 'ReportFilter',
     props: {
       heroTitle: 'AI weekly report',
-      heroSubtitle: 'Sinh báo cáo tuần từ video.',
+      heroSubtitle: '',
     },
   },
   {

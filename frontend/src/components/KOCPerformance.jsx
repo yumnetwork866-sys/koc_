@@ -100,7 +100,6 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
     <div className="page">
       <section className="page__hero">
         <h1 className="page__title">{t('koc.heroTitle') || heroTitle}</h1>
-        <p className="page__subtitle">{t('koc.heroSubtitle') || heroSubtitle}</p>
         <div className="page__stats page__stats--four">
           <article className="stat-card">
             <p className="stat-card__label">{t('koc.koc')}</p>
@@ -131,7 +130,6 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">{t('koc.filterSort')}</h2>
-            <p className="section-card__meta">{t('koc.filterSortMeta')}</p>
           </div>
           <div className="chip-row">
             <span className="chip chip--blue">{t('koc.visible')}: {formatNumber(sortedRows.length)}</span>
@@ -173,7 +171,6 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
           <div className="section-card__header section-card__header--compact">
             <div>
               <h2 className="section-card__title">{t('koc.topKoc')}</h2>
-              <p className="section-card__meta">{t('koc.topKocMeta')}</p>
             </div>
           </div>
 
@@ -214,7 +211,6 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
           <div className="section-card__header section-card__header--compact">
             <div>
               <h2 className="section-card__title">{t('koc.topVideo')}</h2>
-              <p className="section-card__meta">{t('koc.topVideoMeta')}</p>
             </div>
           </div>
 
@@ -242,7 +238,6 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">{t('koc.tableTitle')}</h2>
-            <p className="section-card__meta">{t('koc.tableMeta')}</p>
           </div>
         </div>
 
@@ -307,7 +302,6 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
           <div className="section-card__header section-card__header--compact">
             <div>
               <h2 className="section-card__title">{t('koc.spotlight')}</h2>
-              <p className="section-card__meta">{t('koc.spotlightMeta')}</p>
             </div>
           </div>
           <div className="metric-item">

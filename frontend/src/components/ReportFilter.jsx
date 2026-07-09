@@ -75,7 +75,6 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
     <div className="page">
       <section className="page__hero">
         <h1 className="page__title">{heroTitle}</h1>
-        <p className="page__subtitle">{heroSubtitle}</p>
         <div className="page__stats">
           <article className="stat-card">
             <p className="stat-card__label">Reports</p>
@@ -98,7 +97,6 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Generate weekly report</h2>
-            <p className="section-card__meta">Backend tổng hợp video trong tuần và sinh nội dung báo cáo mẫu.</p>
           </div>
         </div>
 
@@ -123,7 +121,6 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Danh sách báo cáo</h2>
-            <p className="section-card__meta">Nội dung lưu trong bảng weekly_reports.</p>
           </div>
         </div>
 

@@ -200,7 +200,6 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
 
       <section className="page__hero">
         <h1 className="page__title">{t('channel.heroTitle') || heroTitle}</h1>
-        <p className="page__subtitle">{t('channel.heroSubtitle') || heroSubtitle}</p>
         <div className="page__stats">
           <article className="stat-card">
             <p className="stat-card__label">{t('channel.channels')}</p>
@@ -235,9 +234,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
           </div>
         </div>
         <div className="oauth-cta">
-          <div className="oauth-cta__copy">
-            <p className="oauth-cta__subtitle">{t('channel.oauthCta')}</p>
-          </div>
+          <div className="oauth-cta__copy" />
         </div>
       </section>
 

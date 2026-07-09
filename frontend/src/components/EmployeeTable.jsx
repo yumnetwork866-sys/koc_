@@ -115,7 +115,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
     <div className="page">
       <section className="page__hero">
         <h1 className="page__title">{heroTitle}</h1>
-        <p className="page__subtitle">{heroSubtitle}</p>
       </section>
 
       {error ? (
@@ -128,7 +127,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Tạo user</h2>
-            <p className="section-card__meta">Role: admin, leader, member, koc.</p>
           </div>
         </div>
 
@@ -174,7 +172,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Danh sách user</h2>
-            <p className="section-card__meta">Leader sẽ dùng danh sách này để gắn video cho nhân sự, KOC là creator bên ngoài.</p>
           </div>
           <div className="chip-row">
             <span className="chip chip--blue">Users: {rows.length}</span>

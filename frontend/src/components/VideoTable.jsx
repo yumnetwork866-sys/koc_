@@ -94,7 +94,6 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
     <div className="page">
       <section className="page__hero">
         <h1 className="page__title">{heroTitle}</h1>
-        <p className="page__subtitle">{heroSubtitle}</p>
         <div className="page__stats page__stats--four">
           <article className="stat-card">
             <p className="stat-card__label">Videos</p>

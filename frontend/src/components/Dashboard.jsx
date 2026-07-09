@@ -64,7 +64,6 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
     <div className="page">
       <section className="page__hero">
         <h1 className="page__title">{t('dashboard.heroTitle') || heroTitle}</h1>
-        <p className="page__subtitle">{t('dashboard.heroSubtitle') || heroSubtitle}</p>
 
         <div className="page__stats page__stats--four">
           <article className="stat-card">
@@ -89,7 +88,6 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
       {error ? (
         <section className="section-card empty-state">
           <div>{t('dashboard.errorLoad') || 'Không tải được dashboard.'}</div>
-          <div className="section-card__meta">{error}</div>
         </section>
       ) : null}
 
@@ -97,7 +95,6 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">{t('dashboard.kpiByUser')}</h2>
-            <p className="section-card__meta">{t('dashboard.kpiByUserMeta')}</p>
           </div>
         </div>
 
@@ -135,9 +132,8 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
       <section className="grid-two">
         <article className="section-card">
           <div className="section-card__header">
-          <div>
+            <div>
               <h2 className="section-card__title">{t('dashboard.topUser')}</h2>
-              <p className="section-card__meta">{t('dashboard.topUserMeta')}</p>
             </div>
           </div>
           <div className="metric-list">
@@ -160,7 +156,6 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
           <div className="section-card__header">
             <div>
               <h2 className="section-card__title">{t('dashboard.topProduct')}</h2>
-              <p className="section-card__meta">{t('dashboard.topProductMeta')}</p>
             </div>
           </div>
           <div className="metric-list">
