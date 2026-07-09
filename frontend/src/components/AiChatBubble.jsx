@@ -337,20 +337,6 @@ const AiChatBubble = () => {
             </button>
           </header>
 
-          <div className="ai-chat-panel__chips" aria-label={t('ai.assistant')}>
-            {quickPrompts.map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                className="ai-chat-chip"
-                onClick={() => submitPrompt(prompt)}
-                disabled={loading}
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-
           <div ref={listRef} className="ai-chat-panel__messages" aria-live="polite">
             {messages.map((message) => (
               <div
@@ -392,6 +378,20 @@ const AiChatBubble = () => {
             ) : null}
           </div>
 
+          <div className="ai-chat-panel__chips ai-chat-panel__chips--composer" aria-label={t('ai.assistant')}>
+            {quickPrompts.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                className="ai-chat-chip"
+                onClick={() => submitPrompt(prompt)}
+                disabled={loading}
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+
           <form className="ai-chat-panel__composer" onSubmit={handleSubmit}>
             <input
               ref={inputRef}
@@ -420,13 +420,18 @@ const AiChatBubble = () => {
         }}
       >
         <svg
-          viewBox="0 0 64 64"
+          viewBox="0 0 24 24"
           className="ai-chat-launcher__shape"
           aria-hidden="true"
           focusable="false"
         >
-          <circle cx="31" cy="27" r="19.5" fill="#2563eb" />
-          <path d="M33 44.5c5.4 0 9.8 4.4 9.8 9.8v-5.4c0-2.4-2-4.4-4.4-4.4h-5.4Z" fill="#2563eb" />
+          <path
+            d="M6.2 6.3h11.6A2.8 2.8 0 0 1 20.6 9v4.4a2.8 2.8 0 0 1-2.8 2.8H11.8L9 18.8c-.4.3-.9-.1-.8-.6l.6-1.9H6.2A2.8 2.8 0 0 1 3.4 13V9a2.8 2.8 0 0 1 2.8-2.7Z"
+            fill="currentColor"
+          />
+          <circle cx="8.4" cy="11" r="0.95" fill="#ffffff" />
+          <circle cx="12" cy="11" r="0.95" fill="#ffffff" opacity="0.92" />
+          <circle cx="15.6" cy="11" r="0.95" fill="#ffffff" opacity="0.84" />
         </svg>
       </button>
     </div>,
