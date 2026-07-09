@@ -63,6 +63,15 @@ const getChannelAvatarText = (channel) => {
   return initials.toUpperCase();
 };
 
+const getKocDisplayName = (user) => {
+  const rawName = String(user?.name || user || '').trim();
+  if (!rawName) return '-';
+
+  return rawName
+    .replace(/\s*\(?\s*KOC(?:\s*(?:nữ|nam))?\s*\)?$/iu, '')
+    .trim() || rawName;
+};
+
 const BookingManagement = ({ heroTitle, heroSubtitle }) => {
   const { t, language } = useI18n();
   const [bookings, setBookings] = useState([]);
@@ -372,7 +381,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             <select id="staff_id" name="staff_id" value={form.staff_id} onChange={handleChange} required>
               <option value="">{t('booking.selectStaff')}</option>
               {staffUsers.map((user) => (
-                <option key={user.id} value={user.id}>{user.name} ({user.role})</option>
+                <option key={user.id} value={user.id}>{user.name}</option>
               ))}
             </select>
           </div>
@@ -458,7 +467,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                   return (
                     <tr key={booking.id}>
                       <td className="cell-number"><span className="row-title">#{booking.id}</span></td>
-                      <td>{booking.creator?.name || userNameById.get(String(booking.creator_id)) || booking.creator_id}</td>
+                      <td>{getKocDisplayName(booking.creator?.name || userNameById.get(String(booking.creator_id)) || booking.creator_id)}</td>
                       <td className="cell-number">{localizedFormatMoney(booking.booking_cost)}</td>
                       <td>{booking.deadline || '-'}</td>
                       <td>
