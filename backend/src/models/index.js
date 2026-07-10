@@ -97,6 +97,25 @@ const Booking = sequelize.define('Booking', {
   ],
 });
 
+const TikTokPartnerAuthorization = sequelize.define('TikTokPartnerAuthorization', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  creator_id: { type: DataTypes.INTEGER, allowNull: false, unique: true },
+  open_id: { type: DataTypes.STRING, allowNull: true, unique: true },
+  user_type: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
+  granted_scopes: { type: DataTypes.TEXT, allowNull: true },
+  access_token_encrypted: { type: DataTypes.TEXT, allowNull: false },
+  refresh_token_encrypted: { type: DataTypes.TEXT, allowNull: true },
+  access_token_expires_at: { type: DataTypes.DATE, allowNull: true },
+  refresh_token_expires_at: { type: DataTypes.DATE, allowNull: true },
+  shop_id: { type: DataTypes.STRING, allowNull: true },
+  connected_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_partner_authorizations',
+  timestamps: false,
+  indexes: [{ fields: ['creator_id'], unique: true }, { fields: ['open_id'] }],
+});
+
 const TikTokChannel = sequelize.define('TikTokChannel', {
   id: {
     type: DataTypes.INTEGER,
@@ -654,6 +673,8 @@ User.hasMany(Booking, { foreignKey: 'staff_id', as: 'staff_bookings' });
 Booking.belongsTo(User, { foreignKey: 'staff_id', as: 'staff' });
 User.hasMany(Booking, { foreignKey: 'creator_id', as: 'creator_bookings' });
 Booking.belongsTo(User, { foreignKey: 'creator_id', as: 'creator' });
+User.hasOne(TikTokPartnerAuthorization, { foreignKey: 'creator_id', as: 'tiktok_partner_authorization' });
+TikTokPartnerAuthorization.belongsTo(User, { foreignKey: 'creator_id', as: 'creator' });
 
 TikTokChannel.hasMany(Video, { foreignKey: 'channel_id', as: 'videos' });
 Video.belongsTo(TikTokChannel, { foreignKey: 'channel_id', as: 'channel' });
@@ -687,6 +708,7 @@ ChatbotOrder.belongsTo(FacebookPage, { foreignKey: 'page_id', as: 'page' });
 module.exports = {
   User,
   Booking,
+  TikTokPartnerAuthorization,
   TikTokChannel,
   Video,
   VideoAssignment,

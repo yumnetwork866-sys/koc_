@@ -1,4 +1,14 @@
-const { User, Booking } = require('../models');
+const crypto = require('crypto');
+const { User, Booking, TikTokPartnerAuthorization } = require('../models');
+const {
+  buildAuthorizationUrl,
+  parseAuthorizationState,
+  exchangeAuthorizationCode,
+  getCreatorOverview,
+  getCreatorProfileWithAccessToken,
+  searchTargetCollaborations,
+  tokenFields,
+} = require('../services/tiktokPartnerService');
 
 const ALLOWED_STATUSES = new Set(['draft', 'booked', 'waiting_video', 'video_posted', 'done', 'cancelled']);
 
@@ -128,10 +138,146 @@ const deleteBooking = async (req, res) => {
   }
 };
 
+const getTikTokPartnerCollaborations = async (req, res) => {
+  try {
+    const creatorId = Number(req.query.creator_id);
+    if (!Number.isInteger(creatorId)) return res.status(400).json({ message: 'creator_id is required.' });
+    const authorization = await TikTokPartnerAuthorization.findOne({ where: { creator_id: creatorId } });
+    if (!authorization) return res.status(409).json({ message: 'This KOC has not connected TikTok Partner.' });
+    const result = await searchTargetCollaborations({
+      authorization,
+      shopId: req.query.shop_id,
+      pageToken: req.query.page_token,
+      pageSize: req.query.page_size,
+      keyword: req.query.keyword,
+    });
+    res.json(result);
+  } catch (error) {
+    const status = error.message.startsWith('TikTok Partner is not configured') ? 503 : 502;
+    res.status(status).json({ message: error.message });
+  }
+};
+
+const getTikTokPartnerStatuses = async (req, res) => {
+  try {
+    const creators = await User.findAll({
+      where: { role: 'koc' },
+      include: [{ model: TikTokPartnerAuthorization, as: 'tiktok_partner_authorization', required: false }],
+      order: [['name', 'ASC']],
+    });
+    res.json(creators.map((creator) => {
+      const authorization = creator.tiktok_partner_authorization;
+      return {
+        creator_id: creator.id,
+        connected: Boolean(authorization),
+        open_id: authorization?.open_id || null,
+        granted_scopes: authorization?.granted_scopes ? JSON.parse(authorization.granted_scopes) : [],
+        access_token_expires_at: authorization?.access_token_expires_at || null,
+        connected_at: authorization?.connected_at || null,
+      };
+    }));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const startTikTokPartnerOauth = async (req, res) => {
+  try {
+    res.json({ authorizeUrl: buildAuthorizationUrl(req.query.return_path) });
+  } catch (error) {
+    const status = error.message.startsWith('TikTok Partner is not configured') ? 503 : 500;
+    res.status(status).json({ message: error.message });
+  }
+};
+
+const buildPartnerReturnUrl = (status, message, creatorId, returnPath = '/bookings') => {
+  const safeReturnPath = ['/bookings', '/manage/koc-performance'].includes(returnPath) ? returnPath : '/bookings';
+  const url = new URL(safeReturnPath, process.env.FRONTEND_URL || 'http://localhost:3005');
+  url.searchParams.set('partner_oauth_status', status);
+  if (message) url.searchParams.set('partner_oauth_message', message);
+  if (creatorId) url.searchParams.set('creator_id', String(creatorId));
+  return url.toString();
+};
+
+const handleTikTokPartnerOauthCallback = async (req, res) => {
+  let creatorId;
+  let returnPath = '/bookings';
+  try {
+    const state = parseAuthorizationState(req.query.state);
+    returnPath = state.returnPath;
+    if (!req.query.code || req.query.code === 'null') throw new Error(req.query.error || 'Creator denied TikTok authorization.');
+    const tokenData = await exchangeAuthorizationCode(req.query.code);
+    if (Number(tokenData.user_type) !== 1) throw new Error('TikTok authorization must return a Creator token (user_type=1).');
+    const scopes = tokenData.granted_scopes || tokenData.granted_permissions || [];
+    const normalizedScopes = Array.isArray(scopes) ? scopes : String(scopes).split(',').map((item) => item.trim()).filter(Boolean);
+    if (normalizedScopes.length && !normalizedScopes.includes('creator.affiliate_collaboration.read')) {
+      throw new Error('Creator did not grant creator.affiliate_collaboration.read.');
+    }
+    const profile = await getCreatorProfileWithAccessToken(tokenData.access_token);
+    const openId = profile.creator_user_open_id || tokenData.open_id;
+    if (!openId) throw new Error('TikTok Creator profile did not return an open ID.');
+    const existing = await TikTokPartnerAuthorization.findOne({ where: { open_id: openId } });
+    let creator = existing ? await User.findByPk(existing.creator_id) : null;
+    if (!creator) {
+      const identifier = crypto.createHash('sha256').update(openId).digest('hex').slice(0, 24);
+      creator = await User.create({
+        name: profile.username || `TikTok Creator ${openId.slice(-6)}`,
+        email: `tiktok.${identifier}@creators.yumnetwork.vn`,
+        role: 'koc',
+      });
+    } else if (profile.username && creator.name !== profile.username) {
+      await creator.update({ name: profile.username });
+    }
+    creatorId = creator.id;
+    const values = {
+      creator_id: creatorId,
+      shop_id: existing?.shop_id || process.env.TIKTOK_PARTNER_SHOP_ID || null,
+      connected_at: new Date(),
+      ...tokenFields({ ...tokenData, open_id: openId, granted_scopes: normalizedScopes }, existing || {}),
+    };
+    if (existing) await existing.update(values);
+    else await TikTokPartnerAuthorization.create(values);
+    return res.redirect(buildPartnerReturnUrl('success', 'TikTok Creator connected.', creatorId, returnPath));
+  } catch (error) {
+    console.error('[TikTok Partner OAuth] Callback failed', { creatorId, message: error.message });
+    return res.redirect(buildPartnerReturnUrl('error', error.message || 'TikTok Partner OAuth failed.', creatorId, returnPath));
+  }
+};
+
+const getTikTokPartnerCreatorOverview = async (req, res) => {
+  try {
+    const creatorId = Number(req.params.creatorId);
+    const authorization = Number.isInteger(creatorId)
+      ? await TikTokPartnerAuthorization.findOne({ where: { creator_id: creatorId } })
+      : null;
+    if (!authorization) return res.status(409).json({ message: 'This KOC has not connected TikTok Partner.' });
+    res.json(await getCreatorOverview(authorization));
+  } catch (error) {
+    res.status(502).json({ message: error.message });
+  }
+};
+
+const disconnectTikTokPartner = async (req, res) => {
+  try {
+    const creatorId = Number(req.params.creatorId);
+    const deleted = await TikTokPartnerAuthorization.destroy({ where: { creator_id: creatorId } });
+    if (!deleted) return res.status(404).json({ message: 'TikTok Partner connection not found.' });
+    res.json({ message: 'TikTok Creator disconnected.' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getBookings,
   getBookingById,
   createBooking,
   updateBooking,
   deleteBooking,
+  getTikTokPartnerCollaborations,
+  getTikTokPartnerStatuses,
+  startTikTokPartnerOauth,
+  handleTikTokPartnerOauthCallback,
+  disconnectTikTokPartner,
+  getTikTokPartnerCreatorOverview,
 };

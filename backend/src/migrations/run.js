@@ -18,6 +18,8 @@ const migrations = [
   require('./009_add_facebook_page_avatar_url'),
   require('./010_drop_teams'),
   require('./011_create_bookings'),
+  require('./012_create_tiktok_partner_authorizations'),
+  require('./013_unique_tiktok_partner_open_id'),
 ];
 
 const createMigrationRunner = ({

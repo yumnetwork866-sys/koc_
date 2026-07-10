@@ -18,6 +18,7 @@ const importRoutes = require('./routes/importRoutes');
 const authRoutes = require('./routes/authRoutes');
 const assistantRoutes = require('./routes/assistantRoutes');
 const chatbotRoutes = require('./routes/chatbotRoutes');
+const tiktokPartnerPublicRoutes = require('./routes/tiktokPartnerPublicRoutes');
 const { sequelize, TikTokChannel, User } = require('./models');
 const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
 const { requireAdmin } = require('./lib/session');
@@ -36,6 +37,7 @@ const createApp = () => {
   app.use(morgan(httpLogFormat));
   app.use(express.json());
   app.use(chatbotRoutes.publicRouter);
+  app.use('/api/bookings/tiktok-partner', tiktokPartnerPublicRoutes);
 
   app.get('/', (req, res) => {
     res.json({ message: 'Welcome to Content Performance Reporting API' });

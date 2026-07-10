@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { fetchKpis } from '../lib/api';
+import {
+  disconnectTikTokPartner,
+  fetchKpis,
+  fetchTikTokPartnerCreatorOverview,
+  fetchTikTokPartnerStatuses,
+  startTikTokPartnerOauth,
+} from '../lib/api';
 import { useI18n } from '../lib/language';
 
 const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
@@ -9,6 +15,12 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('totalViews_desc');
+  const [partnerStatuses, setPartnerStatuses] = useState([]);
+  const [partnerOverview, setPartnerOverview] = useState(null);
+  const [selectedPartnerCreatorId, setSelectedPartnerCreatorId] = useState(null);
+  const [partnerLoading, setPartnerLoading] = useState(false);
+  const [partnerError, setPartnerError] = useState('');
+  const [partnerNotice, setPartnerNotice] = useState('');
 
   const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
 
@@ -26,8 +38,12 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
       try {
         setLoading(true);
         setError('');
-        const loadedKpis = await fetchKpis(controller.signal);
+        const [loadedKpis, loadedPartnerStatuses] = await Promise.all([
+          fetchKpis(controller.signal),
+          fetchTikTokPartnerStatuses(controller.signal),
+        ]);
         setKpis(loadedKpis);
+        setPartnerStatuses(loadedPartnerStatuses);
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || t('koc.errorLoad'));
@@ -43,6 +59,61 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
 
     return () => controller.abort();
   }, [t]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('partner_oauth_status');
+    if (!status) return;
+    setPartnerNotice(params.get('partner_oauth_message') || (status === 'success' ? t('koc.partnerConnected') : t('koc.partnerError')));
+    const creatorId = params.get('creator_id');
+    if (creatorId) setSelectedPartnerCreatorId(Number(creatorId));
+    window.history.replaceState({}, '', window.location.pathname);
+  }, [t]);
+
+  const partnerStatusByCreatorId = useMemo(
+    () => new Map(partnerStatuses.map((status) => [String(status.creator_id), status])),
+    [partnerStatuses],
+  );
+
+  const connectPartner = async () => {
+    try {
+      setPartnerError('');
+      const { authorizeUrl } = await startTikTokPartnerOauth('/manage/koc-performance');
+      window.location.assign(authorizeUrl);
+    } catch (err) {
+      setPartnerError(err.message || t('koc.partnerError'));
+    }
+  };
+
+  const loadPartnerOverview = async (creatorId) => {
+    try {
+      setSelectedPartnerCreatorId(creatorId);
+      setPartnerLoading(true);
+      setPartnerError('');
+      setPartnerOverview(await fetchTikTokPartnerCreatorOverview(creatorId));
+    } catch (err) {
+      setPartnerOverview(null);
+      setPartnerError(err.message || t('koc.partnerError'));
+    } finally {
+      setPartnerLoading(false);
+    }
+  };
+
+  const disconnectPartner = async (creatorId) => {
+    if (!window.confirm(t('koc.partnerDisconnectConfirm'))) return;
+    try {
+      await disconnectTikTokPartner(creatorId);
+      setPartnerStatuses((current) => current.map((status) => (
+        String(status.creator_id) === String(creatorId) ? { ...status, connected: false } : status
+      )));
+      if (String(selectedPartnerCreatorId) === String(creatorId)) {
+        setPartnerOverview(null);
+        setSelectedPartnerCreatorId(null);
+      }
+    } catch (err) {
+      setPartnerError(err.message || t('koc.partnerError'));
+    }
+  };
 
   const kocRows = useMemo(() => {
     return [...(kpis?.users || [])].filter((user) => user.role === 'koc');
@@ -91,11 +162,6 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
     return Math.max(1, ...sortedRows.map((row) => Number(row.totalViews || 0)));
   }, [sortedRows]);
 
-  const clearFilters = () => {
-    setSearch('');
-    setSortBy('totalViews_desc');
-  };
-
   return (
     <div className="page">
       <section className="page__hero">
@@ -126,6 +192,65 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
         </section>
       ) : null}
 
+      {partnerNotice ? <section className="section-card empty-state empty-state--compact toast--success">{partnerNotice}</section> : null}
+      {partnerError ? <section className="section-card empty-state empty-state--compact">{partnerError}</section> : null}
+
+      {selectedPartnerCreatorId ? (
+        <section className="section-card">
+          <div className="section-card__header">
+            <div>
+              <h2 className="section-card__title">{t('koc.partnerOverview')}</h2>
+              <p className="section-card__meta">{t('koc.partnerOverviewMeta')}</p>
+            </div>
+          </div>
+          {partnerLoading ? (
+            <div className="empty-state"><div className="loading-dot" /><div>{t('koc.partnerLoading')}</div></div>
+          ) : partnerOverview ? (
+            <>
+              <div className="page__stats page__stats--four">
+                <article className="stat-card">
+                  <p className="stat-card__label">{t('koc.partnerUsername')}</p>
+                  <p className="stat-card__value">{partnerOverview.profile?.username || '-'}</p>
+                </article>
+                <article className="stat-card">
+                  <p className="stat-card__label">{t('koc.partnerRegion')}</p>
+                  <p className="stat-card__value">{partnerOverview.profile?.selection_region || partnerOverview.profile?.register_region || '-'}</p>
+                </article>
+                <article className="stat-card">
+                  <p className="stat-card__label">{t('koc.partnerShowcaseProducts')}</p>
+                  <p className="stat-card__value">{formatNumber(partnerOverview.showcase?.totalCount)}</p>
+                </article>
+                <article className="stat-card">
+                  <p className="stat-card__label">{t('koc.partnerPermissions')}</p>
+                  <p className="stat-card__value">{formatNumber(partnerOverview.profile?.permissions?.length)}</p>
+                </article>
+              </div>
+              <div className="chip-row">
+                {(partnerOverview.profile?.permissions || []).map((permission) => <span className="chip chip--positive" key={permission}>{permission}</span>)}
+              </div>
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead><tr><th>{t('koc.partnerProduct')}</th><th>{t('koc.partnerShop')}</th><th>{t('koc.partnerPrice')}</th></tr></thead>
+                  <tbody>
+                    {(partnerOverview.showcase?.products || []).map((product) => {
+                      const price = product.price?.sale_price || product.price?.original_price || {};
+                      return (
+                        <tr key={product.id}>
+                          <td><span className="row-title">{product.title || product.name || product.id}</span></td>
+                          <td>{product.shop?.name || '-'}</td>
+                          <td>{price.minimum_amount || price.amount || '-'} {price.currency || ''}</td>
+                        </tr>
+                      );
+                    })}
+                    {!partnerOverview.showcase?.products?.length ? <tr><td colSpan={3}>{t('koc.partnerNoProducts')}</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="section-card">
         <div className="section-card__header">
           <div>
@@ -138,7 +263,7 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
         </div>
 
         <form className="filter-panel filter-panel--compact" onSubmit={(event) => event.preventDefault()}>
-          <div className="field field--full">
+          <div className="field">
             <label htmlFor="koc-search">{t('common.search')}</label>
             <input
               id="koc-search"
@@ -157,11 +282,6 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="actions">
-            <button className="button button--ghost" type="button" onClick={clearFilters}>
-              {t('koc.clear')}
-            </button>
           </div>
         </form>
       </section>
@@ -239,6 +359,9 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
           <div>
             <h2 className="section-card__title">{t('koc.tableTitle')}</h2>
           </div>
+          <div className="actions">
+            <button className="button" type="button" onClick={connectPartner}>{t('koc.partnerConnectNew')}</button>
+          </div>
         </div>
 
         <div className="table-wrap">
@@ -252,12 +375,13 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
                 <th className="cell-number">{t('koc.avgViewsPerVideo')}</th>
                 <th className="cell-number">{t('koc.over10kRate')}</th>
                 <th>{t('koc.topVideo')}</th>
+                <th>{t('koc.partnerConnection')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={7}>
+                  <td className="table-state-cell" colSpan={8}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('koc.loadingTable')}</div>
@@ -265,8 +389,9 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
                   </td>
                 </tr>
               ) : sortedRows.length ? (
-                sortedRows.map((user, index) => (
-                  <tr key={user.id}>
+                sortedRows.map((user, index) => {
+                  const partnerStatus = partnerStatusByCreatorId.get(String(user.id));
+                  return <tr key={user.id}>
                     <td>
                       <span className="row-title">
                         {index + 1}. {user.name}
@@ -283,11 +408,23 @@ const KOCPerformance = ({ heroTitle, heroSubtitle }) => {
                         {user.topVideo ? `${formatNumber(user.topVideo.views)} ${t('koc.totalViews')}` : t('common.noData')}
                       </span>
                     </td>
-                  </tr>
-                ))
+                    <td>
+                      <div className="actions actions--inline">
+                        {partnerStatus?.connected ? (
+                          <>
+                            <button className="button button--small" type="button" onClick={() => loadPartnerOverview(user.id)}>{t('koc.partnerView')}</button>
+                            <button className="button button--small button--ghost" type="button" onClick={() => disconnectPartner(user.id)}>{t('koc.partnerDisconnect')}</button>
+                          </>
+                        ) : (
+                          <span className="row-subtitle">{t('koc.partnerManualUser')}</span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>;
+                })
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={7}>
+                  <td className="table-state-cell" colSpan={8}>
                     <div className="empty-state empty-state--compact table-empty-state">{t('koc.noData')}</div>
                   </td>
                 </tr>

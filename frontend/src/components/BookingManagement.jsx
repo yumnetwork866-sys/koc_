@@ -2,9 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createBooking,
   deleteBooking,
+  disconnectTikTokPartner,
   fetchBookings,
+  fetchTikTokPartnerCollaborations,
+  fetchTikTokPartnerStatuses,
   fetchVideos,
   fetchUsers,
+  startTikTokPartnerOauth,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 
@@ -87,15 +91,23 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
   const [deletingId, setDeletingId] = useState(null);
   const [isVideoPickerOpen, setIsVideoPickerOpen] = useState(false);
   const [error, setError] = useState('');
+  const [partnerCollaborations, setPartnerCollaborations] = useState([]);
+  const [partnerLoading, setPartnerLoading] = useState(false);
+  const [partnerError, setPartnerError] = useState('');
+  const [selectedPartnerProduct, setSelectedPartnerProduct] = useState(null);
+  const [partnerStatuses, setPartnerStatuses] = useState([]);
+  const [partnerNotice, setPartnerNotice] = useState(null);
 
   const loadData = async (signal) => {
-    const [loadedBookings, loadedUsers] = await Promise.all([
+    const [loadedBookings, loadedUsers, loadedPartnerStatuses] = await Promise.all([
       fetchBookings(signal),
       fetchUsers(signal),
+      fetchTikTokPartnerStatuses(signal),
     ]);
 
     setBookings(loadedBookings);
     setUsers(loadedUsers);
+    setPartnerStatuses(loadedPartnerStatuses);
 
     try {
       const loadedVideos = await fetchVideos(signal);
@@ -131,8 +143,22 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('partner_oauth_status');
+    if (!status) return;
+    setPartnerNotice({ status, message: params.get('partner_oauth_message') || '' });
+    const creatorId = params.get('creator_id');
+    if (creatorId) setForm((current) => ({ ...current, creator_id: creatorId }));
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
+
   const kocUsers = useMemo(() => users.filter((user) => user.role === 'koc'), [users]);
   const staffUsers = useMemo(() => users.filter((user) => user.role !== 'koc'), [users]);
+  const selectedPartnerStatus = useMemo(
+    () => partnerStatuses.find((item) => String(item.creator_id) === String(form.creator_id)) || null,
+    [form.creator_id, partnerStatuses],
+  );
   const localizedFormatMoney = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
 
   const userNameById = useMemo(() => {
@@ -143,6 +169,15 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
     () => videos.filter((video) => selectedVideoIds.includes(String(video.id))),
     [selectedVideoIds, videos],
   );
+
+  const partnerProducts = useMemo(() => partnerCollaborations.flatMap((collaboration) => (
+    (collaboration.products || []).map((product) => ({
+      ...product,
+      collaborationId: collaboration.id,
+      collaborationName: collaboration.name || collaboration.id,
+      collaborationStatus: collaboration.status,
+    }))
+  )), [partnerCollaborations]);
 
   const channelOptions = useMemo(() => {
     const map = new Map();
@@ -228,6 +263,11 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+    if (name === 'creator_id') {
+      setPartnerCollaborations([]);
+      setSelectedPartnerProduct(null);
+      setPartnerError('');
+    }
     setForm((current) => ({
       ...current,
       [name]: value,
@@ -237,6 +277,49 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
   const resetForm = () => {
     setForm(initialForm);
     setSelectedVideoIds([]);
+    setSelectedPartnerProduct(null);
+  };
+
+  const loadPartnerCollaborations = async () => {
+    if (!form.creator_id) {
+      setPartnerError(t('booking.partnerChooseKoc'));
+      return;
+    }
+    try {
+      setPartnerLoading(true);
+      setPartnerError('');
+      const result = await fetchTikTokPartnerCollaborations({ creatorId: form.creator_id });
+      setPartnerCollaborations(result.collaborations || []);
+    } catch (err) {
+      setPartnerError(err.message || t('booking.partnerError'));
+    } finally {
+      setPartnerLoading(false);
+    }
+  };
+
+  const connectPartnerCreator = async () => {
+    try {
+      setPartnerError('');
+      const { authorizeUrl } = await startTikTokPartnerOauth('/bookings');
+      window.location.assign(authorizeUrl);
+    } catch (err) {
+      setPartnerError(err.message || t('booking.partnerError'));
+    }
+  };
+
+  const disconnectPartnerCreator = async () => {
+    if (!form.creator_id || !window.confirm(t('booking.partnerDisconnectConfirm'))) return;
+    try {
+      setPartnerError('');
+      await disconnectTikTokPartner(form.creator_id);
+      setPartnerStatuses((current) => current.map((item) => (
+        String(item.creator_id) === String(form.creator_id) ? { ...item, connected: false } : item
+      )));
+      setPartnerCollaborations([]);
+      setSelectedPartnerProduct(null);
+    } catch (err) {
+      setPartnerError(err.message || t('booking.partnerError'));
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -245,12 +328,22 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
     try {
       setSaving(true);
       setError('');
+      const partnerVideo = selectedPartnerProduct ? {
+        id: `tiktok-partner-${selectedPartnerProduct.id}`,
+        title: `${selectedPartnerProduct.collaborationName} · ${selectedPartnerProduct.title || selectedPartnerProduct.id}`,
+        thumbnail_url: selectedPartnerProduct.main_image_url || '',
+        platform: 'tiktok_shop',
+        platform_video_id: selectedPartnerProduct.id,
+      } : null;
+      const bookingVideos = [...selectedVideos, ...(partnerVideo ? [partnerVideo] : [])];
+
       await createBooking({
         staff_id: Number(form.staff_id),
         creator_id: Number(form.creator_id),
         booking_cost: Number(form.booking_cost),
         deadline: form.deadline,
-        video_url: selectedVideos.length ? selectedVideos : null,
+        video_platform_id: selectedPartnerProduct?.id || null,
+        video_url: bookingVideos.length ? bookingVideos : null,
       });
       resetForm();
       await loadData();
@@ -366,6 +459,90 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
         </section>
       ) : null}
 
+      {partnerNotice ? (
+        <section className={`section-card empty-state empty-state--compact${partnerNotice.status === 'error' ? '' : ' toast--success'}`}>
+          <div>{partnerNotice.message || t(partnerNotice.status === 'error' ? 'booking.partnerError' : 'booking.partnerConnected')}</div>
+        </section>
+      ) : null}
+
+      <section className="section-card">
+        <div className="section-card__header">
+          <div>
+            <h2 className="section-card__title">{t('booking.partnerTitle')}</h2>
+            <p className="section-card__meta">{t('booking.partnerMeta')}</p>
+          </div>
+          <div className="actions">
+            {selectedPartnerStatus?.connected ? (
+              <button className="button button--ghost" type="button" onClick={disconnectPartnerCreator}>
+                {t('booking.partnerDisconnect')}
+              </button>
+            ) : (
+              <button className="button button--ghost" type="button" onClick={connectPartnerCreator}>
+                {t('booking.partnerConnectNew')}
+              </button>
+            )}
+            <button className="button button--ghost" type="button" onClick={loadPartnerCollaborations} disabled={partnerLoading || !selectedPartnerStatus?.connected}>
+              {partnerLoading ? t('booking.partnerLoading') : t('booking.partnerSync')}
+            </button>
+          </div>
+        </div>
+
+        <div className="chip-row">
+          <span className={`chip${selectedPartnerStatus?.connected ? ' chip--positive' : ''}`}>
+            {form.creator_id
+              ? t(selectedPartnerStatus?.connected ? 'booking.partnerConnected' : 'booking.partnerNotConnected')
+              : t('booking.partnerChooseKoc')}
+          </span>
+        </div>
+
+        {partnerError ? <div className="empty-state empty-state--compact">{partnerError}</div> : null}
+        {!partnerError && partnerProducts.length ? (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>{t('booking.partnerCollaboration')}</th>
+                  <th>{t('booking.partnerProduct')}</th>
+                  <th>{t('booking.partnerStatus')}</th>
+                  <th className="cell-number">{t('booking.partnerCommission')}</th>
+                  <th className="cell-actions">{t('booking.actionsColumn')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {partnerProducts.map((product) => {
+                  const isSelected = selectedPartnerProduct?.id === product.id
+                    && selectedPartnerProduct?.collaborationId === product.collaborationId;
+                  return (
+                    <tr key={`${product.collaborationId}-${product.id}`}>
+                      <td><span className="row-title">{product.collaborationName}</span></td>
+                      <td>{product.title || product.id}</td>
+                      <td><span className="chip">{product.collaborationStatus || '-'}</span></td>
+                      <td className="cell-number">
+                        {product.commission?.amount
+                          ? `${product.commission.amount} ${product.commission.currency || ''}`.trim()
+                          : `${Number(product.commission?.rate || 0) / 100}%`}
+                      </td>
+                      <td className="cell-actions">
+                        <button
+                          className={`button button--small${isSelected ? '' : ' button--ghost'}`}
+                          type="button"
+                          onClick={() => setSelectedPartnerProduct(isSelected ? null : product)}
+                        >
+                          {isSelected ? t('booking.partnerSelected') : t('booking.partnerUse')}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {!partnerError && !partnerLoading && partnerCollaborations.length > 0 && !partnerProducts.length ? (
+          <div className="empty-state empty-state--compact">{t('booking.partnerNoProducts')}</div>
+        ) : null}
+      </section>
+
       <section className="section-card">
         <div className="section-card__header">
           <div>
@@ -420,6 +597,11 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             >
               {selectedVideoLabel}
             </button>
+            {selectedPartnerProduct ? (
+              <span className="row-subtitle">
+                {t('booking.partnerSelected')}: {selectedPartnerProduct.title || selectedPartnerProduct.id}
+              </span>
+            ) : null}
           </div>
           <div className="actions">
             <button className="button" type="submit" disabled={saving}>

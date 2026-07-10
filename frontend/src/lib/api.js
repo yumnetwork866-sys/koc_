@@ -61,6 +61,32 @@ export function fetchBookings(signal) {
   return apiRequest('/bookings', { signal });
 }
 
+export function fetchTikTokPartnerCollaborations({ creatorId, signal, pageToken, keyword } = {}) {
+  const params = new URLSearchParams();
+  params.set('creator_id', creatorId);
+  if (pageToken) params.set('page_token', pageToken);
+  if (keyword) params.set('keyword', keyword);
+  const query = params.toString();
+  return apiRequest(`/bookings/tiktok-partner/collaborations${query ? `?${query}` : ''}`, { signal });
+}
+
+export function fetchTikTokPartnerStatuses(signal) {
+  return apiRequest('/bookings/tiktok-partner/status', { signal });
+}
+
+export function startTikTokPartnerOauth(returnPath = '/bookings') {
+  const params = new URLSearchParams({ return_path: returnPath });
+  return apiRequest(`/bookings/tiktok-partner/oauth/start?${params.toString()}`);
+}
+
+export function disconnectTikTokPartner(creatorId) {
+  return apiRequest(`/bookings/tiktok-partner/${encodeURIComponent(creatorId)}`, { method: 'DELETE' });
+}
+
+export function fetchTikTokPartnerCreatorOverview(creatorId, signal) {
+  return apiRequest(`/bookings/tiktok-partner/creators/${encodeURIComponent(creatorId)}/overview`, { signal });
+}
+
 export function fetchVideos(signal) {
   return apiRequest('/videos', { signal });
 }

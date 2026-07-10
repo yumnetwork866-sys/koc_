@@ -6,9 +6,19 @@ const {
   createBooking,
   updateBooking,
   deleteBooking,
+  getTikTokPartnerCollaborations,
+  getTikTokPartnerStatuses,
+  startTikTokPartnerOauth,
+  disconnectTikTokPartner,
+  getTikTokPartnerCreatorOverview,
 } = require('../controllers/bookingController');
 
 router.get('/', getBookings);
+router.get('/tiktok-partner/collaborations', getTikTokPartnerCollaborations);
+router.get('/tiktok-partner/status', getTikTokPartnerStatuses);
+router.get('/tiktok-partner/oauth/start', startTikTokPartnerOauth);
+router.get('/tiktok-partner/creators/:creatorId/overview', getTikTokPartnerCreatorOverview);
+router.delete('/tiktok-partner/:creatorId', disconnectTikTokPartner);
 router.get('/:id', getBookingById);
 router.post('/', createBooking);
 router.put('/:id', updateBooking);
