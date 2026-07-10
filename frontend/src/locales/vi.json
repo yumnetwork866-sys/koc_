@@ -17,13 +17,27 @@
     "admin": "Quản trị viên"
   },
   "login": {
+    "workspace": "Không gian quản trị nội dung",
     "title": "Performance Report",
-    "subtitle": "Đăng nhập để quản lý user, KOC, kênh, video và báo cáo tuần.",
-    "identifier": "Username or Email",
-    "password": "Password",
+    "subtitle": "Theo dõi hiệu suất nội dung, quản lý kênh và phối hợp đội ngũ trong một không gian làm việc tập trung.",
+    "featuresLabel": "Tính năng chính",
+    "featureReports": "Báo cáo hiệu suất",
+    "featureChannels": "Quản lý đa kênh",
+    "featureTeam": "Phối hợp đội ngũ",
+    "formTitle": "Chào mừng trở lại",
+    "formSubtitle": "Đăng nhập bằng tài khoản quản trị của bạn.",
+    "identifier": "Tên đăng nhập hoặc email",
+    "identifierPlaceholder": "Nhập tên đăng nhập hoặc email",
+    "password": "Mật khẩu",
+    "passwordPlaceholder": "Nhập mật khẩu",
+    "showPassword": "Hiện mật khẩu",
+    "hidePassword": "Ẩn mật khẩu",
+    "show": "Hiện",
+    "hide": "Ẩn",
     "submit": "Đăng nhập",
     "submitting": "Đang đăng nhập",
-    "error": "Không đăng nhập được"
+    "error": "Không đăng nhập được",
+    "support": "Bạn gặp vấn đề khi đăng nhập? Liên hệ quản trị viên hệ thống."
   },
   "ai": {
     "assistant": "AI Assistant",

@@ -68,7 +68,6 @@ const Header = () => {
 
   const handleLanguageChange = (nextLanguage) => {
     setLanguage(nextLanguage);
-    setMenuOpen(false);
   };
 
   const navLabels = {
@@ -145,14 +144,8 @@ const Header = () => {
                       aria-checked={currentLanguage === 'en'}
                     >
                       <span className="topbar__language-switch-label topbar__language-switch-label--vi">VI</span>
-                      <span className="topbar__language-switch-track" aria-hidden="true">
-                        <span className="topbar__language-switch-thumb" />
-                      </span>
                       <span className="topbar__language-switch-label topbar__language-switch-label--en">EN</span>
                     </button>
-                    <div className="topbar__language-caption">
-                      {currentLanguage === 'en' ? t('header.english') : t('header.vietnamese')}
-                    </div>
                   </div>
                   <button
                     type="button"

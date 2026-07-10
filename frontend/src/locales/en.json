@@ -17,13 +17,27 @@
     "admin": "Administrator"
   },
   "login": {
+    "workspace": "Content operations workspace",
     "title": "Performance Report",
-    "subtitle": "Sign in to manage users, KOCs, channels, videos, and weekly reports.",
+    "subtitle": "Track content performance, manage channels, and keep your team aligned in one focused workspace.",
+    "featuresLabel": "Key features",
+    "featureReports": "Performance reports",
+    "featureChannels": "Multi-channel management",
+    "featureTeam": "Team collaboration",
+    "formTitle": "Welcome back",
+    "formSubtitle": "Sign in with your administrator account.",
     "identifier": "Username or Email",
+    "identifierPlaceholder": "Enter username or email",
     "password": "Password",
+    "passwordPlaceholder": "Enter password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "show": "Show",
+    "hide": "Hide",
     "submit": "Sign in",
     "submitting": "Signing in",
-    "error": "Unable to sign in"
+    "error": "Unable to sign in",
+    "support": "Having trouble signing in? Contact your system administrator."
   },
   "ai": {
     "assistant": "AI Assistant",
