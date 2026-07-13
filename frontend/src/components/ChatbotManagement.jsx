@@ -231,7 +231,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       try {
         graphPages = await fetchFacebookManagedPages(signal);
       } catch (err) {
-        if (err.status !== 401) throw err;
+        if (err.status !== 428) throw err;
       }
     }
 

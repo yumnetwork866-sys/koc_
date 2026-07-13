@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { loginAdmin } from '../lib/api';
 import { saveStoredSession } from '../lib/session';
 import { useI18n } from '../lib/language';
@@ -7,6 +7,7 @@ import AppLogo from './AppLogo';
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useI18n();
   const [form, setForm] = useState({
     identifier: '',
@@ -30,7 +31,11 @@ const Login = () => {
       setError('');
       const session = await loginAdmin(form);
       saveStoredSession(session);
-      navigate('/dashboard');
+      const previousLocation = location.state?.from;
+      const destination = previousLocation
+        ? `${previousLocation.pathname}${previousLocation.search || ''}${previousLocation.hash || ''}`
+        : '/dashboard';
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err.message || t('login.error'));
     } finally {

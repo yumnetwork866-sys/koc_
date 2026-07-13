@@ -838,7 +838,10 @@ const syncChannelVideos = async (req, res) => {
     });
   } catch (error) {
     const requiresReauthorization = error.message?.startsWith('TikTok authorization must be connected again');
-    return res.status(requiresReauthorization ? 401 : 500).json({ message: error.message });
+    return res.status(requiresReauthorization ? 428 : 500).json({
+      ...(requiresReauthorization ? { code: 'TIKTOK_REAUTHORIZATION_REQUIRED' } : {}),
+      message: error.message,
+    });
   }
 };
 

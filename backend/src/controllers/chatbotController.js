@@ -687,7 +687,7 @@ async function revokeFacebookOwner(userId) {
 
 async function revokeFacebookAccount(req, res) {
   const session = await currentFacebookSession(req);
-  if (!session) return res.status(401).json({ message: 'Facebook login is required' });
+  if (!session) return res.status(428).json({ code: 'FACEBOOK_LOGIN_REQUIRED', message: 'Facebook login is required' });
 
   const revokedPages = await revokeFacebookOwner(session.userId);
   return res.json({ ok: true, revokedPages });
@@ -699,7 +699,9 @@ async function revokeFacebookAccountByUser(req, res) {
 
   const session = await currentFacebookSession(req);
   const isDemoUser = TEMP_FACEBOOK_DEMO_USERS.some((demoUser) => demoUser.userId === userId);
-  if (!session && !isDemoUser) return res.status(401).json({ message: 'Facebook login is required' });
+  if (!session && !isDemoUser) {
+    return res.status(428).json({ code: 'FACEBOOK_LOGIN_REQUIRED', message: 'Facebook login is required' });
+  }
   if (session && session.userId !== userId && !isDemoUser) {
     return res.status(403).json({ message: 'Cannot revoke a different Facebook account from this session' });
   }
@@ -722,7 +724,7 @@ async function getFacebookMe(req, res) {
 
 async function getManagedPages(req, res) {
   const session = await currentFacebookSession(req);
-  if (!session) return res.status(401).json({ message: 'Facebook login is required' });
+  if (!session) return res.status(428).json({ code: 'FACEBOOK_LOGIN_REQUIRED', message: 'Facebook login is required' });
 
   if (String(session.userToken || '').startsWith('temp-')) {
     const pages = await FacebookPage.findAll({
@@ -761,7 +763,7 @@ async function getManagedPages(req, res) {
 
 async function connectPage(req, res) {
   const session = await currentFacebookSession(req);
-  if (!session) return res.status(401).json({ message: 'Facebook login is required' });
+  if (!session) return res.status(428).json({ code: 'FACEBOOK_LOGIN_REQUIRED', message: 'Facebook login is required' });
 
   try {
     const pageId = req.params.id;

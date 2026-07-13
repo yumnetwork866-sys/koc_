@@ -1,5 +1,6 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
+import AppErrorBoundary from './components/AppErrorBoundary';
 import RootLayout from './layouts/RootLayout';
 import ProtectedLayout from './layouts/ProtectedLayout';
 import { protectedRedirectConfig, protectedRouteConfig, publicRouteConfig } from './routes/appRouteConfig';
@@ -12,29 +13,31 @@ const renderRoutes = (routeConfig) => routeConfig.map((route) => (
 function App() {
   return (
     <Router>
-      <Suspense
-        fallback={
-          <div className="app-shell">
-            <div className="page">
-              <section className="section-card empty-state">
-                <div className="loading-dot" />
-                <div>Đang tải nội dung...</div>
-              </section>
+      <AppErrorBoundary>
+        <Suspense
+          fallback={
+            <div className="app-shell">
+              <div className="page">
+                <section className="section-card empty-state">
+                  <div className="loading-dot" />
+                  <div>Đang tải nội dung...</div>
+                </section>
+              </div>
             </div>
-          </div>
-        }
-      >
-        <Routes>
-          <Route element={<RootLayout />}>
-            {renderRoutes(publicRouteConfig)}
-            <Route element={<ProtectedLayout />}>
-              {renderRoutes(protectedRedirectConfig)}
-              {renderRoutes(protectedRouteConfig)}
+          }
+        >
+          <Routes>
+            <Route element={<RootLayout />}>
+              {renderRoutes(publicRouteConfig)}
+              <Route element={<ProtectedLayout />}>
+                {renderRoutes(protectedRedirectConfig)}
+                {renderRoutes(protectedRouteConfig)}
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </Suspense>
+          </Routes>
+        </Suspense>
+      </AppErrorBoundary>
     </Router>
   );
 }

@@ -1,6 +1,6 @@
-import { clearStoredSession, getStoredSession, getStoredFacebookChatbotToken } from './session';
+import { clearStoredSessionIfTokenMatches, getStoredSession, getStoredFacebookChatbotToken } from './session.js';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
+const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 async function apiRequest(path, options = {}) {
   const body = options.body && typeof options.body !== 'string'
@@ -8,8 +8,11 @@ async function apiRequest(path, options = {}) {
     : options.body;
 
   const sessionToken = getStoredSession()?.token || null;
-  const facebookChatbotToken = options.facebookToken || null;
-  const { signal, ...restOptions } = options;
+  const {
+    signal,
+    facebookToken: facebookChatbotToken = null,
+    ...restOptions
+  } = options;
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: 'no-store',
@@ -38,7 +41,7 @@ async function apiRequest(path, options = {}) {
     }
 
     if (response.status === 401 && path !== '/auth/login') {
-      clearStoredSession();
+      clearStoredSessionIfTokenMatches(sessionToken);
     }
 
     const error = new Error(message);

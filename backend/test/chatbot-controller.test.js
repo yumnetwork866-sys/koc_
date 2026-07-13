@@ -25,6 +25,30 @@ const getWhereValues = (whereClause) => {
   return symbolKey ? pageIdClause[symbolKey] : undefined;
 };
 
+test('POST /facebook/revoke distinguishes a missing Facebook login from admin authentication', async (t) => {
+  const restoreModels = mockModule(modelsPath, {
+    FacebookUserSession: { findByPk: async () => null },
+  });
+
+  t.after(() => {
+    restoreModels();
+    delete require.cache[chatbotControllerPath];
+  });
+
+  delete require.cache[chatbotControllerPath];
+  const { revokeFacebookAccount } = require('../src/controllers/chatbotController');
+  const req = { get: () => null };
+  const res = makeResponse();
+
+  await revokeFacebookAccount(req, res);
+
+  assert.equal(res.statusCode, 428);
+  assert.deepEqual(res.body, {
+    code: 'FACEBOOK_LOGIN_REQUIRED',
+    message: 'Facebook login is required',
+  });
+});
+
 test('POST /facebook/revoke removes every session for the Facebook user', async (t) => {
   const destroyCalls = [];
   const pageDestroyCalls = [];

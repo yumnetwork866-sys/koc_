@@ -1,5 +1,8 @@
 const SESSION_STORAGE_KEY = 'content_report_session';
 const FB_CHATBOT_TOKEN_STORAGE_KEY = 'content_report_fb_chatbot_token';
+const SESSION_CHANGE_EVENT = 'content-report-session-change';
+const FB_CHATBOT_TOKEN_CHANGE_EVENT = 'content-report-fb-chatbot-token-change';
+const MAX_TIMEOUT_MS = 2_147_483_647;
 
 function decodeTokenPayload(token) {
   const payload = token?.split('.')?.[0];
@@ -14,44 +17,145 @@ function decodeTokenPayload(token) {
   }
 }
 
-export function getStoredSession() {
+function readStorage(key) {
   try {
-    const session = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY));
-    const payload = decodeTokenPayload(session?.token);
-
-    if (!session?.token || payload?.role !== 'admin' || !Number.isFinite(payload?.exp) || payload.exp < Date.now()) {
-      clearStoredSession();
-      return null;
-    }
-
-    return session;
+    return localStorage.getItem(key);
   } catch {
-    clearStoredSession();
     return null;
   }
+}
+
+function dispatchChange(eventName) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(eventName));
+  }
+}
+
+function decodeStoredSession(rawSession) {
+  try {
+    const session = JSON.parse(rawSession);
+    const payload = decodeTokenPayload(session?.token);
+    return { session, payload };
+  } catch {
+    return null;
+  }
+}
+
+export function parseSessionSnapshot(rawSession) {
+  const decoded = decodeStoredSession(rawSession);
+  if (
+    !decoded?.session?.token
+    || decoded.payload?.role !== 'admin'
+    || !Number.isFinite(decoded.payload?.exp)
+    || decoded.payload.exp < Date.now()
+  ) {
+    return null;
+  }
+
+  return decoded.session;
+}
+
+export function getStoredSession() {
+  return parseSessionSnapshot(readStorage(SESSION_STORAGE_KEY));
+}
+
+export function getSessionSnapshot() {
+  const rawSession = readStorage(SESSION_STORAGE_KEY);
+  return parseSessionSnapshot(rawSession) ? rawSession : null;
+}
+
+export function subscribeSession(listener) {
+  if (typeof window === 'undefined') return () => {};
+
+  let expirationTimer = null;
+
+  const scheduleExpiration = () => {
+    if (expirationTimer !== null) window.clearTimeout(expirationTimer);
+    expirationTimer = null;
+
+    const decoded = decodeStoredSession(readStorage(SESSION_STORAGE_KEY));
+    const expiration = decoded?.payload?.exp;
+    const token = decoded?.session?.token;
+    if (!token || decoded.payload?.role !== 'admin' || !Number.isFinite(expiration)) return;
+
+    const expireSession = () => {
+      const remaining = expiration - Date.now();
+      if (remaining > 0) {
+        expirationTimer = window.setTimeout(expireSession, Math.min(remaining + 1, MAX_TIMEOUT_MS));
+        return;
+      }
+      clearStoredSessionIfTokenMatches(token);
+    };
+
+    expirationTimer = window.setTimeout(
+      expireSession,
+      Math.min(Math.max(expiration - Date.now(), 0) + 1, MAX_TIMEOUT_MS),
+    );
+  };
+
+  const notify = () => {
+    scheduleExpiration();
+    listener();
+  };
+
+  const handleStorage = (event) => {
+    if (event.key === SESSION_STORAGE_KEY || event.key === null) {
+      notify();
+    }
+  };
+
+  window.addEventListener('storage', handleStorage);
+  window.addEventListener(SESSION_CHANGE_EVENT, notify);
+  scheduleExpiration();
+
+  return () => {
+    if (expirationTimer !== null) window.clearTimeout(expirationTimer);
+    window.removeEventListener('storage', handleStorage);
+    window.removeEventListener(SESSION_CHANGE_EVENT, notify);
+  };
 }
 
 export function saveStoredSession(session) {
-  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-  window.dispatchEvent(new Event('content-report-session-change'));
+  const serializedSession = JSON.stringify(session);
+
+  try {
+    const previousSession = localStorage.getItem(SESSION_STORAGE_KEY);
+    localStorage.setItem(SESSION_STORAGE_KEY, serializedSession);
+    if (previousSession !== serializedSession) dispatchChange(SESSION_CHANGE_EVENT);
+  } catch {
+    throw new Error('Không thể lưu phiên đăng nhập trên trình duyệt này.');
+  }
 }
 
 export function clearStoredSession() {
-  localStorage.removeItem(SESSION_STORAGE_KEY);
-  window.dispatchEvent(new Event('content-report-session-change'));
+  try {
+    if (localStorage.getItem(SESSION_STORAGE_KEY) === null) return false;
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    dispatchChange(SESSION_CHANGE_EVENT);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearStoredSessionIfTokenMatches(requestToken) {
+  if (!requestToken) return false;
+
+  try {
+    const storedSession = JSON.parse(readStorage(SESSION_STORAGE_KEY));
+    if (storedSession?.token !== requestToken) return false;
+    return clearStoredSession();
+  } catch {
+    return false;
+  }
 }
 
 export function hasValidSession() {
-  return Boolean(getStoredSession());
+  return Boolean(getSessionSnapshot());
 }
 
 export function getStoredFacebookChatbotToken() {
-  try {
-    const token = localStorage.getItem(FB_CHATBOT_TOKEN_STORAGE_KEY);
-    return token || null;
-  } catch {
-    return null;
-  }
+  return readStorage(FB_CHATBOT_TOKEN_STORAGE_KEY) || null;
 }
 
 export function saveStoredFacebookChatbotToken(token) {
@@ -60,11 +164,22 @@ export function saveStoredFacebookChatbotToken(token) {
     return;
   }
 
-  localStorage.setItem(FB_CHATBOT_TOKEN_STORAGE_KEY, token);
-  window.dispatchEvent(new Event('content-report-fb-chatbot-token-change'));
+  try {
+    const previousToken = localStorage.getItem(FB_CHATBOT_TOKEN_STORAGE_KEY);
+    localStorage.setItem(FB_CHATBOT_TOKEN_STORAGE_KEY, token);
+    if (previousToken !== token) dispatchChange(FB_CHATBOT_TOKEN_CHANGE_EVENT);
+  } catch {
+    // A blocked storage API must not crash the application shell.
+  }
 }
 
 export function clearStoredFacebookChatbotToken() {
-  localStorage.removeItem(FB_CHATBOT_TOKEN_STORAGE_KEY);
-  window.dispatchEvent(new Event('content-report-fb-chatbot-token-change'));
+  try {
+    if (localStorage.getItem(FB_CHATBOT_TOKEN_STORAGE_KEY) === null) return false;
+    localStorage.removeItem(FB_CHATBOT_TOKEN_STORAGE_KEY);
+    dispatchChange(FB_CHATBOT_TOKEN_CHANGE_EVENT);
+    return true;
+  } catch {
+    return false;
+  }
 }

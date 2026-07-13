@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AppLogo from './AppLogo';
 import { getFacebookOauthUrl, getTikTokOauthUrl, startTikTokPartnerOauth } from '../lib/api';
-import { clearStoredSession, getStoredSession, hasValidSession } from '../lib/session';
+import { clearStoredSession } from '../lib/session';
+import { useSession } from '../lib/useSession';
 import { useI18n } from '../lib/language';
 import { topNavItems } from '../routes/navigation';
 
@@ -46,7 +47,8 @@ const ConnectionIcon = ({ type }) => {
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [hasSession, setHasSession] = useState(false);
+  const session = useSession();
+  const hasSession = Boolean(session);
   const [activeMenu, setActiveMenu] = useState(null);
   const [connectingTarget, setConnectingTarget] = useState(null);
   const [connectionError, setConnectionError] = useState('');
@@ -57,7 +59,6 @@ const Header = () => {
   const connectMenuRef = useRef(null);
   const { t, language, setLanguage } = useI18n();
 
-  const session = getStoredSession();
   const userName = String(session?.user?.name || session?.user?.email || 'Admin').trim();
   const avatarText = userName
     .split(/\s+/)
@@ -66,19 +67,6 @@ const Header = () => {
     .map((word) => word[0] || '')
     .join('')
     .toUpperCase() || 'A';
-
-  useEffect(() => {
-    const syncSessionState = () => setHasSession(hasValidSession());
-
-    syncSessionState();
-    window.addEventListener('storage', syncSessionState);
-    window.addEventListener('content-report-session-change', syncSessionState);
-
-    return () => {
-      window.removeEventListener('storage', syncSessionState);
-      window.removeEventListener('content-report-session-change', syncSessionState);
-    };
-  }, [location.pathname]);
 
   useEffect(() => {
     if (!activeMenu) return undefined;
