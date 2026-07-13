@@ -416,7 +416,7 @@ const KOCPerformance = ({ heroTitle }) => {
         <div id="creator-panel" role="tabpanel" aria-labelledby="creator-tab" className="koc-tab-panel">
           <section className="section-card">
             <div className="section-card__header">
-              <div><h2 className="section-card__title">{t('koc.creatorTableTitle')}</h2><p className="section-card__meta">{t('koc.partnerConnectHint')}</p></div>
+              <div><h2 className="section-card__title">{t('koc.creatorTableTitle')}</h2></div>
               <div className="actions"><button className="button button--ghost koc-column-toggle" type="button" onClick={() => setShowExtraColumns((value) => !value)}>{t(showExtraColumns ? 'koc.hideExtraColumns' : 'koc.showExtraColumns')}</button></div>
             </div>
             <div className="table-wrap koc-table-wrap">
