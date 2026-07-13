@@ -16,6 +16,12 @@ const sidebarIcons = {
   koc: [
     'M12 4l2.3 4.7 5.2.8-3.8 3.7.9 5.3L12 16l-4.6 2.5.9-5.3-3.8-3.7 5.2-.8L12 4Z',
   ],
+  analytics: [
+    'M5 20V10',
+    'M12 20V4',
+    'M19 20v-7',
+    'M3 20h18',
+  ],
   bookings: [
     'M7 4v3',
     'M17 4v3',
@@ -64,6 +70,7 @@ const routeIconMap = {
   '/dashboard': 'dashboard',
   '/manage/users': 'users',
   '/manage/koc-performance': 'koc',
+  '/manage/shop-analytics': 'analytics',
   '/bookings': 'bookings',
   '/manage/channels': 'channels',
   '/videos': 'videos',

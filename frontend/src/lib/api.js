@@ -82,6 +82,35 @@ export function startTikTokPartnerOauth(returnPath = '/bookings') {
   return apiRequest(`/bookings/tiktok-partner/oauth/start?${params.toString()}`);
 }
 
+export function startTikTokShopOauth() {
+  return apiRequest('/tiktok-shop/oauth/start');
+}
+
+export function fetchTikTokShopConnections(signal) {
+  return apiRequest('/tiktok-shop/connections', { signal });
+}
+
+export function fetchTikTokShops(signal) {
+  return apiRequest('/tiktok-shop/shops', { signal });
+}
+
+export function fetchTikTokShopAnalytics(shopId, { signal, startDate, endDate, currency } = {}) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
+  if (currency) params.set('currency', currency);
+  const query = params.toString();
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/analytics${query ? `?${query}` : ''}`, { signal });
+}
+
+export function syncTikTokShopAnalytics(shopId, payload) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/analytics/sync`, { method: 'POST', body: payload });
+}
+
+export function disconnectTikTokShopAuthorization(authorizationId) {
+  return apiRequest(`/tiktok-shop/connections/${encodeURIComponent(authorizationId)}`, { method: 'DELETE' });
+}
+
 export function disconnectTikTokPartner(creatorId) {
   return apiRequest(`/bookings/tiktok-partner/${encodeURIComponent(creatorId)}`, { method: 'DELETE' });
 }

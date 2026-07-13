@@ -19,6 +19,7 @@ const authRoutes = require('./routes/authRoutes');
 const assistantRoutes = require('./routes/assistantRoutes');
 const chatbotRoutes = require('./routes/chatbotRoutes');
 const tiktokPartnerPublicRoutes = require('./routes/tiktokPartnerPublicRoutes');
+const tiktokShopRoutes = require('./routes/tiktokShopRoutes');
 const { sequelize, TikTokChannel, User } = require('./models');
 const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
 const { requireAdmin } = require('./lib/session');
@@ -54,6 +55,7 @@ const createApp = () => {
   app.use('/api/auth', authRoutes);
   app.use('/api/assistant', assistantRoutes);
   app.use('/api/chatbot', requireAdmin, chatbotRoutes.adminRouter);
+  app.use('/api/tiktok-shop', requireAdmin, tiktokShopRoutes.adminRouter);
 
   return app;
 };

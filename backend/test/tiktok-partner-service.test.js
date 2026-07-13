@@ -44,6 +44,7 @@ test('creator OAuth state is signed without requiring an internal creator id', (
   const url = new URL(buildAuthorizationUrl('/manage/koc-performance'));
   assert.equal(url.searchParams.get('app_key'), 'app-key');
   const state = parseAuthorizationState(url.searchParams.get('state'));
+  assert.equal(state.oauthType, 'creator');
   assert.equal(state.creatorId, undefined);
   assert.equal(state.returnPath, '/manage/koc-performance');
 });

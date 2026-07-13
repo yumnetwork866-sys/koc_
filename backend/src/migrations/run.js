@@ -23,6 +23,8 @@ const migrations = [
   require('./013_unique_tiktok_partner_open_id'),
   require('./014_add_tiktok_partner_sync_result'),
   require('./015_create_tiktok_partner_sync_logs'),
+  require('./016_add_unique_video_daily_stats'),
+  require('./017_create_tiktok_shop_analytics'),
 ];
 
 const createMigrationRunner = ({

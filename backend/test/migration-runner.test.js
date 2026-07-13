@@ -22,6 +22,8 @@ const defaultMigrationNames = [
   '013_unique_tiktok_partner_open_id',
   '014_add_tiktok_partner_sync_result',
   '015_create_tiktok_partner_sync_logs',
+  '016_add_unique_video_daily_stats',
+  '017_create_tiktok_shop_analytics',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

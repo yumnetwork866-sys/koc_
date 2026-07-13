@@ -10,6 +10,7 @@ export const sidebarSections = [
       { to: '/dashboard', label: 'Dashboard' },
       { to: '/manage/users', label: 'Users' },
       { to: '/manage/koc-performance', label: 'KOC performance' },
+      { to: '/manage/shop-analytics', label: 'Shop analytics' },
       { to: '/bookings', label: 'Bookings' },
       { to: '/manage/channels', label: 'Channels' },
       { to: '/videos', label: 'Videos' },
@@ -51,6 +52,11 @@ export const protectedRouteCards = [
       heroTitle: 'KOC performance',
       heroSubtitle: '',
     },
+  },
+  {
+    path: '/manage/shop-analytics',
+    component: 'ShopAnalytics',
+    props: { heroTitle: 'Shop analytics' },
   },
   {
     path: '/bookings',

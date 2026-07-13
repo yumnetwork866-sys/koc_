@@ -9,6 +9,7 @@ const {
   searchTargetCollaborations,
   tokenFields,
 } = require('../services/tiktokPartnerService');
+const { handleShopOauthCallback } = require('./tiktokShopController');
 
 const ALLOWED_STATUSES = new Set(['draft', 'booked', 'waiting_video', 'video_posted', 'done', 'cancelled']);
 
@@ -217,6 +218,8 @@ const handleTikTokPartnerOauthCallback = async (req, res) => {
   let returnPath = '/bookings';
   try {
     const state = parseAuthorizationState(req.query.state);
+    if (state.oauthType === 'shop') return handleShopOauthCallback(req, res);
+    if (state.oauthType && state.oauthType !== 'creator') throw new Error('TikTok OAuth state has an unsupported authorization type.');
     returnPath = state.returnPath;
     if (!req.query.code || req.query.code === 'null') throw new Error(req.query.error || 'Creator denied TikTok authorization.');
     const tokenData = await exchangeAuthorizationCode(req.query.code);

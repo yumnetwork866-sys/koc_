@@ -3,9 +3,9 @@ const crypto = require('crypto');
 const TOKEN_PREFIX = 'v1';
 
 const getEncryptionKey = () => {
-  const secret = process.env.TIKTOK_PARTNER_TOKEN_ENCRYPTION_KEY;
+  const secret = process.env.TIKTOK_PARTNER_TOKEN_ENCRYPTION_KEY || process.env.TIKTOK_TOKEN_ENCRYPTION_KEY;
   if (!secret || secret.length < 32) {
-    throw new Error('TIKTOK_PARTNER_TOKEN_ENCRYPTION_KEY must be at least 32 characters.');
+    throw new Error('TIKTOK_PARTNER_TOKEN_ENCRYPTION_KEY or TIKTOK_TOKEN_ENCRYPTION_KEY must be at least 32 characters.');
   }
   return crypto.createHash('sha256').update(secret).digest();
 };

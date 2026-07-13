@@ -37,6 +37,7 @@ const buildAuthorizationUrl = (returnPath = '/bookings') => {
   const config = getConfig();
   assertAppConfigured(config, { requireRedirect: true });
   const payload = Buffer.from(JSON.stringify({
+    oauthType: 'creator',
     returnPath: ['/bookings', '/manage/koc-performance'].includes(returnPath) ? returnPath : '/bookings',
     nonce: crypto.randomBytes(16).toString('hex'),
     expiresAt: Date.now() + STATE_TTL_MS,

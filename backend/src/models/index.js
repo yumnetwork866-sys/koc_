@@ -123,6 +123,51 @@ const TikTokPartnerAuthorization = sequelize.define('TikTokPartnerAuthorization'
   indexes: [{ fields: ['creator_id'], unique: true }, { fields: ['open_id'] }],
 });
 
+const TikTokShopAuthorization = sequelize.define('TikTokShopAuthorization', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  open_id: { type: DataTypes.STRING, allowNull: true, unique: true },
+  user_type: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  granted_scopes: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+  access_token_encrypted: { type: DataTypes.TEXT, allowNull: false },
+  refresh_token_encrypted: { type: DataTypes.TEXT, allowNull: true },
+  access_token_expires_at: { type: DataTypes.DATE, allowNull: true },
+  refresh_token_expires_at: { type: DataTypes.DATE, allowNull: true },
+  connected_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  last_sync_status: { type: DataTypes.STRING, allowNull: true },
+  last_sync_error: { type: DataTypes.TEXT, allowNull: true },
+}, { tableName: 'tiktok_shop_authorizations', timestamps: false });
+
+const TikTokShop = sequelize.define('TikTokShop', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  authorization_id: { type: DataTypes.INTEGER, allowNull: false },
+  platform_shop_id: { type: DataTypes.STRING, allowNull: false, unique: true },
+  name: { type: DataTypes.STRING, allowNull: false },
+  region: { type: DataTypes.STRING, allowNull: true },
+  seller_type: { type: DataTypes.STRING, allowNull: true },
+  cipher: { type: DataTypes.TEXT, allowNull: false, unique: true },
+  code: { type: DataTypes.STRING, allowNull: true },
+  last_synced_at: { type: DataTypes.DATE, allowNull: true },
+  last_sync_status: { type: DataTypes.STRING, allowNull: true },
+  last_sync_error: { type: DataTypes.TEXT, allowNull: true },
+}, { tableName: 'tiktok_shops', timestamps: false });
+
+const TikTokShopAnalyticsSnapshot = sequelize.define('TikTokShopAnalyticsSnapshot', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  start_date: { type: DataTypes.DATEONLY, allowNull: false },
+  end_date: { type: DataTypes.DATEONLY, allowNull: false },
+  currency: { type: DataTypes.STRING, allowNull: false, defaultValue: 'LOCAL' },
+  metrics: { type: DataTypes.JSONB, allowNull: false },
+  latest_available_date: { type: DataTypes.DATEONLY, allowNull: true },
+  request_id: { type: DataTypes.STRING, allowNull: true },
+  synced_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_shop_analytics_snapshots',
+  timestamps: false,
+  indexes: [{ unique: true, fields: ['shop_id', 'start_date', 'end_date', 'currency'] }],
+});
+
 const TikTokChannel = sequelize.define('TikTokChannel', {
   id: {
     type: DataTypes.INTEGER,
@@ -682,6 +727,10 @@ User.hasMany(Booking, { foreignKey: 'creator_id', as: 'creator_bookings' });
 Booking.belongsTo(User, { foreignKey: 'creator_id', as: 'creator' });
 User.hasOne(TikTokPartnerAuthorization, { foreignKey: 'creator_id', as: 'tiktok_partner_authorization' });
 TikTokPartnerAuthorization.belongsTo(User, { foreignKey: 'creator_id', as: 'creator' });
+TikTokShopAuthorization.hasMany(TikTokShop, { foreignKey: 'authorization_id', as: 'shops' });
+TikTokShop.belongsTo(TikTokShopAuthorization, { foreignKey: 'authorization_id', as: 'authorization' });
+TikTokShop.hasMany(TikTokShopAnalyticsSnapshot, { foreignKey: 'shop_id', as: 'analytics_snapshots' });
+TikTokShopAnalyticsSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 
 TikTokChannel.hasMany(Video, { foreignKey: 'channel_id', as: 'videos' });
 Video.belongsTo(TikTokChannel, { foreignKey: 'channel_id', as: 'channel' });
@@ -716,6 +765,9 @@ module.exports = {
   User,
   Booking,
   TikTokPartnerAuthorization,
+  TikTokShopAuthorization,
+  TikTokShop,
+  TikTokShopAnalyticsSnapshot,
   TikTokChannel,
   Video,
   VideoAssignment,

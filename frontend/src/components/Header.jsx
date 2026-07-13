@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AppLogo from './AppLogo';
-import { getFacebookOauthUrl, getTikTokOauthUrl, startTikTokPartnerOauth } from '../lib/api';
+import { getFacebookOauthUrl, getTikTokOauthUrl, startTikTokPartnerOauth, startTikTokShopOauth } from '../lib/api';
 import { clearStoredSession } from '../lib/session';
 import { useSession } from '../lib/useSession';
 import { useI18n } from '../lib/language';
@@ -30,14 +30,11 @@ const ConnectionIcon = ({ type }) => {
   }
 
   return (
-    <span className={`topbar__connect-icon${type === 'creator' ? ' topbar__connect-icon--creator' : ''}`} aria-hidden="true">
+    <span className={`topbar__connect-icon${type === 'creator' || type === 'shop' ? ' topbar__connect-icon--creator' : ''}`} aria-hidden="true">
       <TikTokGlyph />
-      {type === 'creator' ? (
+      {type === 'creator' || type === 'shop' ? (
         <span className="topbar__connect-creator-mark">
-          <svg viewBox="0 0 16 16" focusable="false">
-            <circle cx="8" cy="5.3" r="2.4" fill="currentColor" />
-            <path fill="currentColor" d="M3.7 13c.3-2.5 1.8-3.8 4.3-3.8s4 1.3 4.3 3.8H3.7Z" />
-          </svg>
+          {type === 'shop' ? <span aria-hidden="true">▣</span> : <svg viewBox="0 0 16 16" focusable="false"><circle cx="8" cy="5.3" r="2.4" fill="currentColor" /><path fill="currentColor" d="M3.7 13c.3-2.5 1.8-3.8 4.3-3.8s4 1.3 4.3 3.8H3.7Z" /></svg>}
         </span>
       ) : null}
     </span>
@@ -118,6 +115,7 @@ const Header = () => {
   const connectionOptions = [
     { id: 'tiktok', label: t('header.connectTikTok'), meta: t('header.connectTikTokMeta') },
     { id: 'creator', label: t('header.connectTikTokCreator'), meta: t('header.connectTikTokCreatorMeta') },
+    { id: 'shop', label: t('header.connectTikTokShop'), meta: t('header.connectTikTokShopMeta') },
     { id: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta') },
   ];
   const isTopNavActive = (to) => {
@@ -181,6 +179,7 @@ const Header = () => {
         preserveKocOauthState();
         ({ authorizeUrl } = await startTikTokPartnerOauth('/manage/koc-performance'));
       }
+      if (target === 'shop') ({ authorizeUrl } = await startTikTokShopOauth());
       if (target === 'facebook') authorizeUrl = await getFacebookOauthUrl();
       if (!authorizeUrl) throw new Error(t('header.connectionError'));
       setActiveMenu(null);
