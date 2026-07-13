@@ -8,6 +8,41 @@ import { topNavItems } from '../routes/navigation';
 
 const KOC_OAUTH_UI_STATE_KEY = 'koc-performance-oauth-ui-state';
 
+const TikTokGlyph = () => (
+  <svg viewBox="0 0 24 24" focusable="false">
+    <path fill="#25f4ee" d="M13.2 3.2v10.2a3.1 3.1 0 1 1-2.3-3V13a1.3 1.3 0 1 0 .5 1V3.2h1.8Zm0 0c.4 2.1 1.7 3.4 3.8 3.9v2.2a7 7 0 0 1-3.8-1.7V3.2Z" transform="translate(-.8 .7)" />
+    <path fill="#fe2c55" d="M13.2 3.2v10.2a3.1 3.1 0 1 1-2.3-3V13a1.3 1.3 0 1 0 .5 1V3.2h1.8Zm0 0c.4 2.1 1.7 3.4 3.8 3.9v2.2a7 7 0 0 1-3.8-1.7V3.2Z" transform="translate(.7 -.2)" />
+    <path fill="#111827" d="M13.2 3.2v10.2a3.1 3.1 0 1 1-2.3-3V13a1.3 1.3 0 1 0 .5 1V3.2h1.8Zm0 0c.4 2.1 1.7 3.4 3.8 3.9v2.2a7 7 0 0 1-3.8-1.7V3.2Z" />
+  </svg>
+);
+
+const ConnectionIcon = ({ type }) => {
+  if (type === 'facebook') {
+    return (
+      <span className="topbar__connect-icon topbar__connect-icon--facebook" aria-hidden="true">
+        <svg viewBox="0 0 32 32" focusable="false">
+          <rect width="32" height="32" rx="8" fill="#1877f2" />
+          <path fill="#fff" d="M18.5 27V17.2h3.3l.5-3.8h-3.8V11c0-1.1.3-1.8 1.9-1.8h2V5.8c-.4 0-1.6-.2-3-.2-3 0-5 1.8-5 5.1v2.8H11v3.8h3.4V27h4.1Z" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span className={`topbar__connect-icon${type === 'creator' ? ' topbar__connect-icon--creator' : ''}`} aria-hidden="true">
+      <TikTokGlyph />
+      {type === 'creator' ? (
+        <span className="topbar__connect-creator-mark">
+          <svg viewBox="0 0 16 16" focusable="false">
+            <circle cx="8" cy="5.3" r="2.4" fill="currentColor" />
+            <path fill="currentColor" d="M3.7 13c.3-2.5 1.8-3.8 4.3-3.8s4 1.3 4.3 3.8H3.7Z" />
+          </svg>
+        </span>
+      ) : null}
+    </span>
+  );
+};
+
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -93,9 +128,9 @@ const Header = () => {
   };
   const currentLanguage = language;
   const connectionOptions = [
-    { id: 'tiktok', label: t('header.connectTikTok'), meta: t('header.connectTikTokMeta'), badge: 'TT' },
-    { id: 'creator', label: t('header.connectTikTokCreator'), meta: t('header.connectTikTokCreatorMeta'), badge: 'TC' },
-    { id: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta'), badge: 'FB' },
+    { id: 'tiktok', label: t('header.connectTikTok'), meta: t('header.connectTikTokMeta') },
+    { id: 'creator', label: t('header.connectTikTokCreator'), meta: t('header.connectTikTokCreatorMeta') },
+    { id: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta') },
   ];
   const isTopNavActive = (to) => {
     if (to === '/chatbot') return location.pathname.startsWith('/chatbot');
@@ -230,7 +265,7 @@ const Header = () => {
                         disabled={Boolean(connectingTarget)}
                         onClick={() => startConnection(option.id)}
                       >
-                        <span className={`topbar__connect-badge topbar__connect-badge--${option.id}`} aria-hidden="true">{option.badge}</span>
+                        <ConnectionIcon type={option.id} />
                         <span className="topbar__connect-copy">
                           <strong>{option.label}</strong>
                           <small>{connectingTarget === option.id ? t('header.connecting') : option.meta}</small>

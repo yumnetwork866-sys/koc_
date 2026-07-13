@@ -378,25 +378,52 @@
   opacity: 0.68;
 }
 
-.topbar__connect-badge {
+.topbar__connect-icon {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
+  padding: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 10px;
-  background: #111827;
-  color: #ffffff;
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0.03em;
+  background: #ffffff;
 }
 
-.topbar__connect-badge--creator {
-  background: #0f766e;
+.topbar__connect-icon > svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-.topbar__connect-badge--facebook {
+.topbar__connect-icon--creator {
+  background: #f0fdfa;
+}
+
+.topbar__connect-icon--facebook {
+  padding: 0;
+  border-color: transparent;
   background: #1877f2;
+}
+
+.topbar__connect-creator-mark {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 2px;
+  border: 2px solid var(--color-surface);
+  border-radius: 50%;
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.topbar__connect-creator-mark svg {
+  width: 100%;
+  height: 100%;
 }
 
 .topbar__connect-copy {
