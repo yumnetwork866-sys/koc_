@@ -108,6 +108,11 @@ const TikTokPartnerAuthorization = sequelize.define('TikTokPartnerAuthorization'
   access_token_expires_at: { type: DataTypes.DATE, allowNull: true },
   refresh_token_expires_at: { type: DataTypes.DATE, allowNull: true },
   shop_id: { type: DataTypes.STRING, allowNull: true },
+  username: { type: DataTypes.STRING, allowNull: true },
+  avatar_url: { type: DataTypes.TEXT, allowNull: true },
+  register_region: { type: DataTypes.STRING, allowNull: true },
+  showcase_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  last_synced_at: { type: DataTypes.DATE, allowNull: true },
   connected_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
 }, {

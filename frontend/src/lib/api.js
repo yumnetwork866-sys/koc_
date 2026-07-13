@@ -95,8 +95,11 @@ export function fetchReports(signal) {
   return apiRequest('/reports', { signal });
 }
 
-export function fetchKpis(signal) {
-  return apiRequest('/reports/kpis', { signal });
+export function fetchKpis(signal, role) {
+  const params = new URLSearchParams();
+  if (role) params.set('role', role);
+  const query = params.toString();
+  return apiRequest(`/reports/kpis${query ? `?${query}` : ''}`, { signal });
 }
 
 export function chatWithAssistant(message) {

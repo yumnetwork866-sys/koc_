@@ -71,17 +71,22 @@ const deleteReport = async (req, res) => {
 
 const getKpis = async (req, res) => {
   try {
+    const role = req.query.role ? String(req.query.role).trim().toLowerCase() : '';
+    const roleFilterSql = role === 'koc' ? 'WHERE role = :role' : '';
+    const userFilterSql = role === 'koc' ? 'WHERE u.role = :role' : '';
+    const replacements = role === 'koc' ? { role } : undefined;
+
     const [overviewRows, userKpis, productKpis] = await Promise.all([
       sequelize.query(`
         SELECT
-          (SELECT COUNT(*) FROM users)::int AS "totalUsers",
+          (SELECT COUNT(*) FROM users ${roleFilterSql})::int AS "totalUsers",
           COUNT(*)::int AS "totalVideos",
           COALESCE(SUM(views), 0)::bigint AS "totalViews",
           COALESCE(SUM(likes), 0)::bigint AS "totalLikes",
           COALESCE(SUM(comments), 0)::bigint AS "totalComments",
           COALESCE(SUM(shares), 0)::bigint AS "totalShares"
         FROM videos
-      `, { type: QueryTypes.SELECT }),
+      `, { type: QueryTypes.SELECT, replacements }),
       sequelize.query(`
         WITH user_videos AS (
           SELECT DISTINCT user_id, video_id
@@ -112,9 +117,10 @@ const getKpis = async (req, res) => {
           ORDER BY v_top.views DESC, v_top.id ASC
           LIMIT 1
         ) top_video ON true
+        ${userFilterSql}
         GROUP BY u.id, u.name, u.email, u.role, top_video.id, top_video.title, top_video.views
         ORDER BY u.id ASC
-      `, { type: QueryTypes.SELECT }),
+      `, { type: QueryTypes.SELECT, replacements }),
       sequelize.query(`
         SELECT
           p.id,
@@ -131,7 +137,7 @@ const getKpis = async (req, res) => {
     ]);
 
     res.json({
-      overview: toNumbers(overviewRows[0], ['totalViews', 'totalLikes', 'totalComments', 'totalShares']),
+      overview: toNumbers(overviewRows[0], ['totalUsers', 'totalViews', 'totalLikes', 'totalComments', 'totalShares']),
       users: userKpis.map((user) => toNumbers(user, ['totalViews', 'avgViewsPerVideo'])),
       products: productKpis.map((product) => toNumbers(product, ['totalViews', 'avgViewsPerVideo'])),
     });

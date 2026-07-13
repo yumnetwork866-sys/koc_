@@ -11,6 +11,12 @@ const { getAdminAccount } = require('../lib/adminAccount');
 
 const products = ['Sẹo', 'Rạn', 'Follicas', 'Lumilab', 'Mụn'];
 
+const ensureUserRole = async (user, role) => {
+  if (user.role !== role) {
+    await user.update({ role });
+  }
+};
+
 const seedDatabase = async () => {
   try {
     const adminAccount = getAdminAccount();
@@ -22,6 +28,7 @@ const seedDatabase = async () => {
         role: 'admin',
       },
     });
+    await ensureUserRole(admin, 'admin');
 
     const [leader] = await User.findOrCreate({
       where: { email: 'leader@company.com' },
@@ -31,6 +38,7 @@ const seedDatabase = async () => {
         role: 'leader',
       },
     });
+    await ensureUserRole(leader, 'leader');
 
     const [scriptWriter] = await User.findOrCreate({
       where: { email: 'script@company.com' },
@@ -40,6 +48,7 @@ const seedDatabase = async () => {
         role: 'member',
       },
     });
+    await ensureUserRole(scriptWriter, 'member');
 
     const [aiCreator] = await User.findOrCreate({
       where: { email: 'ai@company.com' },
@@ -49,6 +58,7 @@ const seedDatabase = async () => {
         role: 'member',
       },
     });
+    await ensureUserRole(aiCreator, 'member');
 
     const [editor] = await User.findOrCreate({
       where: { email: 'news@company.com' },
@@ -58,6 +68,7 @@ const seedDatabase = async () => {
         role: 'member',
       },
     });
+    await ensureUserRole(editor, 'member');
 
     const [kocOne] = await User.findOrCreate({
       where: { email: 'koc1@creator.com' },
@@ -67,6 +78,7 @@ const seedDatabase = async () => {
         role: 'koc',
       },
     });
+    await ensureUserRole(kocOne, 'koc');
 
     const [kocTwo] = await User.findOrCreate({
       where: { email: 'koc2@creator.com' },
@@ -76,6 +88,7 @@ const seedDatabase = async () => {
         role: 'koc',
       },
     });
+    await ensureUserRole(kocTwo, 'koc');
 
     const productRows = [];
     for (const name of products) {

@@ -167,11 +167,22 @@ const getTikTokPartnerStatuses = async (req, res) => {
     });
     res.json(creators.map((creator) => {
       const authorization = creator.tiktok_partner_authorization;
+      const grantedScopes = authorization?.granted_scopes ? JSON.parse(authorization.granted_scopes) : [];
+      const refreshExpiresAt = authorization?.refresh_token_expires_at
+        ? new Date(authorization.refresh_token_expires_at).getTime()
+        : null;
+      const tokenExpired = Boolean(authorization && refreshExpiresAt && refreshExpiresAt <= Date.now());
       return {
         creator_id: creator.id,
         connected: Boolean(authorization),
         open_id: authorization?.open_id || null,
-        granted_scopes: authorization?.granted_scopes ? JSON.parse(authorization.granted_scopes) : [],
+        status: !authorization ? 'disconnected' : (tokenExpired ? 'expired' : 'connected'),
+        username: authorization?.username || null,
+        avatar_url: authorization?.avatar_url || null,
+        register_region: authorization?.register_region || null,
+        showcase_count: authorization?.showcase_count || 0,
+        last_synced_at: authorization?.last_synced_at || null,
+        granted_scopes: grantedScopes,
         access_token_expires_at: authorization?.access_token_expires_at || null,
         connected_at: authorization?.connected_at || null,
       };
@@ -233,6 +244,10 @@ const handleTikTokPartnerOauthCallback = async (req, res) => {
       creator_id: creatorId,
       shop_id: existing?.shop_id || process.env.TIKTOK_PARTNER_SHOP_ID || null,
       connected_at: new Date(),
+      username: profile.username || existing?.username || null,
+      avatar_url: profile.avatar?.url || profile.avatar_url || existing?.avatar_url || null,
+      register_region: profile.register_region || existing?.register_region || null,
+      last_synced_at: new Date(),
       ...tokenFields({ ...tokenData, open_id: openId, granted_scopes: normalizedScopes }, existing || {}),
     };
     if (existing) await existing.update(values);
@@ -251,7 +266,15 @@ const getTikTokPartnerCreatorOverview = async (req, res) => {
       ? await TikTokPartnerAuthorization.findOne({ where: { creator_id: creatorId } })
       : null;
     if (!authorization) return res.status(409).json({ message: 'This KOC has not connected TikTok Partner.' });
-    res.json(await getCreatorOverview(authorization));
+    const overview = await getCreatorOverview(authorization);
+    await authorization.update({
+      username: overview.profile?.username || authorization.username,
+      avatar_url: overview.profile?.avatar?.url || overview.profile?.avatar_url || authorization.avatar_url,
+      register_region: overview.profile?.register_region || authorization.register_region,
+      showcase_count: overview.showcase?.totalCount || 0,
+      last_synced_at: new Date(),
+    });
+    res.json(overview);
   } catch (error) {
     res.status(502).json({ message: error.message });
   }
