@@ -95,11 +95,21 @@ export function fetchReports(signal) {
   return apiRequest('/reports', { signal });
 }
 
-export function fetchKpis(signal, role) {
+export function fetchKpis(signal, role, filters = {}) {
   const params = new URLSearchParams();
   if (role) params.set('role', role);
+  if (filters.startDate) params.set('start_date', filters.startDate);
+  if (filters.endDate) params.set('end_date', filters.endDate);
   const query = params.toString();
   return apiRequest(`/reports/kpis${query ? `?${query}` : ''}`, { signal });
+}
+
+export function fetchKocDetail(creatorId, { signal, startDate, endDate } = {}) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
+  const query = params.toString();
+  return apiRequest(`/reports/koc/${encodeURIComponent(creatorId)}/detail${query ? `?${query}` : ''}`, { signal });
 }
 
 export function chatWithAssistant(message) {

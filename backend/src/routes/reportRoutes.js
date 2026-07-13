@@ -7,11 +7,13 @@ const {
   updateReport,
   deleteReport,
   getKpis,
+  getKocDetail,
   generateWeeklyReport
 } = require('../controllers/reportController');
 
 // GET /api/reports/kpis
 router.get('/kpis', getKpis);
+router.get('/koc/:creatorId/detail', getKocDetail);
 
 // POST /api/reports/generate
 router.post('/generate', generateWeeklyReport);

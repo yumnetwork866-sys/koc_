@@ -74,9 +74,14 @@ const getKpis = async (req, res) => {
     const role = req.query.role ? String(req.query.role).trim().toLowerCase() : '';
     const roleFilterSql = role === 'koc' ? 'WHERE role = :role' : '';
     const userFilterSql = role === 'koc' ? 'WHERE u.role = :role' : '';
-    const replacements = role === 'koc' ? { role } : undefined;
+    const startDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.start_date || '')) ? req.query.start_date : null;
+    const endDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.end_date || '')) ? req.query.end_date : null;
+    const videoDateSql = `${startDate ? ' AND v.published_at::date >= :startDate' : ''}${endDate ? ' AND v.published_at::date <= :endDate' : ''}`;
+    const topVideoDateSql = `${startDate ? ' AND v_top.published_at::date >= :startDate' : ''}${endDate ? ' AND v_top.published_at::date <= :endDate' : ''}`;
+    const statsDateSql = `${startDate ? ' AND vds.date >= :startDate' : ''}${endDate ? ' AND vds.date <= :endDate' : ''}`;
+    const replacements = { ...(role === 'koc' ? { role } : {}), ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) };
 
-    const [overviewRows, userKpis, productKpis] = await Promise.all([
+    const [overviewRows, userKpis, productKpis, weeklyViews, topVideos] = await Promise.all([
       sequelize.query(`
         SELECT
           (SELECT COUNT(*) FROM users ${roleFilterSql})::int AS "totalUsers",
@@ -91,16 +96,41 @@ const getKpis = async (req, res) => {
         WITH user_videos AS (
           SELECT DISTINCT user_id, video_id
           FROM video_assignments
+        ),
+        video_product_counts AS (
+          SELECT video_id, COUNT(*)::int AS product_count
+          FROM video_products
+          GROUP BY video_id
+        ),
+        period_bounds AS (
+          SELECT MAX(published_at::date) AS max_date
+          FROM videos
+          WHERE published_at IS NOT NULL
+        ),
+        periods AS (
+          SELECT
+            max_date AS current_end,
+            (max_date - INTERVAL '6 days')::date AS current_start,
+            (max_date - INTERVAL '13 days')::date AS previous_start,
+            (max_date - INTERVAL '7 days')::date AS previous_end
+          FROM period_bounds
+          WHERE max_date IS NOT NULL
         )
         SELECT
           u.id,
           u.name,
           u.email,
           u.role,
-          COUNT(uv.video_id)::int AS "videoCount",
+          COUNT(v.id)::int AS "videoCount",
+          COUNT(DISTINCT v.id) FILTER (WHERE COALESCE(vpc.product_count, 0) > 0)::int AS "productVideoCount",
           COALESCE(SUM(v.views), 0)::bigint AS "totalViews",
+          COALESCE(SUM(v.likes), 0)::bigint AS "totalLikes",
+          COALESCE(SUM(v.comments), 0)::bigint AS "totalComments",
+          COALESCE(SUM(v.shares), 0)::bigint AS "totalShares",
           COALESCE(ROUND(AVG(v.views)), 0)::bigint AS "avgViewsPerVideo",
           COALESCE(ROUND(100.0 * COUNT(*) FILTER (WHERE v.views >= 10000) / NULLIF(COUNT(v.id), 0)), 0)::int AS "over10kRate",
+          COALESCE(SUM(CASE WHEN p.current_start IS NOT NULL AND v.published_at::date BETWEEN p.current_start AND p.current_end THEN v.views ELSE 0 END), 0)::bigint AS "currentPeriodViews",
+          COALESCE(SUM(CASE WHEN p.previous_start IS NOT NULL AND v.published_at::date BETWEEN p.previous_start AND p.previous_end THEN v.views ELSE 0 END), 0)::bigint AS "previousPeriodViews",
           CASE WHEN top_video.id IS NULL THEN NULL ELSE json_build_object(
             'id', top_video.id,
             'title', top_video.title,
@@ -108,12 +138,15 @@ const getKpis = async (req, res) => {
           ) END AS "topVideo"
         FROM users u
         LEFT JOIN user_videos uv ON uv.user_id = u.id
-        LEFT JOIN videos v ON v.id = uv.video_id
+        LEFT JOIN videos v ON v.id = uv.video_id${videoDateSql}
+        LEFT JOIN video_product_counts vpc ON vpc.video_id = uv.video_id
+        LEFT JOIN periods p ON true
         LEFT JOIN LATERAL (
           SELECT v_top.id, v_top.title, v_top.views
           FROM user_videos uv_top
           JOIN videos v_top ON v_top.id = uv_top.video_id
           WHERE uv_top.user_id = u.id
+          ${topVideoDateSql}
           ORDER BY v_top.views DESC, v_top.id ASC
           LIMIT 1
         ) top_video ON true
@@ -134,12 +167,128 @@ const getKpis = async (req, res) => {
         GROUP BY p.id, p.name
         ORDER BY p.id ASC
       `, { type: QueryTypes.SELECT }),
+      sequelize.query(`
+        WITH koc_videos AS (
+          SELECT DISTINCT va.video_id
+          FROM video_assignments va
+          JOIN users u ON u.id = va.user_id
+          WHERE u.role = 'koc'
+        ), snapshots AS (
+          SELECT vds.video_id, vds.date, MAX(vds.views)::bigint AS views
+          FROM koc_videos kv
+          JOIN video_daily_stats vds ON vds.video_id = kv.video_id
+          GROUP BY vds.video_id, vds.date
+        ), gains AS (
+          SELECT video_id, date, GREATEST(views - COALESCE(LAG(views) OVER (PARTITION BY video_id ORDER BY date), views), 0) AS views
+          FROM snapshots
+        )
+        SELECT date_trunc('week', date)::date AS week, COALESCE(SUM(views), 0)::bigint AS views
+        FROM gains
+        WHERE 1 = 1${statsDateSql.replaceAll('vds.', '')}
+        GROUP BY date_trunc('week', date)
+        ORDER BY week ASC
+      `, { type: QueryTypes.SELECT, replacements }),
+      sequelize.query(`
+        WITH koc_videos AS (
+          SELECT DISTINCT va.video_id
+          FROM video_assignments va
+          JOIN users u ON u.id = va.user_id
+          WHERE u.role = 'koc'
+        )
+        SELECT v.id, v.title, v.views, v.likes, v.comments, v.shares, v.thumbnail_url AS "thumbnailUrl",
+               COALESCE(v.video_url, 'https://www.tiktok.com/@' || tc.username || '/video/' || v.platform_video_id) AS "videoUrl",
+               v.published_at AS "publishedAt", v.platform_video_id AS "platformVideoId",
+               STRING_AGG(DISTINCT u.name, ', ') AS "creatorNames"
+        FROM koc_videos kv
+        JOIN videos v ON v.id = kv.video_id${videoDateSql}
+        LEFT JOIN tiktok_channels tc ON tc.id = v.channel_id
+        LEFT JOIN video_assignments va ON va.video_id = v.id
+        LEFT JOIN users u ON u.id = va.user_id AND u.role = 'koc'
+        GROUP BY v.id, tc.username
+        ORDER BY v.views DESC, v.id DESC
+        LIMIT 10
+      `, { type: QueryTypes.SELECT, replacements }),
     ]);
 
     res.json({
       overview: toNumbers(overviewRows[0], ['totalUsers', 'totalViews', 'totalLikes', 'totalComments', 'totalShares']),
-      users: userKpis.map((user) => toNumbers(user, ['totalViews', 'avgViewsPerVideo'])),
+      users: userKpis.map((user) => toNumbers(user, [
+        'totalViews',
+        'totalLikes',
+        'totalComments',
+        'totalShares',
+        'avgViewsPerVideo',
+        'currentPeriodViews',
+        'previousPeriodViews',
+      ])),
       products: productKpis.map((product) => toNumbers(product, ['totalViews', 'avgViewsPerVideo'])),
+      weeklyViews: weeklyViews.map((row) => ({ week: row.week, views: Number(row.views || 0) })),
+      topVideos: topVideos.map((video) => ({
+        ...video,
+        views: Number(video.views || 0),
+        likes: Number(video.likes || 0),
+        comments: Number(video.comments || 0),
+        shares: Number(video.shares || 0),
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const getKocDetail = async (req, res) => {
+  try {
+    const creatorId = Number(req.params.creatorId);
+    if (!Number.isInteger(creatorId)) return res.status(400).json({ message: 'Invalid KOC id.' });
+    const creator = await User.findOne({ where: { id: creatorId, role: 'koc' }, attributes: ['id', 'name', 'email', 'role'], raw: true });
+    if (!creator) return res.status(404).json({ message: 'KOC not found.' });
+
+    const startDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.start_date || '')) ? req.query.start_date : null;
+    const endDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.end_date || '')) ? req.query.end_date : null;
+    const dateSql = `${startDate ? ' AND vds.date >= :startDate' : ''}${endDate ? ' AND vds.date <= :endDate' : ''}`;
+    const videoDateSql = `${startDate ? ' AND v.published_at::date >= :startDate' : ''}${endDate ? ' AND v.published_at::date <= :endDate' : ''}`;
+    const replacements = { creatorId, ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) };
+    const [dailyViews, videos, bookings, syncHistory] = await Promise.all([
+      sequelize.query(`
+        WITH creator_videos AS (
+          SELECT DISTINCT video_id FROM video_assignments WHERE user_id = :creatorId
+        )
+        SELECT vds.date, COALESCE(SUM(vds.views), 0)::bigint AS views
+        FROM creator_videos cv
+        JOIN video_daily_stats vds ON vds.video_id = cv.video_id${dateSql}
+        GROUP BY vds.date
+        ORDER BY vds.date ASC
+      `, { type: QueryTypes.SELECT, replacements }),
+      sequelize.query(`
+        SELECT DISTINCT v.id, v.title, v.views, v.likes, v.comments, v.shares,
+          v.thumbnail_url AS "thumbnailUrl", v.video_url AS "videoUrl", v.published_at AS "publishedAt"
+        FROM video_assignments va
+        JOIN videos v ON v.id = va.video_id${videoDateSql}
+        WHERE va.user_id = :creatorId
+        ORDER BY v.views DESC, v.id DESC
+        LIMIT 20
+      `, { type: QueryTypes.SELECT, replacements }),
+      sequelize.query(`
+        SELECT id, booking_cost AS "bookingCost", status, deadline, note, video_url AS "videoUrl", posted_at AS "postedAt"
+        FROM bookings
+        WHERE creator_id = :creatorId
+        ORDER BY deadline DESC, id DESC
+        LIMIT 20
+      `, { type: QueryTypes.SELECT, replacements }),
+      sequelize.query(`
+        SELECT id, status, error, synced_at AS "syncedAt"
+        FROM tiktok_partner_sync_logs
+        WHERE creator_id = :creatorId
+        ORDER BY synced_at DESC, id DESC
+        LIMIT 10
+      `, { type: QueryTypes.SELECT, replacements }),
+    ]);
+    res.json({
+      creator,
+      dailyViews: dailyViews.map((row) => ({ date: row.date, views: Number(row.views || 0) })),
+      videos: videos.map((row) => ({ ...row, views: Number(row.views || 0), likes: Number(row.likes || 0), comments: Number(row.comments || 0), shares: Number(row.shares || 0) })),
+      bookings,
+      syncHistory,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -226,5 +375,6 @@ module.exports = {
   updateReport,
   deleteReport,
   getKpis,
+  getKocDetail,
   generateWeeklyReport,
 };

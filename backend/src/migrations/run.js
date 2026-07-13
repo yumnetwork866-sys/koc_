@@ -21,6 +21,8 @@ const migrations = [
   require('./012_create_tiktok_partner_authorizations'),
   require('./013_add_tiktok_partner_creator_metadata'),
   require('./013_unique_tiktok_partner_open_id'),
+  require('./014_add_tiktok_partner_sync_result'),
+  require('./015_create_tiktok_partner_sync_logs'),
 ];
 
 const createMigrationRunner = ({

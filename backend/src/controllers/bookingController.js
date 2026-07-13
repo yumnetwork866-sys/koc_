@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { User, Booking, TikTokPartnerAuthorization } = require('../models');
+const { User, Booking, TikTokPartnerAuthorization, sequelize } = require('../models');
 const {
   buildAuthorizationUrl,
   parseAuthorizationState,
@@ -182,6 +182,8 @@ const getTikTokPartnerStatuses = async (req, res) => {
         register_region: authorization?.register_region || null,
         showcase_count: authorization?.showcase_count || 0,
         last_synced_at: authorization?.last_synced_at || null,
+        last_sync_status: authorization?.last_sync_status || null,
+        last_sync_error: authorization?.last_sync_error || null,
         granted_scopes: grantedScopes,
         access_token_expires_at: authorization?.access_token_expires_at || null,
         connected_at: authorization?.connected_at || null,
@@ -248,10 +250,21 @@ const handleTikTokPartnerOauthCallback = async (req, res) => {
       avatar_url: profile.avatar?.url || profile.avatar_url || existing?.avatar_url || null,
       register_region: profile.register_region || existing?.register_region || null,
       last_synced_at: new Date(),
+      last_sync_status: 'success',
+      last_sync_error: null,
       ...tokenFields({ ...tokenData, open_id: openId, granted_scopes: normalizedScopes }, existing || {}),
     };
-    if (existing) await existing.update(values);
-    else await TikTokPartnerAuthorization.create(values);
+    let authorization;
+    if (existing) {
+      authorization = existing;
+      await authorization.update(values);
+    } else {
+      authorization = await TikTokPartnerAuthorization.create(values);
+    }
+    await sequelize.query(`
+      INSERT INTO tiktok_partner_sync_logs (authorization_id, creator_id, status, synced_at)
+      VALUES (:authorizationId, :creatorId, 'success', NOW())
+    `, { replacements: { authorizationId: authorization.id, creatorId } });
     return res.redirect(buildPartnerReturnUrl('success', 'TikTok Creator connected.', creatorId, returnPath));
   } catch (error) {
     console.error('[TikTok Partner OAuth] Callback failed', { creatorId, message: error.message });
@@ -273,9 +286,28 @@ const getTikTokPartnerCreatorOverview = async (req, res) => {
       register_region: overview.profile?.register_region || authorization.register_region,
       showcase_count: overview.showcase?.totalCount || 0,
       last_synced_at: new Date(),
+      last_sync_status: 'success',
+      last_sync_error: null,
     });
+    await sequelize.query(`
+      INSERT INTO tiktok_partner_sync_logs (authorization_id, creator_id, status, synced_at)
+      VALUES (:authorizationId, :creatorId, 'success', NOW())
+    `, { replacements: { authorizationId: authorization.id, creatorId } });
     res.json(overview);
   } catch (error) {
+    const creatorId = Number(req.params.creatorId);
+    if (Number.isInteger(creatorId)) {
+      await TikTokPartnerAuthorization.update({
+        last_synced_at: new Date(),
+        last_sync_status: 'failed',
+        last_sync_error: String(error.message || error).slice(0, 2000),
+      }, { where: { creator_id: creatorId } }).catch(() => {});
+      await sequelize.query(`
+        INSERT INTO tiktok_partner_sync_logs (authorization_id, creator_id, status, error, synced_at)
+        SELECT id, creator_id, 'failed', :error, NOW()
+        FROM tiktok_partner_authorizations WHERE creator_id = :creatorId
+      `, { replacements: { creatorId, error: String(error.message || error).slice(0, 2000) } }).catch(() => {});
+    }
     res.status(502).json({ message: error.message });
   }
 };

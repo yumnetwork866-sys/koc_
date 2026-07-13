@@ -6,13 +6,25 @@ const { mockModule } = require('./helpers/mockModule');
 
 const modelsPath = require.resolve('../src/models');
 const seedPath = require.resolve('../src/migrations/002_seed_data');
-const migrationPaths = [
-  '../src/migrations/001_create_tables',
-  '../src/migrations/003_add_tiktok_token_lifecycle',
-  '../src/migrations/004_add_kpi_indexes',
-  '../src/migrations/005_add_facebook_chatbot_tables',
-  '../src/migrations/006_add_chatbot_settings',
-].map((item) => require.resolve(item));
+const defaultMigrationNames = [
+  '001_create_tables',
+  '003_add_tiktok_token_lifecycle',
+  '004_add_kpi_indexes',
+  '005_add_facebook_chatbot_tables',
+  '006_add_chatbot_settings',
+  '007_add_chatbot_message_profile_fields',
+  '008_add_facebook_user_avatar_url',
+  '009_add_facebook_page_avatar_url',
+  '010_drop_teams',
+  '011_create_bookings',
+  '012_create_tiktok_partner_authorizations',
+  '013_add_tiktok_partner_creator_metadata',
+  '013_unique_tiktok_partner_open_id',
+  '014_add_tiktok_partner_sync_result',
+  '015_create_tiktok_partner_sync_logs',
+];
+const migrationPaths = defaultMigrationNames
+  .map((name) => require.resolve(`../src/migrations/${name}`));
 
 const makeMigration = (name) => ({
   name,
@@ -111,6 +123,13 @@ test('migration runner backs up, applies, and rolls back migrations', async (t) 
     '004_add_kpi_indexes',
     '005_add_facebook_chatbot_tables',
   ]);
+
+  const defaultRunner = createMigrationRunner({
+    sequelizeInstance: fakeSequelize,
+    seed: { up: async () => {}, down: async () => {} },
+  });
+  await defaultRunner.migrate();
+  assert.deepEqual(Array.from(applied).sort(), defaultMigrationNames.slice().sort());
 
   assert.ok(queryLog.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS schema_migrations')));
   assert.ok(queryLog.some((sql) => sql.startsWith('INSERT INTO schema_migrations')));

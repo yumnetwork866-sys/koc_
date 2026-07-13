@@ -113,6 +113,8 @@ const TikTokPartnerAuthorization = sequelize.define('TikTokPartnerAuthorization'
   register_region: { type: DataTypes.STRING, allowNull: true },
   showcase_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   last_synced_at: { type: DataTypes.DATE, allowNull: true },
+  last_sync_status: { type: DataTypes.STRING, allowNull: true },
+  last_sync_error: { type: DataTypes.TEXT, allowNull: true },
   connected_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
 }, {
@@ -405,7 +407,7 @@ const VideoDailyStats = sequelize.define('VideoDailyStats', {
   tableName: 'video_daily_stats',
   timestamps: false,
   indexes: [
-    { fields: ['video_id', 'date'] },
+    { fields: ['video_id', 'date'], unique: true },
     { fields: ['date'] },
   ],
 });

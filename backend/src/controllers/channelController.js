@@ -531,6 +531,15 @@ const syncTiktokVideosForChannel = async (channel, accessToken) => {
         });
       }
 
+      await VideoDailyStats.upsert({
+        video_id: video.id,
+        date: new Date().toISOString().slice(0, 10),
+        views: item.views,
+        likes: item.likes,
+        comments: item.comments,
+        shares: item.shares,
+      });
+
       if (wasCreated) {
         created += 1;
       } else {
