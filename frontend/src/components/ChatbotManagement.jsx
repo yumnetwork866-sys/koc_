@@ -15,7 +15,6 @@ import {
   fetchChatbotPages,
   fetchChatbotStats,
   fetchFacebookManagedPages,
-  getFacebookOauthUrl,
   revokeChatbotFacebookAccountByUser,
   sendChatbotMessage,
   fetchChatbotSettings,
@@ -118,7 +117,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
-  const [facebookMeLoaded, setFacebookMeLoaded] = useState(false);
   const [pagePickerOpen, setPagePickerOpen] = useState(false);
   const pagePickerTriggerRef = useRef(null);
   const pagePickerMenuRef = useRef(null);
@@ -191,7 +189,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   }, [facebookMe.avatarUrl, facebookMe.name, facebookMe.userId, managedPages]);
 
   const loadOverview = useCallback(async (signal) => {
-    setFacebookMeLoaded(false);
     const [
       me,
       nextStats,
@@ -216,7 +213,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     ]);
 
     setFacebookMe(me);
-    setFacebookMeLoaded(true);
     if (!me.loggedIn) {
       clearStoredFacebookChatbotToken();
     }
@@ -452,15 +448,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
-  const startFacebookLogin = async () => {
-    try {
-      setError('');
-      window.location.assign(await getFacebookOauthUrl());
-    } catch (err) {
-      setError(err.message || 'Failed to start Facebook connection');
-    }
-  };
-
   const handleRevokeFacebookAccount = async (group) => {
     if (!window.confirm(`Revoke Facebook account "${group.ownerName}" from the app? This will disconnect every connected Page for this user and remove the session.`)) return;
     await revokeChatbotFacebookAccountByUser(group.ownerId);
@@ -532,24 +519,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       modelKey: `${updated.provider}:${updated.model}`,
     });
     setToast({ status: 'success', message: 'Đã lưu chat setting' });
-  };
-
-  const renderFacebookAccountActions = () => {
-    if (!facebookMeLoaded) {
-      return (
-        <button className="button" type="button" disabled>
-          Checking...
-        </button>
-      );
-    }
-
-    return (
-      <>
-        <button className="button" type="button" disabled={!facebookMe.configured} onClick={startFacebookLogin}>
-          Add account
-        </button>
-      </>
-    );
   };
 
   const renderSection = () => {
@@ -941,19 +910,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
       {activeSection !== 'chat' ? (
         <section className="page__hero" id="dashboard">
-          {activeSection === 'dashboard' ? (
-            <div className="page__hero-row page__hero-row--spread page__hero-row--bottom">
-              <h1 className="page__title">{heroTitle}</h1>
-              <div className="page__hero-actions">
-                {renderFacebookAccountActions()}
-              </div>
-            </div>
-          ) : (
-            <>
-              <h1 className="page__title">{heroTitle}</h1>
-              {heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
-            </>
-          )}
+          <h1 className="page__title">{heroTitle}</h1>
+          {activeSection !== 'dashboard' && heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
         </section>
       ) : null}
       {renderSection()}

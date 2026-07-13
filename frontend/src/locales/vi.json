@@ -14,7 +14,17 @@
     "english": "English",
     "vietnamese": "Tiếng Việt",
     "account": "Tài khoản",
-    "admin": "Quản trị viên"
+    "admin": "Quản trị viên",
+    "connect": "Kết nối",
+    "connections": "Kết nối nền tảng",
+    "connectTikTok": "TikTok Channel",
+    "connectTikTokMeta": "Đồng bộ kênh và video TikTok",
+    "connectTikTokCreator": "TikTok Creator",
+    "connectTikTokCreatorMeta": "Kết nối tài khoản affiliate Creator",
+    "connectFacebook": "Facebook",
+    "connectFacebookMeta": "Kết nối tài khoản và Page Facebook",
+    "connecting": "Đang chuyển hướng…",
+    "connectionError": "Không thể bắt đầu kết nối. Vui lòng thử lại."
   },
   "login": {
     "workspace": "Không gian quản trị nội dung",
@@ -230,7 +240,7 @@
     "partnerConnection": "TikTok Partner",
     "partnerConnect": "Kết nối",
     "partnerConnectNew": "Kết nối TikTok Creator mới",
-    "partnerConnectHint": "Khi kết nối, hệ thống tự nhận diện tài khoản TikTok để ghép với KOC hiện có hoặc tạo KOC mới.",
+    "partnerConnectHint": "Dùng Kết nối → TikTok Creator trên topbar. Hệ thống sẽ tự ghép với KOC hiện có hoặc tạo KOC mới.",
     "partnerManualUser": "KOC nhập tay",
     "partnerDisconnect": "Ngắt kết nối",
     "partnerReconnect": "Kết nối lại",

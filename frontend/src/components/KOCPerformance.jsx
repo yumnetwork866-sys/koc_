@@ -112,6 +112,17 @@ const KOCPerformance = ({ heroTitle }) => {
   }, [t]);
 
   useEffect(() => {
+    if (oauthRestoreRef.current) return;
+    try {
+      sessionStorage.setItem(OAUTH_UI_STATE_KEY, JSON.stringify({
+        filters: { search, connectionFilter, showcaseFilter, regionFilter, minViews, periodPreset, startDate, endDate },
+      }));
+    } catch {
+      // OAuth still works when session storage is unavailable; only UI restoration is skipped.
+    }
+  }, [connectionFilter, endDate, minViews, periodPreset, regionFilter, search, showcaseFilter, startDate]);
+
+  useEffect(() => {
     if (!oauthHydratingId) return undefined;
     let active = true;
     const hydrate = async () => {
@@ -406,7 +417,7 @@ const KOCPerformance = ({ heroTitle }) => {
           <section className="section-card">
             <div className="section-card__header">
               <div><h2 className="section-card__title">{t('koc.creatorTableTitle')}</h2><p className="section-card__meta">{t('koc.partnerConnectHint')}</p></div>
-              <div className="actions"><button className="button button--ghost koc-column-toggle" type="button" onClick={() => setShowExtraColumns((value) => !value)}>{t(showExtraColumns ? 'koc.hideExtraColumns' : 'koc.showExtraColumns')}</button><button className="button" type="button" onClick={connectPartner}>{t('koc.partnerConnectNew')}</button></div>
+              <div className="actions"><button className="button button--ghost koc-column-toggle" type="button" onClick={() => setShowExtraColumns((value) => !value)}>{t(showExtraColumns ? 'koc.hideExtraColumns' : 'koc.showExtraColumns')}</button></div>
             </div>
             <div className="table-wrap koc-table-wrap">
               <table className={`data-table koc-table ${showExtraColumns ? 'koc-table--expanded' : ''}`}>

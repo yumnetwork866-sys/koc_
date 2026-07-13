@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   deleteChannel,
   fetchChannels,
-  getTikTokOauthUrl,
   revokeChannelAuthorization,
   syncChannelVideos,
 } from '../lib/api';
@@ -17,7 +16,6 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
   const [channels, setChannels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isOauthOpen, setIsOauthOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [deletingChannelId, setDeletingChannelId] = useState(null);
   const [syncingChannelId, setSyncingChannelId] = useState(null);
@@ -98,15 +96,6 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       return acc;
     }, {});
   }, [channels]);
-
-  const startOauth = async () => {
-    try {
-      setError('');
-      window.location.assign(await getTikTokOauthUrl());
-    } catch (err) {
-      setError(err.message || t('channel.errorStartOauth'));
-    }
-  };
 
   const isFallbackUsername = (value) => {
     const text = String(value || '').trim();
@@ -217,26 +206,6 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       </section>
 
       {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
-
-      <section className="section-card">
-        <div className="section-card__header">
-          <div>
-            <h2 className="section-card__title">{t('channel.addChannel')}</h2>
-          </div>
-          <div className="actions">
-            <button
-              className="button"
-              type="button"
-              onClick={() => setIsOauthOpen(true)}
-            >
-              {t('channel.addChannel')}
-            </button>
-          </div>
-        </div>
-        <div className="oauth-cta">
-          <div className="oauth-cta__copy" />
-        </div>
-      </section>
 
       <section className="section-card">
         <div className="section-card__header">
@@ -369,34 +338,6 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
         </div>
       </section>
 
-      {isOauthOpen ? (
-        <div className="modal-backdrop" role="presentation" onClick={() => setIsOauthOpen(false)}>
-          <div
-            className="modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="oauth-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="section-card__header">
-              <div>
-                <h2 className="section-card__title" id="oauth-title">{t('channel.oauthTitle')}</h2>
-                <p className="section-card__meta">
-                  {t('channel.oauthMeta')}
-                </p>
-              </div>
-            </div>
-            <div className="modal-card__actions">
-              <button className="button" type="button" onClick={startOauth}>
-                {t('channel.continueWithTikTok')}
-              </button>
-              <button className="button button--ghost" type="button" onClick={() => setIsOauthOpen(false)}>
-                {t('channel.cancel')}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 };

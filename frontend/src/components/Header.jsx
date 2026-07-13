@@ -1,16 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AppLogo from './AppLogo';
+import { getFacebookOauthUrl, getTikTokOauthUrl, startTikTokPartnerOauth } from '../lib/api';
 import { clearStoredSession, getStoredSession, hasValidSession } from '../lib/session';
 import { useI18n } from '../lib/language';
 import { topNavItems } from '../routes/navigation';
+
+const KOC_OAUTH_UI_STATE_KEY = 'koc-performance-oauth-ui-state';
 
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [hasSession, setHasSession] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRootRef = useRef(null);
+  const [activeMenu, setActiveMenu] = useState(null);
+  const [connectingTarget, setConnectingTarget] = useState(null);
+  const [connectionError, setConnectionError] = useState('');
+  const accountRootRef = useRef(null);
+  const accountTriggerRef = useRef(null);
+  const connectRootRef = useRef(null);
+  const connectTriggerRef = useRef(null);
+  const connectMenuRef = useRef(null);
   const { t, language, setLanguage } = useI18n();
 
   const session = getStoredSession();
@@ -37,17 +46,20 @@ const Header = () => {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (!menuOpen) return undefined;
+    if (!activeMenu) return undefined;
 
     const handlePointerDown = (event) => {
-      if (menuRootRef.current && !menuRootRef.current.contains(event.target)) {
-        setMenuOpen(false);
+      const activeRoot = activeMenu === 'connect' ? connectRootRef.current : accountRootRef.current;
+      if (activeRoot && !activeRoot.contains(event.target)) {
+        setActiveMenu(null);
       }
     };
 
     const handleEscape = (event) => {
       if (event.key === 'Escape') {
-        setMenuOpen(false);
+        const trigger = activeMenu === 'connect' ? connectTriggerRef.current : accountTriggerRef.current;
+        setActiveMenu(null);
+        window.requestAnimationFrame(() => trigger?.focus());
       }
     };
 
@@ -58,11 +70,16 @@ const Header = () => {
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleEscape);
     };
-  }, [menuOpen]);
+  }, [activeMenu]);
+
+  useEffect(() => {
+    setActiveMenu(null);
+    setConnectionError('');
+  }, [location.pathname]);
 
   const handleSignOut = () => {
     clearStoredSession();
-    setMenuOpen(false);
+    setActiveMenu(null);
     navigate('/');
   };
 
@@ -75,6 +92,11 @@ const Header = () => {
     '/chatbot': t('nav.facebook'),
   };
   const currentLanguage = language;
+  const connectionOptions = [
+    { id: 'tiktok', label: t('header.connectTikTok'), meta: t('header.connectTikTokMeta'), badge: 'TT' },
+    { id: 'creator', label: t('header.connectTikTokCreator'), meta: t('header.connectTikTokCreatorMeta'), badge: 'TC' },
+    { id: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta'), badge: 'FB' },
+  ];
   const isTopNavActive = (to) => {
     if (to === '/chatbot') return location.pathname.startsWith('/chatbot');
     if (to === '/dashboard') {
@@ -87,6 +109,64 @@ const Header = () => {
       ].some((prefix) => location.pathname.startsWith(prefix));
     }
     return location.pathname.startsWith(to);
+  };
+
+  const focusConnectionItem = (position) => {
+    window.requestAnimationFrame(() => {
+      const items = Array.from(connectMenuRef.current?.querySelectorAll('[role="menuitem"]:not(:disabled)') || []);
+      if (!items.length) return;
+      items[position === 'last' ? items.length - 1 : 0].focus();
+    });
+  };
+
+  const handleConnectTriggerKeyDown = (event) => {
+    if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+    event.preventDefault();
+    setActiveMenu('connect');
+    setConnectionError('');
+    focusConnectionItem(event.key === 'ArrowUp' ? 'last' : 'first');
+  };
+
+  const handleConnectMenuKeyDown = (event) => {
+    const items = Array.from(connectMenuRef.current?.querySelectorAll('[role="menuitem"]:not(:disabled)') || []);
+    if (!items.length) return;
+    const currentIndex = items.indexOf(document.activeElement);
+    let nextIndex = null;
+    if (event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % items.length;
+    if (event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + items.length) % items.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = items.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    items[nextIndex].focus();
+  };
+
+  const preserveKocOauthState = () => {
+    if (!location.pathname.startsWith('/manage/koc-performance')) return;
+    let saved = {};
+    try { saved = JSON.parse(sessionStorage.getItem(KOC_OAUTH_UI_STATE_KEY) || '{}'); } catch { saved = {}; }
+    sessionStorage.setItem(KOC_OAUTH_UI_STATE_KEY, JSON.stringify({ ...saved, scrollY: window.scrollY }));
+  };
+
+  const startConnection = async (target) => {
+    try {
+      setConnectingTarget(target);
+      setConnectionError('');
+      let authorizeUrl;
+      if (target === 'tiktok') authorizeUrl = await getTikTokOauthUrl();
+      if (target === 'creator') {
+        preserveKocOauthState();
+        ({ authorizeUrl } = await startTikTokPartnerOauth('/manage/koc-performance'));
+      }
+      if (target === 'facebook') authorizeUrl = await getFacebookOauthUrl();
+      if (!authorizeUrl) throw new Error(t('header.connectionError'));
+      setActiveMenu(null);
+      window.location.assign(authorizeUrl);
+    } catch (error) {
+      setConnectionError(error.message || t('header.connectionError'));
+    } finally {
+      setConnectingTarget(null);
+    }
   };
 
   return (
@@ -110,17 +190,70 @@ const Header = () => {
             </Link>
           ))}
           {hasSession ? (
-            <div className="topbar__account" ref={menuRootRef}>
+            <>
+              <div className="topbar__connect" ref={connectRootRef}>
+                <button
+                  ref={connectTriggerRef}
+                  type="button"
+                  className="topbar__connect-trigger"
+                  aria-haspopup="menu"
+                  aria-controls="topbar-connect-menu"
+                  aria-expanded={activeMenu === 'connect'}
+                  onClick={() => {
+                    setConnectionError('');
+                    setActiveMenu((current) => current === 'connect' ? null : 'connect');
+                  }}
+                  onKeyDown={handleConnectTriggerKeyDown}
+                >
+                  <span>{t('header.connect')}</span>
+                  <span className="topbar__connect-chevron" aria-hidden="true">⌄</span>
+                </button>
+                {activeMenu === 'connect' ? (
+                  <div
+                    id="topbar-connect-menu"
+                    ref={connectMenuRef}
+                    className="topbar__connect-menu"
+                    role="menu"
+                    aria-label={t('header.connections')}
+                    aria-busy={Boolean(connectingTarget)}
+                    onKeyDown={handleConnectMenuKeyDown}
+                  >
+                    <div className="topbar__connect-head">
+                      <strong>{t('header.connections')}</strong>
+                    </div>
+                    {connectionOptions.map((option) => (
+                      <button
+                        className="topbar__connect-item"
+                        type="button"
+                        role="menuitem"
+                        key={option.id}
+                        disabled={Boolean(connectingTarget)}
+                        onClick={() => startConnection(option.id)}
+                      >
+                        <span className={`topbar__connect-badge topbar__connect-badge--${option.id}`} aria-hidden="true">{option.badge}</span>
+                        <span className="topbar__connect-copy">
+                          <strong>{option.label}</strong>
+                          <small>{connectingTarget === option.id ? t('header.connecting') : option.meta}</small>
+                        </span>
+                        <span className="topbar__connect-arrow" aria-hidden="true">→</span>
+                      </button>
+                    ))}
+                    {connectionError ? <p className="topbar__connect-error" role="alert">{connectionError}</p> : null}
+                  </div>
+                ) : null}
+              </div>
+              <div className="topbar__account" ref={accountRootRef}>
               <button
+                ref={accountTriggerRef}
                 type="button"
                 className="topbar__avatar-button"
                 aria-label="Open account menu"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((value) => !value)}
+                aria-expanded={activeMenu === 'account'}
+                onClick={() => setActiveMenu((current) => current === 'account' ? null : 'account')}
               >
                 <span className="topbar__avatar">{avatarText}</span>
               </button>
-              {menuOpen ? (
+              {activeMenu === 'account' ? (
                 <div className="topbar__account-menu" role="menu" aria-label="Account menu">
                   <div className="topbar__account-head">
                     <strong>{userName}</strong>
@@ -130,7 +263,7 @@ const Header = () => {
                     to="/chatbot/chat-setting"
                     className="topbar__account-item"
                     role="menuitem"
-                    onClick={() => setMenuOpen(false)}
+                    onClick={() => setActiveMenu(null)}
                   >
                     {t('header.settings')}
                   </Link>
@@ -157,7 +290,8 @@ const Header = () => {
                   </button>
                 </div>
               ) : null}
-            </div>
+              </div>
+            </>
           ) : (
             <Link to="/login" className="button button--ghost topbar__nav-button">
               {t('header.signIn')}

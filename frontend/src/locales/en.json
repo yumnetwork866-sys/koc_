@@ -14,7 +14,17 @@
     "english": "English",
     "vietnamese": "Tiếng Việt",
     "account": "Account",
-    "admin": "Administrator"
+    "admin": "Administrator",
+    "connect": "Connect",
+    "connections": "Connect platform",
+    "connectTikTok": "TikTok Channel",
+    "connectTikTokMeta": "Sync a TikTok channel and its videos",
+    "connectTikTokCreator": "TikTok Creator",
+    "connectTikTokCreatorMeta": "Connect a Creator affiliate account",
+    "connectFacebook": "Facebook",
+    "connectFacebookMeta": "Connect a Facebook account and Pages",
+    "connecting": "Redirecting…",
+    "connectionError": "Unable to start the connection. Please try again."
   },
   "login": {
     "workspace": "Content operations workspace",
@@ -230,7 +240,7 @@
     "partnerConnection": "TikTok Partner",
     "partnerConnect": "Connect",
     "partnerConnectNew": "Connect new TikTok Creator",
-    "partnerConnectHint": "After authorization, the TikTok account is automatically matched to an existing KOC or used to create a new one.",
+    "partnerConnectHint": "Use Connect → TikTok Creator in the topbar. The account will be matched to an existing KOC or used to create a new one.",
     "partnerManualUser": "Manual KOC",
     "partnerDisconnect": "Disconnect",
     "partnerReconnect": "Reconnect",
