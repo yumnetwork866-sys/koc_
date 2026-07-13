@@ -45,7 +45,7 @@ export function parseSessionSnapshot(rawSession) {
   const decoded = decodeStoredSession(rawSession);
   if (
     !decoded?.session?.token
-    || decoded.payload?.role !== 'admin'
+    || typeof decoded.payload?.role !== 'string'
     || !Number.isFinite(decoded.payload?.exp)
     || decoded.payload.exp < Date.now()
   ) {
@@ -76,7 +76,7 @@ export function subscribeSession(listener) {
     const decoded = decodeStoredSession(readStorage(SESSION_STORAGE_KEY));
     const expiration = decoded?.payload?.exp;
     const token = decoded?.session?.token;
-    if (!token || decoded.payload?.role !== 'admin' || !Number.isFinite(expiration)) return;
+    if (!token || typeof decoded?.payload?.role !== 'string' || !Number.isFinite(expiration)) return;
 
     const expireSession = () => {
       const remaining = expiration - Date.now();

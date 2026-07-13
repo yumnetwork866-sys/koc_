@@ -32,7 +32,7 @@ function createStorage(initialEntries = {}) {
 
 function createSession(id = 'session', ttlMs = 60_000) {
   const payload = Buffer.from(JSON.stringify({
-    role: 'admin',
+    role: 'member',
     exp: Date.now() + ttlMs,
   })).toString('base64url');
 
@@ -169,5 +169,17 @@ test('session snapshot changes when user data changes with the same token', asyn
 
     assert.notEqual(getSessionSnapshot(), firstSnapshot);
     assert.equal(getStoredSession()?.user?.name, 'Updated Admin');
+  });
+});
+
+test('non-admin sessions are still treated as valid app sessions', async () => {
+  const session = createSession('member-session');
+  const storage = createStorage();
+
+  await withBrowser(storage, () => {
+    saveStoredSession(session);
+
+    assert.equal(getStoredSession()?.token, session.token);
+    assert.equal(getSessionSnapshot() !== null, true);
   });
 });

@@ -27,7 +27,7 @@ const requireAdmin = (req, res, next) => {
 
   try {
     const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (session.role !== 'admin' || !Number.isInteger(session.sub) || session.exp < Date.now()) {
+    if (typeof session.role !== 'string' || !Number.isInteger(session.sub) || session.exp < Date.now()) {
       return res.status(401).json({ message: 'Session is invalid or expired' });
     }
     req.session = session;

@@ -280,7 +280,7 @@ const Header = () => {
                 <div className="topbar__account-menu" role="menu" aria-label="Account menu">
                   <div className="topbar__account-head">
                     <strong>{userName}</strong>
-                    <span>{t('header.admin')}</span>
+                    <span>{t('header.account')}</span>
                   </div>
                   <Link
                     to="/chatbot/chat-setting"

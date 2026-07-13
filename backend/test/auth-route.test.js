@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { mockModule } = require('./helpers/mockModule');
 
 const modelsPath = require.resolve('../src/models');
+const passwordPath = require.resolve('../src/lib/password');
 const authControllerPath = require.resolve('../src/controllers/authController');
 
 const makeResponse = () => ({
@@ -40,7 +41,77 @@ test('auth route wires POST /login to the login controller', (t) => {
   });
 });
 
-test('POST /login controller returns a token for valid admin credentials', async (t) => {
+test('POST /login controller returns a token for a created user', async (t) => {
+  const originalSessionSecret = process.env.SESSION_SECRET;
+  const originalAdminPassword = process.env.ADMIN_PASSWORD;
+  delete process.env.ADMIN_PASSWORD;
+  process.env.SESSION_SECRET = 'session-secret';
+
+  const restorePassword = mockModule(passwordPath, {
+    verifyPassword: async (password, passwordHash) => password === 'leader-secret' && passwordHash === 'hashed-password',
+  });
+  const restoreModels = mockModule(modelsPath, {
+    User: {
+      unscoped() {
+        return {
+          findOne: async () => ({
+            id: 1,
+            name: 'Mai Leader',
+            email: 'leader@example.com',
+            role: 'leader',
+            password_hash: 'hashed-password',
+            get() {
+              return {
+                id: 1,
+                name: 'Mai Leader',
+                email: 'leader@example.com',
+                role: 'leader',
+                password_hash: 'hashed-password',
+              };
+            },
+          }),
+        };
+      },
+    },
+  });
+
+  t.after(() => {
+    restorePassword();
+    restoreModels();
+    delete require.cache[authControllerPath];
+    if (originalAdminPassword === undefined) {
+      delete process.env.ADMIN_PASSWORD;
+    } else {
+      process.env.ADMIN_PASSWORD = originalAdminPassword;
+    }
+    if (originalSessionSecret === undefined) {
+      delete process.env.SESSION_SECRET;
+    } else {
+      process.env.SESSION_SECRET = originalSessionSecret;
+    }
+  });
+
+  delete require.cache[authControllerPath];
+  const { login } = require('../src/controllers/authController');
+  const req = {
+    body: {
+      identifier: 'leader@example.com',
+      password: 'leader-secret',
+    },
+  };
+  const res = makeResponse();
+
+  await login(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(typeof res.body.token, 'string');
+  assert.match(res.body.token, /^[^.]+\.[^.]+$/);
+  assert.equal(res.body.user.email, 'leader@example.com');
+  assert.equal(res.body.user.role, 'leader');
+  assert.equal(res.body.user.password_hash, undefined);
+});
+
+test('POST /login controller still supports bootstrap admin password', async (t) => {
   const originalAdminPassword = process.env.ADMIN_PASSWORD;
   const originalSessionSecret = process.env.SESSION_SECRET;
   process.env.ADMIN_PASSWORD = 'admin-secret';

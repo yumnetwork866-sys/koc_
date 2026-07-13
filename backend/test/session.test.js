@@ -16,7 +16,7 @@ const makeResponse = () => ({
   },
 });
 
-test('requireAdmin accepts a valid admin session token', (t) => {
+test('requireAdmin accepts a valid session token', (t) => {
   const originalSessionSecret = process.env.SESSION_SECRET;
   const originalExitCode = process.exitCode;
   process.env.SESSION_SECRET = 'session-secret';
@@ -30,7 +30,7 @@ test('requireAdmin accepts a valid admin session token', (t) => {
     process.exitCode = originalExitCode;
   });
 
-  const token = createSessionToken({ id: 7, role: 'admin' });
+  const token = createSessionToken({ id: 7, role: 'member' });
   const req = {
     get(name) {
       return name === 'authorization' ? `Bearer ${token}` : undefined;
@@ -45,10 +45,10 @@ test('requireAdmin accepts a valid admin session token', (t) => {
 
   assert.equal(nextCalled, true);
   assert.deepEqual(req.session.sub, 7);
-  assert.equal(req.session.role, 'admin');
+  assert.equal(req.session.role, 'member');
 });
 
-test('requireAdmin rejects non-admin sessions', (t) => {
+test('requireAdmin rejects malformed sessions', (t) => {
   const originalSessionSecret = process.env.SESSION_SECRET;
   const originalExitCode = process.exitCode;
   process.env.SESSION_SECRET = 'session-secret';
@@ -62,7 +62,7 @@ test('requireAdmin rejects non-admin sessions', (t) => {
     process.exitCode = originalExitCode;
   });
 
-  const token = createSessionToken({ id: 8, role: 'member' });
+  const token = createSessionToken({ id: 8, role: 123 });
   const req = {
     get(name) {
       return name === 'authorization' ? `Bearer ${token}` : undefined;
@@ -79,4 +79,3 @@ test('requireAdmin rejects non-admin sessions', (t) => {
   assert.equal(res.statusCode, 401);
   assert.equal(res.body.message, 'Session is invalid or expired');
 });
-

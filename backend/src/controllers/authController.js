@@ -9,26 +9,25 @@ const login = async (req, res) => {
     const { password } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD;
 
-    if (!adminPassword) {
-      throw new Error('ADMIN_PASSWORD must be set in .env');
-    }
-
     if (!identifier || !password) {
       return res.status(400).json({ message: 'username and password are required' });
     }
 
     const user = await User.unscoped().findOne({
       where: {
-        [Op.or]: [{ email: identifier }, { name: identifier }],
+        [Op.or]: [
+          { email: { [Op.iLike]: identifier } },
+          { name: { [Op.iLike]: identifier } },
+        ],
       },
     });
 
     const passwordIsValid = user?.password_hash
       ? await verifyPassword(password, user.password_hash)
-      : password === adminPassword;
+      : Boolean(adminPassword) && password === adminPassword;
 
-    if (!user || user.role !== 'admin' || !passwordIsValid) {
-      return res.status(401).json({ message: 'Invalid admin credentials' });
+    if (!user || !passwordIsValid) {
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     const safeUser = user.get({ plain: true });
