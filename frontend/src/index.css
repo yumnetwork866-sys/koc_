@@ -39,6 +39,8 @@
   --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.18);
   --layout-max-width: 1480px;
   --sidebar-width: 248px;
+  --control-height: 42px;
+  --transition-fast: 160ms ease;
 
   font-family:
     var(--font-sans);
@@ -58,12 +60,14 @@
 
 html {
   min-width: 320px;
+  scrollbar-gutter: stable;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   color: var(--color-text);
   background: var(--color-bg);
 }
@@ -75,10 +79,39 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
+}
+
+button,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
 }
 
 #root {
   min-height: 100vh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

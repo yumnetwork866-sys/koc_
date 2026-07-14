@@ -168,12 +168,12 @@ const requestTikTokPartner = async ({ path, method = 'GET', query = {}, body, ac
   return payload;
 };
 
-const searchTargetCollaborations = async ({ authorization, shopId, pageToken, pageSize, keyword } = {}, dependencies = {}) => {
+const searchTargetCollaborations = async ({ authorization, accessToken, shopId, pageToken, pageSize, keyword } = {}, dependencies = {}) => {
   if (!authorization) throw new Error('TikTok Creator is not connected.');
   const config = getConfig();
   const resolvedShopId = String(shopId || authorization.shop_id || config.shopId || '').trim();
   if (!resolvedShopId) throw new Error('Set TIKTOK_PARTNER_SHOP_ID or save a shop ID for this Creator.');
-  const accessToken = await getUsableAccessToken(authorization, dependencies.fetchImpl || fetch);
+  const resolvedAccessToken = accessToken || await getUsableAccessToken(authorization, dependencies.fetchImpl || fetch);
   const normalizedKeyword = String(keyword || '').trim();
   const body = {
     shop_id: resolvedShopId,
@@ -187,7 +187,7 @@ const searchTargetCollaborations = async ({ authorization, shopId, pageToken, pa
       ...(pageToken ? { page_token: pageToken } : {}),
     },
     body,
-    accessToken,
+    accessToken: resolvedAccessToken,
     fetchImpl: dependencies.fetchImpl || fetch,
   });
   const data = payload.data || {};
@@ -204,7 +204,7 @@ const getCreatorOverview = async (authorization, dependencies = {}) => {
   const fetchImpl = dependencies.fetchImpl || fetch;
   const accessToken = await getUsableAccessToken(authorization, fetchImpl);
   const config = getConfig();
-  const [profilePayload, showcasePayload] = await Promise.all([
+  const [profilePayload, showcasePayload, collaborationsPayload] = await Promise.all([
     requestTikTokPartner({
       path: CREATOR_PROFILE_PATH,
       accessToken,
@@ -216,8 +216,14 @@ const getCreatorOverview = async (authorization, dependencies = {}) => {
       accessToken,
       fetchImpl,
     }),
+    searchTargetCollaborations({
+      authorization,
+      accessToken,
+      pageSize: config.pageSize,
+    }, { fetchImpl }),
   ]);
   const showcaseData = showcasePayload.data || {};
+  const collaborationsData = collaborationsPayload || {};
   return {
     profile: profilePayload.data || {},
     showcase: {
@@ -225,6 +231,7 @@ const getCreatorOverview = async (authorization, dependencies = {}) => {
       nextPageToken: showcaseData.next_page_token || null,
       totalCount: Number(showcaseData.total_count || showcaseData.products?.length || 0),
     },
+    collaborations: Array.isArray(collaborationsData.collaborations) ? collaborationsData.collaborations : [],
   };
 };
 

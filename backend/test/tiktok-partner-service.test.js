@@ -98,6 +98,18 @@ test('getCreatorOverview combines profile and showcase for one creator', async (
       if (url.pathname.endsWith('/profiles')) {
         return { ok: true, status: 200, json: async () => ({ code: 0, data: { username: 'creator-name' } }) };
       }
+      if (url.pathname.endsWith('/target_collaborations/search')) {
+        assert.equal(url.searchParams.get('page_size'), '20');
+        assert.deepEqual(JSON.parse(options.body), { shop_id: 'shop-id' });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 0,
+            data: { total_count: 1, target_collaborations: [{ id: 'collaboration-1', products: [{ id: 'product-1' }] }] },
+          }),
+        };
+      }
       assert.equal(url.searchParams.get('origin'), 'SHOWCASE');
       return {
         ok: true,
@@ -109,4 +121,5 @@ test('getCreatorOverview combines profile and showcase for one creator', async (
   assert.equal(result.profile.username, 'creator-name');
   assert.equal(result.showcase.totalCount, 1);
   assert.equal(result.showcase.products[0].id, 'product-1');
+  assert.equal(result.collaborations[0].id, 'collaboration-1');
 });
