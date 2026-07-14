@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   createRole, createUser, deleteRole, deleteUser, fetchRoles, fetchUsers, updateRole, updateUser,
 } from '../lib/api';
@@ -597,14 +598,13 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         </div>
       ) : null}
 
-      {isRoleManagerOpen ? (
+      {isRoleManagerOpen ? createPortal((
         <div className="modal-backdrop employee-table__role-backdrop" role="presentation" onClick={(event) => {
           if (event.target === event.currentTarget) setIsRoleManagerOpen(false);
         }}>
           <div className="modal-card employee-table__role-modal" role="dialog" aria-modal="true" aria-labelledby="role-manager-title">
             <div className="employee-table__modal-header employee-table__modal-header--roles">
               <div>
-                <span className="employee-table__modal-eyebrow">Phân quyền</span>
                 <h2 id="role-manager-title" className="section-card__title">Quản lý vai trò</h2>
               </div>
               <button className="employee-table__modal-close" type="button" onClick={() => setIsRoleManagerOpen(false)} aria-label="Đóng">×</button>
@@ -623,7 +623,10 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                   <div className={`employee-table__role-item${editingRoleKey === role.key ? ' is-active' : ''}`} key={role.key}>
                     <button type="button" className="employee-table__role-edit" onClick={() => editRole(role)}>
                       <span>
-                        <span className="employee-table__role-name"><strong>{role.label}</strong><em>{role.is_system ? 'Hệ thống' : 'Tùy chỉnh'}</em></span>
+                        <span className="employee-table__role-name">
+                          <strong>{role.label}</strong>
+                          {!role.is_system ? <em>Tùy chỉnh</em> : null}
+                        </span>
                       </span>
                       <span>{role.user_count || 0} người</span>
                     </button>
@@ -637,9 +640,9 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
 
               <form className="employee-table__role-form" onSubmit={handleRoleSubmit}>
                 <div className="field">
-                  <label htmlFor="role-label">Tên hiển thị</label>
                   <input
                     id="role-label"
+                    aria-label="Tên vai trò"
                     value={roleForm.label}
                     required
                     onChange={(event) => setRoleForm((current) => ({
@@ -658,7 +661,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
             </div>
           </div>
         </div>
-      ) : null}
+      ), document.body) : null}
     </div>
   );
 };
