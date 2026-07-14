@@ -207,6 +207,7 @@ const Header = () => {
               key={item.to}
               to={item.to}
               className={`topbar__nav-link${isTopNavActive(item.to) ? ' topbar__nav-link--active' : ''}`}
+              aria-current={isTopNavActive(item.to) ? 'page' : undefined}
             >
               {navLabels[item.to] || item.label}
             </Link>

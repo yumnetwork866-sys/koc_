@@ -6,7 +6,7 @@ const LegalPage = ({ title, updatedAt, children }) => {
   const { t } = useI18n();
 
   return (
-    <div className="page legal-page">
+    <main className="page legal-page">
       <section className="page__hero legal-page__hero">
         <div className="legal-page__hero-row">
           <h1 className="page__title legal-page__title">{title}</h1>
@@ -24,7 +24,7 @@ const LegalPage = ({ title, updatedAt, children }) => {
       <section className="section-card legal-page__card">
         <div className="legal-page__content">{children}</div>
       </section>
-    </div>
+    </main>
   );
 };
 

@@ -43,7 +43,7 @@ const HomePage = () => {
   }));
 
   return (
-    <div className="page home-page">
+    <main className="page home-page">
       <section className="page__hero home-page__hero" id="overview">
         <div className="home-page__hero-copy">
           <h1 className="page__title">{t('home.heroTitle')}</h1>
@@ -185,7 +185,7 @@ const HomePage = () => {
         <Link to="/privacy">Privacy Policy</Link>
         <Link to="/data-deletion">Data Deletion</Link>
       </section>
-    </div>
+    </main>
   );
 };
 

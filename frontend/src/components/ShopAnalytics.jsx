@@ -18,7 +18,20 @@ import {
 import { useI18n } from '../lib/language';
 
 const REQUIRED_SCOPE = 'data.shop_analytics.public.read';
-const SOURCE_COLORS = ['#2563eb', '#7c3aed', '#0f766e', '#d97706', '#db2777'];
+const SOURCE_COLORS = [
+  'var(--color-social-cyan-strong)',
+  'var(--color-social-magenta)',
+  'var(--color-primary)',
+  'var(--color-warning)',
+  'var(--color-success)',
+];
+const CHART_TOOLTIP_STYLE = {
+  borderRadius: 8,
+  border: '1px solid #e2e8f0',
+  boxShadow: '0 18px 40px -12px rgba(15, 23, 42, 0.24)',
+  color: '#0f172a',
+};
+const CHART_TICK = { fill: '#64748b', fontSize: 12 };
 
 const ICON_PATHS = {
   shop: ['M4 9h16', 'M5 9l1-5h12l1 5', 'M6 9v11h12V9', 'M9 20v-6h6v6'],
@@ -681,16 +694,17 @@ const ShopAnalytics = () => {
                         <AreaChart data={chartData} margin={{ top: 12, right: 12, bottom: 4, left: 4 }}>
                           <defs>
                             <linearGradient id="shopAnalyticsArea" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="var(--color-accent)" stopOpacity={0.28} />
-                              <stop offset="100%" stopColor="var(--color-accent)" stopOpacity={0.02} />
+                              <stop offset="0%" stopColor="var(--color-social-cyan-strong)" stopOpacity={0.28} />
+                              <stop offset="100%" stopColor="var(--color-social-cyan-strong)" stopOpacity={0.02} />
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(148, 163, 184, 0.25)" />
+                          <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#e2e8f0" />
                           <XAxis
                             dataKey="date"
                             axisLine={false}
                             tickLine={false}
                             minTickGap={26}
+                            tick={CHART_TICK}
                             tickFormatter={(value) => new Intl.DateTimeFormat(locale, {
                               month: 'short',
                               day: 'numeric',
@@ -700,6 +714,7 @@ const ShopAnalytics = () => {
                             width={64}
                             axisLine={false}
                             tickLine={false}
+                            tick={CHART_TICK}
                             tickFormatter={(value) => Intl.NumberFormat(locale, { notation: 'compact' }).format(value)}
                           />
                           <Tooltip
@@ -708,16 +723,12 @@ const ShopAnalytics = () => {
                               chartMetric === 'gmv' ? formatMoney(value) : formatNumber(value),
                               chartLabel,
                             ]}
-                            contentStyle={{
-                              borderRadius: 10,
-                              border: '1px solid rgba(15, 23, 42, 0.1)',
-                              boxShadow: '0 12px 28px rgba(15, 23, 42, 0.12)',
-                            }}
+                            contentStyle={CHART_TOOLTIP_STYLE}
                           />
                           <Area
                             type="monotone"
                             dataKey={chartMetric}
-                            stroke="var(--color-accent)"
+                            stroke="var(--color-social-cyan-strong)"
                             strokeWidth={3}
                             fill="url(#shopAnalyticsArea)"
                             dot={false}

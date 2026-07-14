@@ -11,6 +11,15 @@ import {
 import { fetchKpis } from '../lib/api';
 import { useI18n } from '../lib/language';
 
+const chartTooltipStyle = {
+  borderRadius: '8px',
+  border: '1px solid #e2e8f0',
+  boxShadow: '0 18px 40px -12px rgba(15, 23, 42, 0.24)',
+  color: '#0f172a',
+};
+
+const chartTick = { fill: '#64748b', fontSize: 12 };
+
 const Dashboard = ({ heroTitle, heroSubtitle }) => {
   const { t, language } = useI18n();
   const [kpis, setKpis] = useState(null);
@@ -129,21 +138,21 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
             <div>{t('dashboard.loadingKpi')}</div>
           </div>
       ) : chartData.length ? (
-          <div className="dashboard-chart">
+          <div
+            className="dashboard-chart"
+            role="img"
+            aria-label={`${t('dashboard.kpiByUser')}. ${chartData.map((item) => `${item.name}: ${formatNumber(item.views)}`).join('; ')}`}
+          >
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} barSize={36}>
-                <CartesianGrid strokeDasharray="4 4" stroke="rgba(148,163,184,0.25)" />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
+                <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={chartTick} />
+                <YAxis tickLine={false} axisLine={false} allowDecimals={false} tick={chartTick} />
                 <Tooltip
-                  cursor={{ fill: 'rgba(20, 184, 166, 0.08)' }}
-                  contentStyle={{
-                    borderRadius: '8px',
-                    border: '1px solid rgba(15, 23, 42, 0.08)',
-                    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.12)',
-                  }}
+                  cursor={{ fill: 'rgba(0, 242, 234, 0.08)' }}
+                  contentStyle={chartTooltipStyle}
                 />
-                <Bar dataKey="views" fill="#14b8a6" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="views" fill="var(--color-social-cyan-strong)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -5,6 +5,7 @@ import RootLayout from './layouts/RootLayout';
 import ProtectedLayout from './layouts/ProtectedLayout';
 import { protectedRedirectConfig, protectedRouteConfig, publicRouteConfig } from './routes/appRouteConfig';
 import './App.css';
+import './design-system.css';
 
 const renderRoutes = (routeConfig) => routeConfig.map((route) => (
   <Route key={route.path} path={route.path} element={route.element} />
