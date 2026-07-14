@@ -27,9 +27,6 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: false,
     defaultValue: 'member',
-    validate: {
-      isIn: [['admin', 'leader', 'member', 'koc']],
-    },
   },
 }, {
   tableName: 'users',
@@ -37,6 +34,31 @@ const User = sequelize.define('User', {
   defaultScope: {
     attributes: { exclude: ['password_hash'] },
   },
+});
+
+const Role = sequelize.define('Role', {
+  key: {
+    type: DataTypes.STRING(64),
+    primaryKey: true,
+  },
+  label: {
+    type: DataTypes.STRING(100),
+    allowNull: false,
+  },
+  description: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  is_system: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  },
+  created_at: DataTypes.DATE,
+  updated_at: DataTypes.DATE,
+}, {
+  tableName: 'roles',
+  timestamps: false,
 });
 
 const Booking = sequelize.define('Booking', {
@@ -763,6 +785,7 @@ ChatbotOrder.belongsTo(FacebookPage, { foreignKey: 'page_id', as: 'page' });
 
 module.exports = {
   User,
+  Role,
   Booking,
   TikTokPartnerAuthorization,
   TikTokShopAuthorization,

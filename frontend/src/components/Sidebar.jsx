@@ -1,5 +1,7 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { isAdminSession } from '../lib/session';
+import { useSession } from '../lib/useSession';
 import { sidebarSections } from '../routes/navigation';
 
 const sidebarIcons = {
@@ -93,30 +95,54 @@ const SidebarIcon = ({ name }) => {
   );
 };
 
-const Sidebar = () => {
+const CollapseIcon = ({ isCollapsed }) => (
+  <svg className="sidebar__toggle-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d={isCollapsed ? 'm9 6 6 6-6 6' : 'm15 6-6 6 6 6'} />
+  </svg>
+);
+
+const Sidebar = ({ isCollapsed, onToggle }) => {
   const location = useLocation();
+  const session = useSession();
   const isFacebookArea = location.pathname.startsWith('/chatbot');
+  const adminVisible = isAdminSession(session);
   const visibleSections = isFacebookArea
     ? sidebarSections.filter((section) => section.title === 'Facebook')
     : sidebarSections.filter((section) => section.title === 'TikTok');
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${isCollapsed ? ' sidebar--collapsed' : ''}`}>
+      <div className="sidebar__header">
+        <span className="sidebar__header-label">Điều hướng</span>
+        <button
+          type="button"
+          className="sidebar__toggle"
+          onClick={onToggle}
+          aria-label={isCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+          aria-expanded={!isCollapsed}
+          title={isCollapsed ? 'Mở rộng' : 'Thu gọn'}
+        >
+          <CollapseIcon isCollapsed={isCollapsed} />
+        </button>
+      </div>
       <nav className="sidebar__nav" aria-label="Workspace">
         {visibleSections.map((section) => (
           <div className="sidebar__section" key={section.title}>
             <p className="sidebar__section-title">{section.title}</p>
             <div className="sidebar__section-links">
-              {section.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
-                >
-                  <SidebarIcon name={routeIconMap[item.to]} />
-                  <span className="sidebar__link-label">{item.label}</span>
-                </NavLink>
-              ))}
+              {section.items
+                .filter((item) => adminVisible || !item.adminOnly)
+                .map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+                    title={isCollapsed ? item.label : undefined}
+                  >
+                    <SidebarIcon name={routeIconMap[item.to]} />
+                    <span className="sidebar__link-label">{item.label}</span>
+                  </NavLink>
+                ))}
             </div>
           </div>
         ))}

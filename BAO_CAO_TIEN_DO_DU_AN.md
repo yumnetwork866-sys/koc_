@@ -1,6 +1,6 @@
 # BÁO CÁO TIẾN ĐỘ DỰ ÁN CONTENT PERFORMANCE & SOCIAL COMMERCE
 
-**Ngày báo cáo:** 11/07/2026  
+**Ngày báo cáo:** 14/07/2026  
 **Phạm vi:** Toàn bộ hệ thống frontend, backend, database và các tích hợp TikTok/Facebook hiện có  
 **Trạng thái tổng quan:** MVP đã vận hành được các luồng nghiệp vụ chính; một số API nâng cao và hạng mục production-hardening cần tiếp tục hoàn thiện.
 
@@ -256,3 +256,26 @@ Hệ thống đã đủ nền tảng để tiếp tục pilot nội bộ. Tuy nh
 Dự án đã hoàn thành phần lớn nền tảng quản trị nội dung, KPI, booking, TikTok channel, TikTok Shop Creator và Facebook Chatbot. Kiến trúc OAuth đa Creator và lưu token mã hóa trong database là nền tảng phù hợp để mở rộng lên nhiều KOC.
 
 Khoảng trống lớn nhất hiện tại không nằm ở CRUD cơ bản mà nằm ở dữ liệu thương mại nâng cao, độ ổn định production và tự động hóa. Nếu hoàn thành Seller OAuth, Shop Analytics, affiliate order và monitoring, hệ thống có thể chuyển từ công cụ quản lý nội bộ sang nền tảng theo dõi hiệu quả social commerce đầy đủ hơn.
+
+## 8. Đánh giá ngắn theo trạng thái hiện tại
+
+### Điểm mạnh
+
+- Kiến trúc hiện tại đã đủ để vận hành nội bộ: React/Vite, Express, PostgreSQL, phân quyền cơ bản và OAuth cho cả TikTok Creator lẫn TikTok Shop.
+- Luồng dữ liệu chính đã rõ: video, KPI, booking, KOC Performance, Shop Analytics, Facebook chatbot.
+- Token nhạy cảm đã được mã hóa, có migration/versioning và đã có test tự động ở cả backend lẫn build frontend.
+
+### Phần chưa đạt mức production-ready
+
+- Shop Analytics vẫn phụ thuộc Seller OAuth riêng; đây là khoảng trống lớn nhất nếu muốn đi vào số liệu commerce thật sự.
+- Chưa có monitoring/alert/audit log đủ rõ để xử lý sự cố production và truy vết thao tác admin.
+- Frontend còn rủi ro khi deploy theo chunk/cache nếu không có chiến lược atomic deploy hoặc cơ chế reload/retry.
+- Một số luồng nâng cao mới dừng ở mức nền tảng: webhook validation, affiliate order, live data, tracking link, workflow booking nhiều bước.
+
+### Nên cải thiện tiếp
+
+- Ưu tiên 1: ổn định deploy frontend, thêm Error Boundary, retry chunk load và giám sát lỗi.
+- Ưu tiên 2: hoàn thiện Seller OAuth + Shop Analytics để có GMV/order/conversion thật.
+- Ưu tiên 3: nối dữ liệu affiliate order, booking và performance để đo hiệu quả KOC end-to-end.
+- Ưu tiên 4: chuẩn hóa webhook, audit log, rate limit và validation để giảm rủi ro vận hành.
+- Ưu tiên 5: mở rộng automation cho báo cáo tuần, cảnh báo deadline và đồng bộ nền định kỳ.

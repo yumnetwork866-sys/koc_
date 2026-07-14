@@ -1,6 +1,6 @@
 import React, { lazy } from 'react';
 import { Navigate } from 'react-router-dom';
-import { LoginRoute } from './guards';
+import { LoginRoute, RequireAdmin } from './guards';
 import { protectedRouteCards, redirectRoutes } from './navigation';
 
 const ChannelManagement = lazy(() => import('../components/ChannelManagement'));
@@ -45,9 +45,15 @@ export const publicRouteConfig = [
   { path: '/data-deletion', element: <DataDeletionPage /> },
 ];
 
-export const protectedRouteConfig = protectedRouteCards.map(({ path, component, props }) => ({
+export const protectedRouteConfig = protectedRouteCards.map(({ path, component, props, adminOnly }) => ({
   path,
-  element: React.createElement(componentMap[component], props),
+  element: adminOnly
+    ? (
+      <RequireAdmin>
+        {React.createElement(componentMap[component], props)}
+      </RequireAdmin>
+    )
+    : React.createElement(componentMap[component], props),
 }));
 
 export const protectedRedirectConfig = redirectRoutes.map(({ path, to }) => ({

@@ -3,8 +3,10 @@ import test from 'node:test';
 import {
   clearStoredSession,
   clearStoredSessionIfTokenMatches,
+  getSessionRole,
   getSessionSnapshot,
   getStoredSession,
+  isAdminSession,
   saveStoredSession,
   subscribeSession,
 } from '../src/lib/session.js';
@@ -182,4 +184,21 @@ test('non-admin sessions are still treated as valid app sessions', async () => {
     assert.equal(getStoredSession()?.token, session.token);
     assert.equal(getSessionSnapshot() !== null, true);
   });
+});
+
+test('session role helpers identify admin sessions', async () => {
+  const adminSession = {
+    token: 'token.admin',
+    user: { id: 'admin', role: 'admin' },
+  };
+  const legacySession = {
+    token: 'token.member',
+    role: 'member',
+  };
+
+  assert.equal(getSessionRole(adminSession), 'admin');
+  assert.equal(isAdminSession(adminSession), true);
+  assert.equal(getSessionRole(legacySession), 'member');
+  assert.equal(isAdminSession(legacySession), false);
+  assert.equal(getSessionRole(null), null);
 });

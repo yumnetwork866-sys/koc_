@@ -25,6 +25,7 @@ const migrations = [
   require('./015_create_tiktok_partner_sync_logs'),
   require('./016_add_unique_video_daily_stats'),
   require('./017_create_tiktok_shop_analytics'),
+  require('./018_create_roles'),
 ];
 
 const createMigrationRunner = ({

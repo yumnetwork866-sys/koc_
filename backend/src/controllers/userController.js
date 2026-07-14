@@ -1,7 +1,8 @@
-const { User } = require('../models');
+const { User, Role } = require('../models');
 const { hashPassword } = require('../lib/password');
 const MIN_PASSWORD_LENGTH = 8;
-const ALLOWED_ROLES = new Set(['admin', 'leader', 'member', 'koc']);
+
+const roleExists = async (role) => Boolean(await Role.findByPk(role));
 
 const serializeUser = (user) => {
   const safeUser = user.get({ plain: true });
@@ -43,7 +44,7 @@ const createUser = async (req, res) => {
       return res.status(400).json({ message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     }
 
-    if (role && !ALLOWED_ROLES.has(role)) {
+    if (role && !(await roleExists(role))) {
       return res.status(400).json({ message: 'Invalid role' });
     }
 
@@ -62,24 +63,42 @@ const createUser = async (req, res) => {
 // Update user
 const updateUser = async (req, res) => {
   try {
-    if (req.body.role && !ALLOWED_ROLES.has(req.body.role)) {
+    if (req.body.role && !(await roleExists(req.body.role))) {
       return res.status(400).json({ message: 'Invalid role' });
     }
 
-    const payload = {
-      name: req.body.name,
-      email: req.body.email,
-      role: req.body.role,
-    };
+    const payload = {};
+
+    if (typeof req.body.name === 'string' && req.body.name.trim()) {
+      payload.name = req.body.name.trim();
+    }
+
+    if (typeof req.body.email === 'string' && req.body.email.trim()) {
+      payload.email = req.body.email.trim();
+    }
+
+    if (typeof req.body.role === 'string' && req.body.role.trim()) {
+      payload.role = req.body.role.trim();
+    }
+
+    if (typeof req.body.password === 'string' && req.body.password.trim()) {
+      if (req.body.password.length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({ message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+      }
+      payload.password_hash = await hashPassword(req.body.password);
+    }
+
+    if (!Object.keys(payload).length) {
+      return res.status(400).json({ message: 'No update fields provided' });
+    }
 
     const [updated] = await User.update(payload, {
       where: { id: req.params.id },
-      individualHooks: true,
       validate: true,
     });
     if (updated) {
       const updatedUser = await User.findByPk(req.params.id);
-      res.json(updatedUser);
+      res.json(serializeUser(updatedUser));
     } else {
       res.status(404).json({ message: 'User not found' });
     }

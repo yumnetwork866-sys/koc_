@@ -60,6 +60,10 @@ export function fetchUsers(signal) {
   return apiRequest('/users', { signal });
 }
 
+export function fetchRoles(signal) {
+  return apiRequest('/roles', { signal });
+}
+
 export function fetchBookings(signal) {
   return apiRequest('/bookings', { signal });
 }
@@ -186,6 +190,18 @@ export function createUser(payload) {
     method: 'POST',
     body: payload,
   });
+}
+
+export function createRole(payload) {
+  return apiRequest('/roles', { method: 'POST', body: payload });
+}
+
+export function updateRole(roleKey, payload) {
+  return apiRequest(`/roles/${encodeURIComponent(roleKey)}`, { method: 'PUT', body: payload });
+}
+
+export function deleteRole(roleKey) {
+  return apiRequest(`/roles/${encodeURIComponent(roleKey)}`, { method: 'DELETE' });
 }
 
 export function createBooking(payload) {

@@ -37,8 +37,8 @@
   --shadow-sm: 0 6px 18px rgba(15, 23, 42, 0.07);
   --shadow-md: 0 12px 28px rgba(15, 23, 42, 0.1);
   --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.18);
-  --layout-max-width: 1480px;
-  --sidebar-width: 248px;
+  --layout-max-width: none;
+  --sidebar-width: 280px;
   --control-height: 42px;
   --transition-fast: 160ms ease;
 

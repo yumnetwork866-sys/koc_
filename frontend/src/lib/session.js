@@ -154,6 +154,18 @@ export function hasValidSession() {
   return Boolean(getSessionSnapshot());
 }
 
+export function getSessionRole(session) {
+  return typeof session?.user?.role === 'string'
+    ? session.user.role
+    : typeof session?.role === 'string'
+      ? session.role
+      : null;
+}
+
+export function isAdminSession(session) {
+  return getSessionRole(session) === 'admin';
+}
+
 export function getStoredFacebookChatbotToken() {
   return readStorage(FB_CHATBOT_TOKEN_STORAGE_KEY) || null;
 }

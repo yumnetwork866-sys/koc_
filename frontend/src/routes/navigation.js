@@ -8,7 +8,7 @@ export const sidebarSections = [
     title: 'TikTok',
     items: [
       { to: '/dashboard', label: 'Dashboard' },
-      { to: '/manage/users', label: 'Users' },
+      { to: '/manage/users', label: 'Users', adminOnly: true },
       { to: '/manage/koc-performance', label: 'KOC performance' },
       { to: '/manage/shop-analytics', label: 'Shop analytics' },
       { to: '/bookings', label: 'Bookings' },
@@ -40,6 +40,7 @@ export const protectedRouteCards = [
   {
     path: '/manage/users',
     component: 'EmployeeTable',
+    adminOnly: true,
     props: {
       heroTitle: 'User management',
       heroSubtitle: '',
