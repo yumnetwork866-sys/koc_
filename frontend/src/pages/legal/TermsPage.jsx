@@ -4,7 +4,7 @@ import { TermsContent } from './legalContent';
 
 const TermsPage = () => {
   return (
-    <LegalPage title="Terms of Service" updatedAt="July 1, 2026">
+    <LegalPage title="Yumnetwork Terms of Service" updatedAt="July 1, 2026">
       <TermsContent />
     </LegalPage>
   );

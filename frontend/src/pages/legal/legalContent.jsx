@@ -4,7 +4,7 @@ import { privacyContactEmail } from '../../lib/legal';
 export const TermsContent = () => (
   <>
     <p>
-      These Terms govern access to YUM Network, including its public website and authorized
+      These Terms govern access to Yumnetwork, including its public website and authorized
       reporting workspace. By using the service, you agree to these Terms, our Privacy Policy, and the applicable
       terms of any third-party platforms you choose to connect.
     </p>
@@ -44,7 +44,7 @@ export const TermsContent = () => (
 export const PrivacyContent = () => (
   <>
     <p>
-      This Privacy Policy explains how YUM Network collects, uses, retains, and deletes information
+      This Privacy Policy explains how Yumnetwork collects, uses, retains, and deletes information
       when you use our website, private workspace, and any supported platform connection.
     </p>
     <h2>Information we collect</h2>
@@ -96,7 +96,7 @@ export const PrivacyContent = () => (
 export const DataDeletionContent = () => (
   <>
     <p>
-      This page explains how to request deletion of personal data associated with YUM Network and
+      This page explains how to request deletion of personal data associated with Yumnetwork and
       connected platform accounts.
     </p>
     <h2>How to request deletion</h2>

@@ -1,9 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import AppLogo from './AppLogo';
 import { useI18n } from '../lib/language';
 
 const LegalPage = ({ title, updatedAt, children }) => {
   const { t } = useI18n();
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = title;
+
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [title]);
 
   return (
     <main className="page legal-page">
