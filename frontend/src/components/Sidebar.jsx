@@ -101,9 +101,14 @@ const CollapseIcon = ({ isCollapsed }) => (
   </svg>
 );
 
-const PlatformIcon = ({ facebook }) => (
+const PlatformIcon = ({ type }) => (
   <svg className="sidebar__platform-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    {facebook ? (
+    {type === 'admin' ? (
+      <>
+        <circle cx="12" cy="8" r="3.5" />
+        <path d="M5.5 20c.4-4.2 2.6-6.3 6.5-6.3s6.1 2.1 6.5 6.3h-13Z" />
+      </>
+    ) : type === 'facebook' ? (
       <path d="M14 21v-8h2.8l.4-3H14V8.1c0-.9.3-1.6 1.7-1.6h1.8V3.8c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5V10H7.6v3h2.9v8H14Z" />
     ) : (
       <>
@@ -117,18 +122,18 @@ const PlatformIcon = ({ facebook }) => (
 const Sidebar = ({ isCollapsed, onToggle }) => {
   const location = useLocation();
   const session = useSession();
+  const isAdminArea = location.pathname.startsWith('/manage/users') || location.pathname.startsWith('/chatbot/chat-setting');
   const isFacebookArea = location.pathname.startsWith('/chatbot');
   const adminVisible = isAdminSession(session);
-  const visibleSections = isFacebookArea
-    ? sidebarSections.filter((section) => section.title === 'Facebook')
-    : sidebarSections.filter((section) => section.title === 'TikTok');
+  const activeSectionTitle = isAdminArea ? 'Admin' : isFacebookArea ? 'Facebook' : 'TikTok';
+  const visibleSections = sidebarSections.filter((section) => section.title === activeSectionTitle);
 
   return (
     <aside className={`sidebar${isCollapsed ? ' sidebar--collapsed' : ''}`}>
       <div className="sidebar__header">
         <span className="sidebar__header-label">
-          <PlatformIcon facebook={isFacebookArea} />
-          {isFacebookArea ? 'Facebook' : 'TikTok'}
+          <PlatformIcon type={isAdminArea ? 'admin' : isFacebookArea ? 'facebook' : 'tiktok'} />
+          {activeSectionTitle}
         </span>
         <button
           type="button"

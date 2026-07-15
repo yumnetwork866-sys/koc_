@@ -9,7 +9,6 @@ export const sidebarSections = [
     title: 'TikTok',
     items: [
       { to: '/dashboard', label: 'Dashboard' },
-      { to: '/manage/users', label: 'Users', adminOnly: true },
       { to: '/manage/koc-performance', label: 'KOC performance' },
       { to: '/manage/shop-analytics', label: 'Shop analytics' },
       { to: '/bookings', label: 'Bookings' },
@@ -23,8 +22,14 @@ export const sidebarSections = [
     items: [
       { to: '/chatbot/dashboard', label: 'Dashboard' },
       { to: '/chatbot/chat', label: 'Chat' },
-      { to: '/chatbot/chat-setting', label: 'Chat setting' },
       { to: '/chatbot/orders', label: 'Đơn hàng' },
+    ],
+  },
+  {
+    title: 'Admin',
+    items: [
+      { to: '/manage/users', label: 'Users', adminOnly: true },
+      { to: '/chatbot/chat-setting', label: 'Chat setting', adminOnly: true },
     ],
   },
 ];

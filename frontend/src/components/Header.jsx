@@ -127,8 +127,12 @@ const Header = () => {
     { id: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta') },
   ];
   const isTopNavActive = (to) => {
-    if (to === '/manage/users') return location.pathname.startsWith('/manage/users');
-    if (to === '/chatbot') return location.pathname.startsWith('/chatbot');
+    if (to === '/manage/users') {
+      return location.pathname.startsWith('/manage/users') || location.pathname.startsWith('/chatbot/chat-setting');
+    }
+    if (to === '/chatbot') {
+      return location.pathname.startsWith('/chatbot') && !location.pathname.startsWith('/chatbot/chat-setting');
+    }
     if (to === '/dashboard') {
       return [
         '/dashboard',
