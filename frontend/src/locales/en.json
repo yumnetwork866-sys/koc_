@@ -17,6 +17,7 @@
     "admin": "Administrator",
     "connect": "Connect",
     "connections": "Connect platform",
+    "connectionsMeta": "Choose a data source to link",
     "connectTikTok": "TikTok Channel",
     "connectTikTokMeta": "Sync a TikTok channel and its videos",
     "connectTikTokCreator": "TikTok Creator",

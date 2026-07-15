@@ -1,6 +1,7 @@
 export const topNavItems = [
   { to: '/dashboard', label: 'TikTok' },
   { to: '/chatbot', label: 'Facebook' },
+  { to: '/manage/users', label: 'Admin', adminOnly: true },
 ];
 
 export const sidebarSections = [

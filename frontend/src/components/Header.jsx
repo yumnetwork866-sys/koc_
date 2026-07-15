@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AppLogo from './AppLogo';
 import { getFacebookOauthUrl, getTikTokOauthUrl, startTikTokPartnerOauth, startTikTokShopOauth } from '../lib/api';
-import { clearStoredSession } from '../lib/session';
+import { clearStoredSession, isAdminSession } from '../lib/session';
 import { useSession } from '../lib/useSession';
 import { useI18n } from '../lib/language';
 import { topNavItems } from '../routes/navigation';
@@ -46,9 +46,11 @@ const Header = () => {
   const location = useLocation();
   const session = useSession();
   const hasSession = Boolean(session);
+  const isAdmin = isAdminSession(session);
   const [activeMenu, setActiveMenu] = useState(null);
   const [connectingTarget, setConnectingTarget] = useState(null);
   const [connectionError, setConnectionError] = useState('');
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const accountRootRef = useRef(null);
   const accountTriggerRef = useRef(null);
   const connectRootRef = useRef(null);
@@ -64,6 +66,12 @@ const Header = () => {
     .map((word) => word[0] || '')
     .join('')
     .toUpperCase() || 'A';
+  const avatarSeed = String(session?.user?.id || session?.user?.email || userName);
+  const avatarUrl = `https://api.dicebear.com/10.x/lorelei-neutral/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=e6f7f5`;
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [avatarUrl]);
 
   useEffect(() => {
     if (!activeMenu) return undefined;
@@ -119,11 +127,13 @@ const Header = () => {
     { id: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta') },
   ];
   const isTopNavActive = (to) => {
+    if (to === '/manage/users') return location.pathname.startsWith('/manage/users');
     if (to === '/chatbot') return location.pathname.startsWith('/chatbot');
     if (to === '/dashboard') {
       return [
         '/dashboard',
-        '/manage',
+        '/manage/koc-performance',
+        '/manage/shop-analytics',
         '/bookings',
         '/videos',
         '/reports',
@@ -131,7 +141,6 @@ const Header = () => {
     }
     return location.pathname.startsWith(to);
   };
-
   const focusConnectionItem = (position) => {
     window.requestAnimationFrame(() => {
       const items = Array.from(connectMenuRef.current?.querySelectorAll('[role="menuitem"]:not(:disabled)') || []);
@@ -202,7 +211,7 @@ const Header = () => {
         </Link>
 
         <nav className="topbar__nav" aria-label="Primary">
-          {topNavItems.map((item) => (
+          {topNavItems.filter((item) => !item.adminOnly || isAdmin).map((item) => (
             <Link
               key={item.to}
               to={item.to}
@@ -229,7 +238,6 @@ const Header = () => {
                   onKeyDown={handleConnectTriggerKeyDown}
                 >
                   <span>{t('header.connect')}</span>
-                  <span className="topbar__connect-chevron" aria-hidden="true">⌄</span>
                 </button>
                 {activeMenu === 'connect' ? (
                   <div
@@ -243,6 +251,7 @@ const Header = () => {
                   >
                     <div className="topbar__connect-head">
                       <strong>{t('header.connections')}</strong>
+                      <span>{t('header.connectionsMeta')}</span>
                     </div>
                     {connectionOptions.map((option) => (
                       <button
@@ -274,7 +283,16 @@ const Header = () => {
                 aria-expanded={activeMenu === 'account'}
                 onClick={() => setActiveMenu((current) => current === 'account' ? null : 'account')}
               >
-                <span className="topbar__avatar">{avatarText}</span>
+                <span className="topbar__avatar">
+                  {avatarLoadFailed ? avatarText : (
+                    <img
+                      src={avatarUrl}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                      onError={() => setAvatarLoadFailed(true)}
+                    />
+                  )}
+                </span>
               </button>
               {activeMenu === 'account' ? (
                 <div className="topbar__account-menu" role="menu" aria-label="Account menu">

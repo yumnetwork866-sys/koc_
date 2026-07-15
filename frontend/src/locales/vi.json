@@ -17,6 +17,7 @@
     "admin": "Quản trị viên",
     "connect": "Kết nối",
     "connections": "Kết nối nền tảng",
+    "connectionsMeta": "Chọn nguồn dữ liệu bạn muốn liên kết",
     "connectTikTok": "TikTok Channel",
     "connectTikTokMeta": "Đồng bộ kênh và video TikTok",
     "connectTikTokCreator": "TikTok Creator",

@@ -101,6 +101,19 @@ const CollapseIcon = ({ isCollapsed }) => (
   </svg>
 );
 
+const PlatformIcon = ({ facebook }) => (
+  <svg className="sidebar__platform-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    {facebook ? (
+      <path d="M14 21v-8h2.8l.4-3H14V8.1c0-.9.3-1.6 1.7-1.6h1.8V3.8c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5V10H7.6v3h2.9v8H14Z" />
+    ) : (
+      <>
+        <path d="M13.2 3v10.1a3.2 3.2 0 1 1-2.5-3.1v3a1.3 1.3 0 1 0 .6 1.1V3h1.9Z" />
+        <path d="M13.2 3c.4 2.1 1.7 3.5 4 4v2.5a7.3 7.3 0 0 1-4-1.8V3Z" />
+      </>
+    )}
+  </svg>
+);
+
 const Sidebar = ({ isCollapsed, onToggle }) => {
   const location = useLocation();
   const session = useSession();
@@ -113,7 +126,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
   return (
     <aside className={`sidebar${isCollapsed ? ' sidebar--collapsed' : ''}`}>
       <div className="sidebar__header">
-        <span className="sidebar__header-label">Điều hướng</span>
+        <span className="sidebar__header-label">
+          <PlatformIcon facebook={isFacebookArea} />
+          {isFacebookArea ? 'Facebook' : 'TikTok'}
+        </span>
         <button
           type="button"
           className="sidebar__toggle"
@@ -128,7 +144,6 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
       <nav className="sidebar__nav" aria-label="Workspace">
         {visibleSections.map((section) => (
           <div className="sidebar__section" key={section.title}>
-            <p className="sidebar__section-title">{section.title}</p>
             <div className="sidebar__section-links">
               {section.items
                 .filter((item) => adminVisible || !item.adminOnly)
