@@ -26,6 +26,7 @@ const migrations = [
   require('./016_add_unique_video_daily_stats'),
   require('./017_create_tiktok_shop_analytics'),
   require('./018_create_roles'),
+  require('./019_add_user_avatar_url'),
 ];
 
 const createMigrationRunner = ({

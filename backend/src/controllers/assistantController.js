@@ -407,6 +407,107 @@ async function askAssistant(message) {
   };
 }
 
+async function readStreamLines(response, onLine) {
+  if (!response.body) throw new Error('Provider did not return a readable stream');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) onLine(line);
+    if (done) break;
+  }
+  if (buffer.trim()) onLine(buffer);
+}
+
+async function streamAssistantAnswer(message, onDelta) {
+  const snapshot = await getKpiSnapshot();
+  const runtime = await getRuntime();
+  const normalizedMessage = String(message || '').trim();
+  const systemPrompt = [
+    'Bạn là trợ lý phân tích dữ liệu nội bộ cho YUM Network.',
+    "Trả lời ngắn gọn, rõ ràng, lịch sự, xưng 'mình' gọi người dùng 'bạn'.",
+    'Ưu tiên số liệu, không bịa, nếu thiếu dữ liệu thì nói rõ.',
+    'Trình bày câu trả lời bằng markdown nhẹ khi phù hợp.',
+    'Không mở đầu câu trả lời bằng lời chào; đi thẳng vào nội dung.',
+  ].join(' ');
+  const userPrompt = buildPrompt(normalizedMessage, snapshot);
+  let receivedText = false;
+
+  if (runtime.provider === 'ollama') {
+    try {
+      const response = await fetch(`${runtime.ollamaHost.replace(/\/+$/, '')}/api/chat`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: runtime.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          stream: true,
+        }),
+      });
+      if (!response.ok) throw new Error(`Ollama returned ${response.status}`);
+      await readStreamLines(response, (line) => {
+        if (!line.trim()) return;
+        const event = JSON.parse(line);
+        const delta = event.message?.content || event.response || '';
+        if (delta) {
+          receivedText = true;
+          onDelta(delta);
+        }
+      });
+      if (receivedText) return;
+    } catch (error) {
+      console.error('Assistant Ollama stream error:', error.message);
+      if (receivedText) return;
+    }
+  }
+
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${runtime.model}:streamGenerateContent?alt=sse&key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+            generationConfig: { maxOutputTokens: 320, temperature: 0.5 },
+          }),
+        },
+      );
+      if (!response.ok) throw new Error(`Gemini returned ${response.status}`);
+      await readStreamLines(response, (line) => {
+        if (!line.startsWith('data:')) return;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') return;
+        const event = JSON.parse(payload);
+        const delta = event.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('') || '';
+        if (delta) {
+          receivedText = true;
+          onDelta(delta);
+        }
+      });
+      if (receivedText) return;
+    } catch (error) {
+      console.error('Assistant Gemini stream error:', error.message);
+      if (receivedText) return;
+    }
+  }
+
+  const fallback = fallbackAnswer(normalizedMessage, snapshot);
+  for (const delta of fallback.match(/.{1,18}(?:\s+|$)/gs) || [fallback]) {
+    onDelta(delta);
+    await new Promise((resolve) => setTimeout(resolve, 18));
+  }
+}
+
 async function chat(req, res) {
   const message = String(req.body?.message || '').trim();
   if (!message) {
@@ -420,6 +521,38 @@ async function chat(req, res) {
   }
 }
 
+async function chatStream(req, res) {
+  const message = String(req.body?.message || '').trim();
+  if (!message) {
+    return res.status(400).json({ message: 'message is required' });
+  }
+
+  res.status(200);
+  res.set({
+    'Content-Type': 'application/x-ndjson; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+
+  try {
+    await streamAssistantAnswer(message, (delta) => {
+      if (res.destroyed) return;
+      res.write(`${JSON.stringify({ type: 'delta', delta })}\n`);
+      if (typeof res.flush === 'function') res.flush();
+    });
+
+    if (res.destroyed) return undefined;
+    res.write(`${JSON.stringify({ type: 'done' })}\n`);
+    return res.end();
+  } catch (error) {
+    res.write(`${JSON.stringify({ type: 'error', message: error.message || 'Failed to generate assistant response' })}\n`);
+    return res.end();
+  }
+}
+
 module.exports = {
   chat,
+  chatStream,
 };

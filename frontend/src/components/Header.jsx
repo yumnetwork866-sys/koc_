@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AppLogo from './AppLogo';
-import { getFacebookOauthUrl, getTikTokOauthUrl, startTikTokPartnerOauth, startTikTokShopOauth } from '../lib/api';
-import { clearStoredSession, isAdminSession } from '../lib/session';
+import { getFacebookOauthUrl, getTikTokOauthUrl, startTikTokPartnerOauth, startTikTokShopOauth, updateUser } from '../lib/api';
+import { clearStoredSession, isAdminSession, saveStoredSession } from '../lib/session';
 import { useSession } from '../lib/useSession';
 import { useI18n } from '../lib/language';
 import { topNavItems } from '../routes/navigation';
@@ -41,6 +41,36 @@ const ConnectionIcon = ({ type }) => {
   );
 };
 
+const prepareAvatarImage = (file) => new Promise((resolve, reject) => {
+  if (!file?.type?.startsWith('image/')) {
+    reject(new Error('Please choose an image file'));
+    return;
+  }
+
+  const sourceUrl = URL.createObjectURL(file);
+  const image = new Image();
+  image.onload = () => {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+    const cropSize = Math.min(image.naturalWidth, image.naturalHeight);
+    const sourceX = (image.naturalWidth - cropSize) / 2;
+    const sourceY = (image.naturalHeight - cropSize) / 2;
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, size, size);
+    context.drawImage(image, sourceX, sourceY, cropSize, cropSize, 0, 0, size, size);
+    URL.revokeObjectURL(sourceUrl);
+    resolve(canvas.toDataURL('image/jpeg', 0.78));
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(sourceUrl);
+    reject(new Error('Unable to read this image'));
+  };
+  image.src = sourceUrl;
+});
+
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,6 +81,11 @@ const Header = () => {
   const [connectingTarget, setConnectingTarget] = useState(null);
   const [connectionError, setConnectionError] = useState('');
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
+  const [accountDialog, setAccountDialog] = useState(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [passwordForm, setPasswordForm] = useState({ password: '', confirmPassword: '' });
+  const [avatarPreview, setAvatarPreview] = useState('');
   const accountRootRef = useRef(null);
   const accountTriggerRef = useRef(null);
   const connectRootRef = useRef(null);
@@ -59,6 +94,8 @@ const Header = () => {
   const { t, language, setLanguage } = useI18n();
 
   const userName = String(session?.user?.name || session?.user?.email || 'Admin').trim();
+  const userEmail = String(session?.user?.email || '').trim();
+  const userRole = String(session?.user?.role || session?.role || '').trim();
   const avatarText = userName
     .split(/\s+/)
     .filter(Boolean)
@@ -67,7 +104,8 @@ const Header = () => {
     .join('')
     .toUpperCase() || 'A';
   const avatarSeed = String(session?.user?.id || session?.user?.email || userName);
-  const avatarUrl = `https://api.dicebear.com/10.x/lorelei-neutral/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=e6f7f5`;
+  const fallbackAvatarUrl = `https://api.dicebear.com/10.x/lorelei-neutral/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=e6f7f5`;
+  const avatarUrl = session?.user?.avatar_url || fallbackAvatarUrl;
 
   useEffect(() => {
     setAvatarLoadFailed(false);
@@ -121,10 +159,14 @@ const Header = () => {
   };
   const currentLanguage = language;
   const connectionOptions = [
-    { id: 'tiktok', label: t('header.connectTikTok'), meta: t('header.connectTikTokMeta') },
-    { id: 'creator', label: t('header.connectTikTokCreator'), meta: t('header.connectTikTokCreatorMeta') },
-    { id: 'shop', label: t('header.connectTikTokShop'), meta: t('header.connectTikTokShopMeta') },
-    { id: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta') },
+    { id: 'tiktok', group: 'tiktok', label: t('header.connectTikTok'), meta: t('header.connectTikTokMeta') },
+    { id: 'creator', group: 'tiktok', label: t('header.connectTikTokCreator'), meta: t('header.connectTikTokCreatorMeta') },
+    { id: 'shop', group: 'tiktok', label: t('header.connectTikTokShop'), meta: t('header.connectTikTokShopMeta') },
+    { id: 'facebook', group: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta') },
+  ];
+  const connectionGroups = [
+    { id: 'tiktok', label: 'TikTok' },
+    { id: 'facebook', label: 'Facebook' },
   ];
   const isTopNavActive = (to) => {
     if (to === '/manage/users') {
@@ -204,7 +246,75 @@ const Header = () => {
     }
   };
 
+  const closeAccountDialog = () => {
+    setAccountDialog(null);
+    setProfileError('');
+    setPasswordForm({ password: '', confirmPassword: '' });
+  };
+
+  const saveSessionUser = (updatedUser) => {
+    saveStoredSession({ ...session, user: updatedUser });
+  };
+
+  const handlePasswordUpdate = async (event) => {
+    event.preventDefault();
+    if (passwordForm.password.length < 8) {
+      setProfileError(t('header.passwordMinLength'));
+      return;
+    }
+    if (passwordForm.password !== passwordForm.confirmPassword) {
+      setProfileError(t('header.passwordMismatch'));
+      return;
+    }
+
+    try {
+      setProfileSaving(true);
+      setProfileError('');
+      const updatedUser = await updateUser(session.user.id, { password: passwordForm.password });
+      saveSessionUser(updatedUser);
+      closeAccountDialog();
+    } catch (error) {
+      setProfileError(error.message || t('header.profileUpdateError'));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleAvatarUpdate = async () => {
+    if (!avatarPreview.startsWith('data:image/')) {
+      setProfileError(t('header.avatarRequired'));
+      return;
+    }
+    try {
+      setProfileSaving(true);
+      setProfileError('');
+      const updatedUser = await updateUser(session.user.id, { avatar_url: avatarPreview });
+      saveSessionUser(updatedUser);
+      closeAccountDialog();
+    } catch (error) {
+      setProfileError(error.message || t('header.profileUpdateError'));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleAvatarFile = async (event) => {
+    const [file] = event.target.files || [];
+    if (!file) return;
+    try {
+      setProfileError('');
+      const preparedImage = await prepareAvatarImage(file);
+      if (preparedImage.length > 90_000) throw new Error(t('header.avatarTooLarge'));
+      setAvatarPreview(preparedImage);
+    } catch (error) {
+      setProfileError(error.message || t('header.avatarInvalid'));
+    } finally {
+      event.target.value = '';
+    }
+  };
+
   return (
+    <>
     <header className="topbar">
       <div className="topbar__inner">
         <Link to="/" className="brand" aria-label="Go to home">
@@ -215,18 +325,21 @@ const Header = () => {
         </Link>
 
         <nav className="topbar__nav" aria-label="Primary">
-          {topNavItems.filter((item) => !item.adminOnly || isAdmin).map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={`topbar__nav-link${isTopNavActive(item.to) ? ' topbar__nav-link--active' : ''}`}
-              aria-current={isTopNavActive(item.to) ? 'page' : undefined}
-            >
-              {navLabels[item.to] || item.label}
-            </Link>
-          ))}
-          {hasSession ? (
-            <>
+          <div className="topbar__tabs">
+            {topNavItems.filter((item) => !item.adminOnly || isAdmin).map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`topbar__nav-link${isTopNavActive(item.to) ? ' topbar__nav-link--active' : ''}`}
+                aria-current={isTopNavActive(item.to) ? 'page' : undefined}
+              >
+                {navLabels[item.to] || item.label}
+              </Link>
+            ))}
+          </div>
+          <div className="topbar__actions">
+            {hasSession ? (
+              <>
               <div className="topbar__connect" ref={connectRootRef}>
                 <button
                   ref={connectTriggerRef}
@@ -257,22 +370,27 @@ const Header = () => {
                       <strong>{t('header.connections')}</strong>
                       <span>{t('header.connectionsMeta')}</span>
                     </div>
-                    {connectionOptions.map((option) => (
-                      <button
-                        className="topbar__connect-item"
-                        type="button"
-                        role="menuitem"
-                        key={option.id}
-                        disabled={Boolean(connectingTarget)}
-                        onClick={() => startConnection(option.id)}
-                      >
-                        <ConnectionIcon type={option.id} />
-                        <span className="topbar__connect-copy">
-                          <strong>{option.label}</strong>
-                          <small>{connectingTarget === option.id ? t('header.connecting') : option.meta}</small>
-                        </span>
-                        <span className="topbar__connect-arrow" aria-hidden="true">→</span>
-                      </button>
+                    {connectionGroups.map((group) => (
+                      <div className="topbar__connect-group" key={group.id} role="presentation">
+                        <span className="topbar__connect-group-label">{group.label}</span>
+                        {connectionOptions.filter((option) => option.group === group.id).map((option) => (
+                          <button
+                            className="topbar__connect-item"
+                            type="button"
+                            role="menuitem"
+                            key={option.id}
+                            disabled={Boolean(connectingTarget)}
+                            onClick={() => startConnection(option.id)}
+                          >
+                            <ConnectionIcon type={option.id} />
+                            <span className="topbar__connect-copy">
+                              <strong>{option.label}</strong>
+                              <small>{connectingTarget === option.id ? t('header.connecting') : option.meta}</small>
+                            </span>
+                            <span className="topbar__connect-arrow" aria-hidden="true">→</span>
+                          </button>
+                        ))}
+                      </div>
                     ))}
                     {connectionError ? <p className="topbar__connect-error" role="alert">{connectionError}</p> : null}
                   </div>
@@ -301,17 +419,47 @@ const Header = () => {
               {activeMenu === 'account' ? (
                 <div className="topbar__account-menu" role="menu" aria-label="Account menu">
                   <div className="topbar__account-head">
-                    <strong>{userName}</strong>
-                    <span>{t('header.account')}</span>
+                    <div className="topbar__account-identity">
+                      <strong>{userName}</strong>
+                      {userRole ? <small>{userRole}</small> : null}
+                    </div>
+                    {userEmail ? <span>{userEmail}</span> : null}
                   </div>
-                  <Link
-                    to="/chatbot/chat-setting"
+                  {isAdmin ? (
+                    <Link
+                      to="/chatbot/chat-setting"
+                      className="topbar__account-item"
+                      role="menuitem"
+                      onClick={() => setActiveMenu(null)}
+                    >
+                      {t('header.settings')}
+                    </Link>
+                  ) : null}
+                  <button
+                    type="button"
                     className="topbar__account-item"
                     role="menuitem"
-                    onClick={() => setActiveMenu(null)}
+                    onClick={() => {
+                      setActiveMenu(null);
+                      setProfileError('');
+                      setAccountDialog('password');
+                    }}
                   >
-                    {t('header.settings')}
-                  </Link>
+                    {t('header.changePassword')}
+                  </button>
+                  <button
+                    type="button"
+                    className="topbar__account-item"
+                    role="menuitem"
+                    onClick={() => {
+                      setActiveMenu(null);
+                      setProfileError('');
+                      setAvatarPreview(session?.user?.avatar_url || '');
+                      setAccountDialog('avatar');
+                    }}
+                  >
+                    {t('header.changeAvatar')}
+                  </button>
                   <div className="topbar__account-section" aria-label={t('header.language')}>
                     <span className="topbar__account-section-label">{t('header.language')}</span>
                     <button
@@ -335,16 +483,88 @@ const Header = () => {
                   </button>
                 </div>
               ) : null}
-              </div>
-            </>
-          ) : (
-            <Link to="/login" className="button button--ghost topbar__nav-button">
-              {t('header.signIn')}
-            </Link>
-          )}
+                </div>
+              </>
+            ) : (
+              <Link to="/login" className="button button--ghost topbar__nav-button">
+                {t('header.signIn')}
+              </Link>
+            )}
+          </div>
         </nav>
       </div>
     </header>
+    {accountDialog ? (
+      <div className="modal-backdrop account-dialog" role="presentation" onMouseDown={(event) => {
+        if (event.target === event.currentTarget) closeAccountDialog();
+      }}>
+        <section className="modal-card account-dialog__card" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title">
+          <div className="account-dialog__header">
+            <div>
+              <h2 id="account-dialog-title">
+                {accountDialog === 'password' ? t('header.changePassword') : t('header.changeAvatar')}
+              </h2>
+              <p>{accountDialog === 'password' ? t('header.changePasswordMeta') : t('header.changeAvatarMeta')}</p>
+            </div>
+            <button type="button" className="account-dialog__close" onClick={closeAccountDialog} aria-label={t('header.close')}>×</button>
+          </div>
+
+          {accountDialog === 'password' ? (
+            <form className="account-dialog__form" onSubmit={handlePasswordUpdate}>
+              <label className="field">
+                <span>{t('header.newPassword')}</span>
+                <input
+                  type="password"
+                  value={passwordForm.password}
+                  onChange={(event) => setPasswordForm((current) => ({ ...current, password: event.target.value }))}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>{t('header.confirmPassword')}</span>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(event) => setPasswordForm((current) => ({ ...current, confirmPassword: event.target.value }))}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+              </label>
+              {profileError ? <p className="account-dialog__error" role="alert">{profileError}</p> : null}
+              <div className="account-dialog__actions">
+                <button type="button" className="button button--ghost" onClick={closeAccountDialog}>{t('header.cancel')}</button>
+                <button type="submit" className="button" disabled={profileSaving}>{profileSaving ? t('header.saving') : t('header.save')}</button>
+              </div>
+            </form>
+          ) : (
+            <div className="account-dialog__form">
+              <div className="account-dialog__upload">
+                <div className="account-dialog__avatar-preview">
+                  <img src={avatarPreview || avatarUrl} alt={t('header.avatarPreview')} />
+                </div>
+                <div className="account-dialog__upload-copy">
+                  <strong>{t('header.uploadAvatar')}</strong>
+                  <span>{t('header.uploadAvatarMeta')}</span>
+                  <label className="button button--ghost account-dialog__upload-button">
+                    {t('header.chooseImage')}
+                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleAvatarFile} />
+                  </label>
+                </div>
+              </div>
+              {profileError ? <p className="account-dialog__error" role="alert">{profileError}</p> : null}
+              <div className="account-dialog__actions">
+                <button type="button" className="button button--ghost" onClick={closeAccountDialog}>{t('header.cancel')}</button>
+                <button type="button" className="button" disabled={profileSaving} onClick={handleAvatarUpdate}>{profileSaving ? t('header.saving') : t('header.save')}</button>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+    ) : null}
+    </>
   );
 };
 

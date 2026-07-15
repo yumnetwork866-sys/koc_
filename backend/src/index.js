@@ -37,7 +37,7 @@ const createApp = () => {
     credentials: true,
   }));
   app.use(morgan(httpLogFormat));
-  app.use(express.json());
+  app.use(express.json({ limit: '256kb' }));
   app.use(chatbotRoutes.publicRouter);
   app.use('/api/bookings/tiktok-partner', tiktokPartnerPublicRoutes);
 

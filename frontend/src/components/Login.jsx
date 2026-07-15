@@ -16,6 +16,7 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -98,6 +99,9 @@ const Login = () => {
                 onChange={handleChange}
                 placeholder={t('login.passwordPlaceholder')}
                 autoComplete="current-password"
+                onKeyDown={(event) => setCapsLockOn(event.getModifierState('CapsLock'))}
+                onKeyUp={(event) => setCapsLockOn(event.getModifierState('CapsLock'))}
+                onBlur={() => setCapsLockOn(false)}
                 required
               />
               <button
@@ -106,9 +110,23 @@ const Login = () => {
                 onClick={() => setShowPassword((current) => !current)}
                 aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
               >
-                {showPassword ? t('login.hide') : t('login.show')}
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  {showPassword ? (
+                    <>
+                      <path d="M3 3l18 18" />
+                      <path d="M10.6 10.7a2 2 0 0 0 2.7 2.7" />
+                      <path d="M9.9 4.3A10.7 10.7 0 0 1 12 4c5.2 0 8.5 4.2 9.5 6-.4.8-1.3 2.2-2.7 3.4M6.2 6.2C4.4 7.4 3.2 9.1 2.5 10c1 1.8 4.3 6 9.5 6 1 0 2-.2 2.8-.5" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M2.5 12S6 6 12 6s9.5 6 9.5 6S18 18 12 18 2.5 12 2.5 12Z" />
+                      <circle cx="12" cy="12" r="2.5" />
+                    </>
+                  )}
+                </svg>
               </button>
             </div>
+            {capsLockOn ? <small className="login-form__hint">{t('login.capsLock')}</small> : null}
           </div>
 
           <button className="button login-form__submit" type="submit" disabled={loading}>

@@ -81,6 +81,14 @@ const updateUser = async (req, res) => {
       payload.role = req.body.role.trim();
     }
 
+    if (typeof req.body.avatar_url === 'string' && req.body.avatar_url.trim()) {
+      const avatarUrl = req.body.avatar_url.trim();
+      if (!/^data:image\/(?:png|jpe?g|webp);base64,/i.test(avatarUrl) || avatarUrl.length > 90_000) {
+        return res.status(400).json({ message: 'Avatar image is invalid or too large' });
+      }
+      payload.avatar_url = avatarUrl;
+    }
+
     if (typeof req.body.password === 'string' && req.body.password.trim()) {
       if (req.body.password.length < MIN_PASSWORD_LENGTH) {
         return res.status(400).json({ message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });

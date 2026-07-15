@@ -157,7 +157,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
                     key={item.to}
                     to={item.to}
                     className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
-                    title={isCollapsed ? item.label : undefined}
+                    title={item.label}
                   >
                     <SidebarIcon name={routeIconMap[item.to]} />
                     <span className="sidebar__link-label">{item.label}</span>

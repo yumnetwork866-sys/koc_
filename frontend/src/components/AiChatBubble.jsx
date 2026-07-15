@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { chatWithAssistant } from '../lib/api';
+import { streamAssistant } from '../lib/api';
 import { useI18n } from '../lib/language';
 
 const createMessage = (role, text, extra = {}) => ({
@@ -184,6 +184,7 @@ const AiChatBubble = () => {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showCallout, setShowCallout] = useState(true);
   const [typedCalloutText, setTypedCalloutText] = useState('');
@@ -277,18 +278,34 @@ const AiChatBubble = () => {
     setMessages((prev) => [...prev, createMessage('user', text)]);
     setInput('');
     setLoading(true);
+    setStreaming(false);
 
+    const assistantMessageId = `assistant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    let receivedText = false;
     try {
-      const response = await chatWithAssistant(text);
-      appendAssistantMessage(response.answer || t('ai.fallbackAnswer'), {
-        suggestions: Array.isArray(response.suggestions) ? response.suggestions : quickPrompts,
+      await streamAssistant(text, {
+        onDelta: (delta) => {
+          receivedText = true;
+          setStreaming(true);
+          setMessages((current) => {
+            const existingIndex = current.findIndex((message) => message.id === assistantMessageId);
+            if (existingIndex === -1) {
+              return [...current, { id: assistantMessageId, role: 'assistant', text: delta }];
+            }
+            return current.map((message) => (
+              message.id === assistantMessageId
+                ? { ...message, text: `${message.text}${delta}` }
+                : message
+            ));
+          });
+        },
       });
+      if (!receivedText) appendAssistantMessage(t('ai.fallbackAnswer'));
     } catch (error) {
-      appendAssistantMessage(error.message || t('ai.fallbackError'), {
-        suggestions: quickPrompts,
-      });
+      if (!receivedText) appendAssistantMessage(error.message || t('ai.fallbackError'));
     } finally {
       setLoading(false);
+      setStreaming(false);
     }
   };
 
@@ -325,6 +342,7 @@ const AiChatBubble = () => {
             <div className="ai-chat-panel__brand">
               <div>
                 <strong>{t('ai.assistant')}</strong>
+                <span>{t('ai.status')}</span>
               </div>
             </div>
             <button
@@ -350,24 +368,9 @@ const AiChatBubble = () => {
                 ) : (
                   <p className="ai-chat-message__plain">{message.text}</p>
                 )}
-                {message.role === 'assistant' && Array.isArray(message.suggestions) && message.suggestions.length ? (
-                  <div className="ai-chat-message__suggestions">
-                    {message.suggestions.map((suggestion) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        className="ai-chat-suggestion"
-                        onClick={() => submitPrompt(suggestion)}
-                        disabled={loading}
-                      >
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
               </div>
             ))}
-            {loading ? (
+            {loading && !streaming ? (
               <div className="ai-chat-message ai-chat-message--assistant ai-chat-message--loading">
                 <div className="ai-chat-loading" aria-label={t('ai.loading')} role="status">
                   <span />
