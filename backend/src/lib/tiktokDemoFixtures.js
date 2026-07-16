@@ -1,0 +1,161 @@
+const DEMO_PREFIX = 'demo_full_';
+
+const isDemoAuthorization = (authorization) => String(authorization?.open_id || '').startsWith(DEMO_PREFIX);
+
+const sellerAffiliateFixture = (namespace, shop, query = {}) => {
+  const shopName = shop.name || 'Demo Shop';
+  const products = Array.from({ length: 8 }, (_, index) => ({
+    id: `${DEMO_PREFIX}product_${index + 1}`,
+    title: `${['Glow Serum', 'Hair Tonic', 'Acne Gel', 'Body Oil'][index % 4]} · ${shopName}`,
+    main_image_url: `https://picsum.photos/seed/demo-affiliate-${index + 1}/160/160`,
+  }));
+  const requestId = `${DEMO_PREFIX}${namespace}`;
+  if (namespace === 'open-collaboration-settings') {
+    return {
+      data: { auto_add_product: { enable: true, commission_rate: 1200 } },
+      request_id: requestId,
+    };
+  }
+  if (namespace === 'open-collaborations') {
+    return {
+      data: {
+        total_count: products.length,
+        next_page_token: null,
+        open_collaborations: products.map((product, index) => ({
+          id: `${DEMO_PREFIX}open_${index + 1}`,
+          product,
+          current_commission: { rate: 900 + index * 75 },
+          showcase_creator_count: 18 + index * 4,
+          content_creator_count: 9 + index * 3,
+          status: index % 4 === 0 ? 'INACTIVE' : 'ACTIVE',
+        })),
+      },
+      request_id: requestId,
+    };
+  }
+  if (namespace === 'target-collaborations') {
+    const rows = Array.from({ length: 7 }, (_, index) => ({
+      id: `${DEMO_PREFIX}target_${index + 1}`,
+      name: `Demo Invitation ${index + 1}`,
+      products: products.slice(index % 4, index % 4 + 2),
+      showcase_creator_count: 4 + index,
+      content_creator_count: 2 + index,
+      end_time: Math.floor(Date.now() / 1000) + (index + 2) * 86400,
+      status: ['ONGOING', 'VALID', 'COMPLETED'][index % 3],
+    }));
+    return {
+      data: {
+        total_count: rows.length,
+        next_page_token: null,
+        target_collaborations: query.status ? rows.filter((row) => row.status === query.status) : rows,
+      },
+      request_id: requestId,
+    };
+  }
+  if (namespace === 'creators') {
+    const sampleApplications = Array.from({ length: 10 }, (_, index) => ({
+      id: `${DEMO_PREFIX}sample_${index + 1}`,
+      status: ['PENDING', 'AWAITING_SHIPMENT', 'CONTENT_PENDING', 'COMPLETED'][index % 4],
+      commission_rate: String(0.1 + index * 0.005),
+      fulfillment_status: ['PENDING', 'ONGOING', 'SUCCEED'][index % 3],
+      creator: {
+        user_id: `${DEMO_PREFIX}creator_${index + 1}`,
+        username: `demo.creator.${index + 1}`,
+        nickname: `Demo Creator ${index + 1}`,
+        follower_count: 12000 + index * 7300,
+        avatar_url: `https://api.dicebear.com/10.x/lorelei-neutral/svg?seed=demo-creator-${index + 1}`,
+        gmv: { amount: String(320 + index * 185), currency: 'USD' },
+        content_count: 4 + index * 2,
+        fulfillment_percentage: String(58 + index * 4),
+        ec_video_view: 18000 + index * 9200,
+      },
+      product: products[index % products.length],
+    }));
+    const filteredApplications = query.status
+      ? sampleApplications.filter((application) => application.status === query.status)
+      : sampleApplications;
+    return {
+      data: {
+        total_count: filteredApplications.length,
+        next_page_token: null,
+        sample_applications: filteredApplications,
+      },
+      request_id: requestId,
+    };
+  }
+  if (namespace === 'creator-content-details') {
+    return {
+      data: {
+        total_count: 1,
+        next_page_token: null,
+        creator_content_details: [{
+          creator_profile: {
+            username: 'demo.creator.1',
+            nickname: 'Demo Creator 1',
+            follower_count: 12000,
+            avatar: { url: 'https://api.dicebear.com/10.x/lorelei-neutral/svg?seed=demo-creator-1' },
+            creator_open_id: `${DEMO_PREFIX}creator_1`,
+          },
+          video_count: 6,
+          live_count: 2,
+          promotion_status: 'NORMAL',
+          promotion_end_time: Math.floor(Date.now() / 1000) + 30 * 86400,
+        }],
+        product: products[0],
+      },
+      request_id: requestId,
+    };
+  }
+  const orders = Array.from({ length: 12 }, (_, index) => ({
+    order_id: `${DEMO_PREFIX}order_${String(index + 1).padStart(3, '0')}`,
+    product_id: products[index % products.length].id,
+    program_id: `${DEMO_PREFIX}program_${index % 3 + 1}`,
+    create_time: Math.floor(Date.now() / 1000) - index * 21600,
+  }));
+  return {
+    data: { total_count: orders.length, next_page_token: null, orders },
+    request_id: requestId,
+  };
+};
+
+const creatorOverviewFixture = (authorization) => ({
+  profile: {
+    creator_user_open_id: authorization.open_id,
+    username: authorization.username,
+    avatar_url: authorization.avatar_url,
+    register_region: authorization.register_region || 'VN',
+  },
+  showcase: {
+    totalCount: Number(authorization.showcase_count || 0),
+    nextPageToken: null,
+    products: Array.from({ length: Math.min(8, Number(authorization.showcase_count || 0)) }, (_, index) => ({
+      id: `${DEMO_PREFIX}creator_product_${index + 1}`,
+      title: `Demo Showcase Product ${index + 1}`,
+      main_image_url: `https://picsum.photos/seed/demo-showcase-${index + 1}/160/160`,
+    })),
+  },
+  collaborations: Array.from({ length: 5 }, (_, index) => ({
+    id: `${DEMO_PREFIX}creator_collaboration_${index + 1}`,
+    name: `Demo Creator Collaboration ${index + 1}`,
+    status: ['ONGOING', 'VALID', 'COMPLETED'][index % 3],
+    products: [{ id: `${DEMO_PREFIX}creator_product_${index + 1}` }],
+  })),
+  errors: { profile: null, showcase: null, collaborations: null },
+});
+
+const creatorCollaborationsFixture = (authorization) => {
+  const overview = creatorOverviewFixture(authorization);
+  return {
+    collaborations: overview.collaborations,
+    nextPageToken: null,
+    totalCount: overview.collaborations.length,
+    requestId: `${DEMO_PREFIX}creator_collaborations`,
+  };
+};
+
+module.exports = {
+  isDemoAuthorization,
+  sellerAffiliateFixture,
+  creatorOverviewFixture,
+  creatorCollaborationsFixture,
+};

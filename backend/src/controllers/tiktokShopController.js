@@ -13,8 +13,11 @@ const {
   searchTargetCollaborations,
   searchAffiliateOrders,
   getOpenCollaborationSettings,
+  searchSellerSampleApplications,
+  getSellerCreatorContentDetails,
 } = require('../services/tiktokShopService');
 const { createTtlPromiseCache } = require('../lib/ttlPromiseCache');
+const { isDemoAuthorization, sellerAffiliateFixture } = require('../lib/tiktokDemoFixtures');
 
 const affiliateCacheTtlValue = Number(process.env.TIKTOK_SELLER_AFFILIATE_CACHE_TTL_MS ?? 120000);
 const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
@@ -229,7 +232,9 @@ const affiliateResponse = (namespace, operation) => async (req, res) => {
     if (!shop) return;
     const { value: payload, hit } = await sellerAffiliateCache.getOrLoad(
       affiliateCacheKey(namespace, shop, req),
-      () => operation(shop, req),
+      () => isDemoAuthorization(shop.authorization)
+        ? sellerAffiliateFixture(namespace, shop, req.query)
+        : operation(shop, req),
     );
     res.set('X-Seller-Affiliate-Cache', hit ? 'HIT' : 'MISS');
     res.json({ ...payload.data, request_id: payload.request_id || null });
@@ -266,6 +271,30 @@ const listAffiliateOrders = affiliateResponse('orders', (shop, req) => searchAff
   programId: req.query.program_id,
 }));
 
+const sampleApplicationStatuses = new Set([
+  'PENDING', 'AWAITING_SHIPMENT', 'SHIPPED', 'CONTENT_PENDING', 'REJECT_CANCELLED',
+  'OVERDUE_CANCELLED', 'UNFULFILL_CANCELLED', 'DEL_OPEN_COLLAB',
+  'SELLER_NOT_SHIP_CANCELLED', 'WITHDRAW_CANCELLED', 'UNFULFILLABLE_CANCELLED',
+  'OPS_CANCELLED', 'OPS_FAILED', 'OPS_COMPLETED', 'COMPLETED',
+]);
+
+const listAffiliateCreators = affiliateResponse('creators', (shop, req) => searchSellerSampleApplications({
+  authorization: shop.authorization,
+  shopCipher: shop.cipher,
+  pageToken: req.query.page_token,
+  pageSize: pageSizeValue(req.query.page_size),
+  keyword: req.query.keyword,
+  status: sampleApplicationStatuses.has(req.query.status) ? req.query.status : null,
+}));
+
+const listCreatorContentDetails = affiliateResponse('creator-content-details', (shop, req) => getSellerCreatorContentDetails({
+  authorization: shop.authorization,
+  shopCipher: shop.cipher,
+  productId: req.query.product_id,
+  pageToken: req.query.page_token,
+  pageSize: pageSizeValue(req.query.page_size),
+}));
+
 const showOpenCollaborationSettings = affiliateResponse('open-collaboration-settings', (shop) => getOpenCollaborationSettings({
   authorization: shop.authorization,
   shopCipher: shop.cipher,
@@ -284,4 +313,6 @@ module.exports = {
   startShopOauth, handleShopOauthCallback, listShopConnections, listShops,
   getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization,
   listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
+  listAffiliateCreators,
+  listCreatorContentDetails,
 };

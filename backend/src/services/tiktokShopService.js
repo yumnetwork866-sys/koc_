@@ -10,6 +10,8 @@ const OPEN_COLLABORATIONS_PATH = '/affiliate_seller/202412/open_collaborations/s
 const TARGET_COLLABORATIONS_PATH = '/affiliate_seller/202409/target_collaborations/search';
 const AFFILIATE_ORDERS_PATH = '/affiliate_seller/202410/orders/search';
 const OPEN_COLLABORATION_SETTINGS_PATH = '/affiliate_seller/202409/open_collaboration_settings';
+const SAMPLE_APPLICATIONS_PATH = '/affiliate_seller/202508/sample_applications/search';
+const CREATOR_CONTENT_DETAILS_PATH = '/affiliate_seller/202508/open_collaborations/creator_content_details';
 
 const getConfig = () => ({
   appKey: String(process.env.TIKTOK_PARTNER_APP_KEY || '').trim(),
@@ -241,6 +243,43 @@ const getOpenCollaborationSettings = ({ authorization, shopCipher } = {}, fetchI
   method: 'GET',
 }, fetchImpl);
 
+const searchSellerSampleApplications = ({
+  authorization, shopCipher, pageToken, pageSize = 20, keyword, status,
+} = {}, fetchImpl) => {
+  const normalizedKeyword = String(keyword || '').trim();
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: SAMPLE_APPLICATIONS_PATH,
+    query: {
+      page_size: Math.min(50, Math.max(1, Number(pageSize) || 20)),
+      ...(pageToken ? { page_token: pageToken } : {}),
+    },
+    body: {
+      ...(normalizedKeyword ? { username: normalizedKeyword } : {}),
+      ...(status ? { status } : {}),
+    },
+  }, fetchImpl);
+};
+
+const getSellerCreatorContentDetails = ({
+  authorization, shopCipher, productId, pageToken, pageSize = 50,
+} = {}, fetchImpl) => {
+  const normalizedProductId = String(productId || '').trim();
+  if (!normalizedProductId) throw new Error('product_id is required.');
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: CREATOR_CONTENT_DETAILS_PATH,
+    method: 'GET',
+    query: {
+      product_id: normalizedProductId,
+      page_size: Math.min(100, Math.max(1, Number(pageSize) || 50)),
+      ...(pageToken ? { page_token: pageToken } : {}),
+    },
+  }, fetchImpl);
+};
+
 const getUsableShopToken = async (authorization, fetchImpl = fetch) => {
   if (authorization.access_token_encrypted && new Date(authorization.access_token_expires_at || 0).getTime() > Date.now() + TOKEN_SKEW_MS) {
     return decryptPartnerToken(authorization.access_token_encrypted);
@@ -277,6 +316,8 @@ module.exports = {
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
   AFFILIATE_ORDERS_PATH,
+  SAMPLE_APPLICATIONS_PATH,
+  CREATOR_CONTENT_DETAILS_PATH,
   buildShopAuthorizationUrl,
   parseShopAuthorizationState,
   exchangeShopAuthorizationCode,
@@ -289,4 +330,6 @@ module.exports = {
   searchTargetCollaborations,
   searchAffiliateOrders,
   getOpenCollaborationSettings,
+  searchSellerSampleApplications,
+  getSellerCreatorContentDetails,
 };

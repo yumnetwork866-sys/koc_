@@ -125,6 +125,7 @@ function fetchTikTokSellerAffiliate(shopId, resource, filters = {}) {
   if (filters.startTime) params.set('create_time_ge', filters.startTime);
   if (filters.endTime) params.set('create_time_lt', filters.endTime);
   if (filters.programId) params.set('program_id', filters.programId);
+  if (filters.productId) params.set('product_id', filters.productId);
   const query = params.toString();
   return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/affiliate/${resource}${query ? `?${query}` : ''}`, { signal: filters.signal });
 }
@@ -132,6 +133,8 @@ function fetchTikTokSellerAffiliate(shopId, resource, filters = {}) {
 export const fetchTikTokSellerOpenCollaborations = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'open-collaborations', filters);
 export const fetchTikTokSellerTargetCollaborations = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'target-collaborations', filters);
 export const fetchTikTokSellerAffiliateOrders = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'orders', filters);
+export const fetchTikTokSellerAffiliateCreators = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'creators', filters);
+export const fetchTikTokSellerCreatorContentDetails = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'creator-content-details', filters);
 export const fetchTikTokSellerOpenCollaborationSettings = (shopId, signal) => fetchTikTokSellerAffiliate(shopId, 'open-collaboration-settings', { signal });
 
 export function disconnectTikTokShopAuthorization(authorizationId) {

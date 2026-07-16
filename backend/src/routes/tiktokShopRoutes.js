@@ -10,6 +10,8 @@ adminRouter.post('/shops/:shopId/analytics/sync', controller.syncShopAnalytics);
 adminRouter.get('/shops/:shopId/affiliate/open-collaborations', controller.listOpenCollaborations);
 adminRouter.get('/shops/:shopId/affiliate/target-collaborations', controller.listTargetCollaborations);
 adminRouter.get('/shops/:shopId/affiliate/orders', controller.listAffiliateOrders);
+adminRouter.get('/shops/:shopId/affiliate/creators', controller.listAffiliateCreators);
+adminRouter.get('/shops/:shopId/affiliate/creator-content-details', controller.listCreatorContentDetails);
 adminRouter.get('/shops/:shopId/affiliate/open-collaboration-settings', controller.showOpenCollaborationSettings);
 adminRouter.delete('/connections/:authorizationId', controller.disconnectShopAuthorization);
 

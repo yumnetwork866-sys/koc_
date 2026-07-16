@@ -8,6 +8,8 @@ const {
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
   AFFILIATE_ORDERS_PATH,
+  SAMPLE_APPLICATIONS_PATH,
+  CREATOR_CONTENT_DETAILS_PATH,
   buildShopAuthorizationUrl,
   parseShopAuthorizationState,
   exchangeShopAuthorizationCode,
@@ -18,6 +20,8 @@ const {
   searchOpenCollaborations,
   searchTargetCollaborations,
   searchAffiliateOrders,
+  searchSellerSampleApplications,
+  getSellerCreatorContentDetails,
 } = require('../src/services/tiktokShopService');
 const { encryptPartnerToken } = require('../src/lib/tiktokPartnerTokenEncryption');
 
@@ -221,6 +225,40 @@ test('search affiliate orders sends the time window and program id', async (t) =
     assert.equal(url.pathname, AFFILIATE_ORDERS_PATH);
     assert.deepEqual(JSON.parse(options.body), { create_time_ge: 1700000000, create_time_lt: 1700100000, program_id: 'program-1' });
     return successResponse({ orders: [] });
+  });
+});
+
+test('search Seller sample applications uses the existing Seller Affiliate read scope', async (t) => {
+  configure(t);
+  await searchSellerSampleApplications({
+    authorization: sellerAuthorization(),
+    shopCipher: 'cipher-1',
+    pageSize: 20,
+    keyword: 'demo.creator',
+    status: 'PENDING',
+  }, async (url, options) => {
+    assert.equal(url.pathname, SAMPLE_APPLICATIONS_PATH);
+    assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
+    assert.equal(url.searchParams.get('page_size'), '20');
+    assert.deepEqual(JSON.parse(options.body), { username: 'demo.creator', status: 'PENDING' });
+    return successResponse({ sample_applications: [] });
+  });
+});
+
+test('get Seller creator content details uses product filters and Seller token', async (t) => {
+  configure(t);
+  await getSellerCreatorContentDetails({
+    authorization: sellerAuthorization(),
+    shopCipher: 'cipher-1',
+    productId: 'product-1',
+    pageSize: 50,
+  }, async (url, options) => {
+    assert.equal(url.pathname, CREATOR_CONTENT_DETAILS_PATH);
+    assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
+    assert.equal(url.searchParams.get('product_id'), 'product-1');
+    assert.equal(url.searchParams.get('page_size'), '50');
+    assert.equal(options.method, 'GET');
+    return successResponse({ creator_content_details: [] });
   });
 });
 

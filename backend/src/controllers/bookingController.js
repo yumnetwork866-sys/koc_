@@ -12,6 +12,11 @@ const {
   CREATOR_PROFILE_SCOPE,
 } = require('../services/tiktokPartnerService');
 const { handleShopOauthCallback } = require('./tiktokShopController');
+const {
+  creatorCollaborationsFixture,
+  creatorOverviewFixture,
+  isDemoAuthorization,
+} = require('../lib/tiktokDemoFixtures');
 
 const ALLOWED_STATUSES = new Set(['draft', 'booked', 'waiting_video', 'video_posted', 'done', 'cancelled']);
 
@@ -155,13 +160,15 @@ const getTikTokPartnerCollaborations = async (req, res) => {
     const authorization = await TikTokPartnerAuthorization.findOne({ where: { creator_id: creatorId } });
     if (!authorization) return res.status(409).json({ message: 'This KOC has not connected TikTok Partner.' });
     const shopId = await resolveSellerShopId(authorization, req.query.shop_id);
-    const result = await searchTargetCollaborations({
-      authorization,
-      shopId,
-      pageToken: req.query.page_token,
-      pageSize: req.query.page_size,
-      keyword: req.query.keyword,
-    });
+    const result = isDemoAuthorization(authorization)
+      ? creatorCollaborationsFixture(authorization)
+      : await searchTargetCollaborations({
+        authorization,
+        shopId,
+        pageToken: req.query.page_token,
+        pageSize: req.query.page_size,
+        keyword: req.query.keyword,
+      });
     res.json(result);
   } catch (error) {
     const status = error.message.startsWith('TikTok Partner is not configured') ? 503 : 502;
@@ -319,7 +326,9 @@ const getTikTokPartnerCreatorOverview = async (req, res) => {
       : null;
     if (!authorization) return res.status(409).json({ message: 'This KOC has not connected TikTok Partner.' });
     const shopId = await resolveSellerShopId(authorization);
-    const overview = await getCreatorOverview(authorization, { shopId });
+    const overview = isDemoAuthorization(authorization)
+      ? creatorOverviewFixture(authorization)
+      : await getCreatorOverview(authorization, { shopId });
     await authorization.update({
       username: overview.profile?.username || authorization.username,
       avatar_url: overview.profile?.avatar?.url || overview.profile?.avatar_url || authorization.avatar_url,

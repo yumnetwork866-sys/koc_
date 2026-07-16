@@ -149,7 +149,8 @@ const ShopAnalytics = () => {
   const [selectedShopId, setSelectedShopId] = useState('');
   const [startDate, setStartDate] = useState(initialRange.startDate);
   const [endDate, setEndDate] = useState(initialRange.endDate);
-  const [currency, setCurrency] = useState('LOCAL');
+  const [periodPreset, setPeriodPreset] = useState('30d');
+  const currency = 'LOCAL';
   const [chartMetric, setChartMetric] = useState('gmv');
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -403,11 +404,16 @@ const ShopAnalytics = () => {
     setSelectedShopId(nextShopId);
   };
 
-  const changeCurrency = (event) => {
-    const nextCurrency = event.target.value;
-    if (nextCurrency === currency) return;
+  const changePeriodPreset = (event) => {
+    const nextPreset = event.target.value;
+    setPeriodPreset(nextPreset);
+    if (nextPreset === 'custom') return;
+    const days = Number(nextPreset.replace(/d$/, ''));
+    if (!Number.isFinite(days) || days <= 0) return;
+    const nextRange = rangeForDays(days);
     setSnapshot(null);
-    setCurrency(nextCurrency);
+    setStartDate(nextRange.startDate);
+    setEndDate(nextRange.endDate);
   };
 
   const kpis = [
@@ -419,14 +425,6 @@ const ShopAnalytics = () => {
     { key: 'refunds', value: formatMoney(totals.refunds), change: changeFrom(totals.refunds, comparisonTotals.refunds), inverse: true },
   ];
   const chartLabel = t(`shopAnalytics.${chartMetric}`);
-  const connectionState = tokenExpired
-    ? 'expired'
-    : missingAnalyticsScope
-      ? 'permission'
-      : selectedShop?.last_sync_status === 'failed'
-        ? 'failed'
-        : 'active';
-
   const funnel = [
     {
       key: 'impressions',
@@ -485,14 +483,6 @@ const ShopAnalytics = () => {
           </div>
         </div>
 
-        <div className="shop-analytics__hero-context">
-          {selectedShop ? (
-            <span className={`shop-analytics__status shop-analytics__status--${connectionState}`}>
-              <i aria-hidden="true" />
-              {t(`shopAnalytics.status${connectionState.charAt(0).toUpperCase()}${connectionState.slice(1)}`)}
-            </span>
-          ) : null}
-        </div>
       </section>
 
       {toast ? (
@@ -596,51 +586,43 @@ const ShopAnalytics = () => {
                 />
               </div>
               <div className="field">
-                <label htmlFor="analytics-start-date">{t('shopAnalytics.startDate')}</label>
-                <input
-                  id="analytics-start-date"
-                  type="date"
-                  value={startDate}
-                  max={endDate ? shiftDate(endDate, -1) : undefined}
-                  onChange={changeCustomDate(setStartDate, startDate)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="analytics-end-date">{t('shopAnalytics.endDate')}</label>
-                <input
-                  id="analytics-end-date"
-                  type="date"
-                  value={endDate}
-                  min={startDate ? shiftDate(startDate, 1) : undefined}
-                  max={dateOnly(new Date())}
-                  aria-invalid={invalidRange}
-                  onChange={changeCustomDate(setEndDate, endDate)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="analytics-currency">{t('shopAnalytics.currency')}</label>
-                <select
-                  id="analytics-currency"
-                  value={currency}
-                  onChange={changeCurrency}
-                >
-                  <option value="LOCAL">{t('shopAnalytics.localCurrency')}</option>
-                  <option value="USD">USD</option>
+                <label htmlFor="analytics-period">{t('shopAnalytics.period')}</label>
+                <select id="analytics-period" value={periodPreset} onChange={changePeriodPreset}>
+                  <option value="7d">{t('shopAnalytics.period7d')}</option>
+                  <option value="30d">{t('shopAnalytics.period30d')}</option>
+                  <option value="90d">{t('shopAnalytics.period90d')}</option>
+                  <option value="custom">{t('shopAnalytics.periodCustom')}</option>
                 </select>
               </div>
+              {periodPreset === 'custom' ? (
+                <>
+                  <div className="field">
+                    <label htmlFor="analytics-start-date">{t('shopAnalytics.startDate')}</label>
+                    <input
+                      id="analytics-start-date"
+                      type="date"
+                      value={startDate}
+                      max={endDate ? shiftDate(endDate, -1) : undefined}
+                      onChange={changeCustomDate(setStartDate, startDate)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="analytics-end-date">{t('shopAnalytics.endDate')}</label>
+                    <input
+                      id="analytics-end-date"
+                      type="date"
+                      value={endDate}
+                      min={startDate ? shiftDate(startDate, 1) : undefined}
+                      max={dateOnly(new Date())}
+                      aria-invalid={invalidRange}
+                      onChange={changeCustomDate(setEndDate, endDate)}
+                    />
+                  </div>
+                </>
+              ) : null}
             </div>
             {invalidRange ? (
               <p className="shop-analytics__validation" role="alert">{t('shopAnalytics.invalidRange')}</p>
-            ) : null}
-            {selectedShop ? (
-              <div className="shop-analytics__shop-meta">
-                <strong>{selectedShop.name}</strong>
-                <span>{t('shopAnalytics.region')}: {selectedShop.region || t('common.unknown')}</span>
-                <span>{t('shopAnalytics.shopCode')}: {selectedShop.code || selectedShop.platform_shop_id}</span>
-                <span className={`chip ${connectionState === 'active' ? 'chip--positive' : 'chip--amber'}`}>
-                  {t(`shopAnalytics.status${connectionState.charAt(0).toUpperCase()}${connectionState.slice(1)}`)}
-                </span>
-              </div>
             ) : null}
           </section>
 
