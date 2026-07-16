@@ -123,6 +123,8 @@ const sumBy = (rows, key, value = numericValue) => rows.reduce(
 const totalsFor = (rows) => {
   const gmv = sumBy(rows, 'gmv', moneyValue);
   const orders = sumBy(rows, 'orders');
+  const cancellationRows = rows.filter((row) => row?.cancellations_and_returns !== null
+    && row?.cancellations_and_returns !== undefined);
   return {
     gmv,
     orders,
@@ -131,7 +133,7 @@ const totalsFor = (rows) => {
     impressions: sumBy(rows, 'product_impressions'),
     pageViews: sumBy(rows, 'product_page_views'),
     refunds: sumBy(rows, 'refunds', moneyValue),
-    cancellations: sumBy(rows, 'cancellations_and_returns'),
+    cancellations: cancellationRows.length ? sumBy(cancellationRows, 'cancellations_and_returns') : null,
     avgOrderValue: orders ? gmv / orders : 0,
   };
 };
@@ -164,6 +166,7 @@ const ShopAnalytics = () => {
   const formatNumber = (value) => numericValue(value).toLocaleString(locale, {
     maximumFractionDigits: 2,
   });
+  const formatOptionalNumber = (value) => value === null || value === undefined ? '—' : formatNumber(value);
   const formatPercent = (value) => `${numericValue(value).toLocaleString(locale, {
     maximumFractionDigits: 1,
   })}%`;
@@ -825,7 +828,7 @@ const ShopAnalytics = () => {
                         ))}
                         <div className="shop-analytics__funnel-footer">
                           <span>{t('shopAnalytics.cancellationsReturns')}</span>
-                          <strong>{formatNumber(totals.cancellations)}</strong>
+                          <strong>{formatOptionalNumber(totals.cancellations)}</strong>
                         </div>
                       </div>
                     ) : (
@@ -887,7 +890,7 @@ const ShopAnalytics = () => {
                           <td className="cell-number">{formatNumber(row.product_impressions)}</td>
                           <td className="cell-number">{formatNumber(row.product_page_views)}</td>
                           <td className="cell-number">{formatMoney(moneyValue(row.refunds))}</td>
-                          <td className="cell-number">{formatNumber(row.cancellations_and_returns)}</td>
+                          <td className="cell-number">{formatOptionalNumber(row.cancellations_and_returns)}</td>
                         </tr>
                       ))}
                       {!analyticsLoading && !intervals.length ? (
@@ -922,7 +925,7 @@ const ShopAnalytics = () => {
                         <div><dt>{t('shopAnalytics.pageViews')}</dt><dd>{formatNumber(row.product_page_views)}</dd></div>
                         <div><dt>{t('shopAnalytics.impressions')}</dt><dd>{formatNumber(row.product_impressions)}</dd></div>
                         <div><dt>{t('shopAnalytics.refunds')}</dt><dd>{formatMoney(moneyValue(row.refunds))}</dd></div>
-                        <div><dt>{t('shopAnalytics.cancellationsReturns')}</dt><dd>{formatNumber(row.cancellations_and_returns)}</dd></div>
+                        <div><dt>{t('shopAnalytics.cancellationsReturns')}</dt><dd>{formatOptionalNumber(row.cancellations_and_returns)}</dd></div>
                       </dl>
                     </article>
                   ))}

@@ -176,6 +176,47 @@ test('shop performance 202509 response is normalized for the existing analytics 
   ]);
 });
 
+test('shop performance normalizer supports the current 202509 response fields', () => {
+  const performance = normalizeShopPerformance({
+    intervals: [{
+      start_date: '2026-07-09',
+      end_date: '2026-07-10',
+      gmv: {
+        overall: { amount: '8222.47', currency: 'MYR' },
+        breakdowns: [{ type: 'LIVE', gmv: { amount: '4774.89', currency: 'MYR' } }],
+      },
+      sales: {
+        orders_count: 34,
+        sku_orders_count: 34,
+        items_sold: 34,
+        avg_customers_count: 29,
+        refunds: { amount: '359.46', currency: 'MYR' },
+      },
+      traffic: { avg_visitors: 1213, avg_page_views: 2719 },
+      // Values written by the first 202509 adapter must be replaced by the
+      // authoritative nested response when old snapshots are read again.
+      orders: 0,
+      buyers: 0,
+      refunds: 0,
+      product_impressions: 0,
+      product_page_views: 0,
+      cancellations_and_returns: 0,
+    }],
+  });
+  const [interval] = performance.intervals;
+  assert.deepEqual(interval.gmv, { amount: '8222.47', currency: 'MYR' });
+  assert.equal(interval.orders, 34);
+  assert.equal(interval.units_sold, 34);
+  assert.equal(interval.buyers, 29);
+  assert.equal(interval.product_impressions, 1213);
+  assert.equal(interval.product_page_views, 2719);
+  assert.deepEqual(interval.refunds, { amount: '359.46', currency: 'MYR' });
+  assert.equal(interval.cancellations_and_returns, null);
+  assert.deepEqual(interval.gmv_breakdowns, [
+    { type: 'LIVE', amount: '4774.89', currency: 'MYR' },
+  ]);
+});
+
 const sellerAuthorization = () => ({
   granted_scopes: ['seller.affiliate_collaboration.read'],
   access_token_encrypted: encryptPartnerToken('seller-token'),

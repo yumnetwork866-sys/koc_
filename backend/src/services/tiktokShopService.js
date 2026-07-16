@@ -150,29 +150,42 @@ const normalizeShopPerformance = (performance) => {
       const sales = interval?.sales || {};
       const traffic = interval?.traffic || {};
       const trafficBreakdowns = traffic.breakdowns || [];
-      const cancelAndRefunds = interval?.cancel_and_refunds || {};
-      const salesBreakdowns = Array.isArray(sales.breakdowns) ? sales.breakdowns : [];
+      const cancelAndRefunds = interval?.cancel_and_refunds;
+      const gmv = interval?.gmv?.overall || sales?.gmv?.overall || sales.gmv || interval.gmv || null;
+      const gmvBreakdowns = interval?.gmv?.breakdowns
+        || sales?.gmv?.breakdowns
+        || sales.breakdowns
+        || [];
       return {
         ...interval,
-        gmv: interval.gmv || sales.gmv || null,
-        orders: interval.orders ?? sales.orders ?? sales.sku_orders ?? 0,
-        units_sold: interval.units_sold ?? sales.items_sold ?? 0,
-        buyers: interval.buyers ?? sales.customers ?? sales.avg_customers ?? 0,
-        product_impressions: interval.product_impressions
+        gmv,
+        orders: sales.orders_count ?? sales.sku_orders_count ?? sales.orders ?? sales.sku_orders ?? interval.orders ?? 0,
+        units_sold: sales.items_sold ?? interval.units_sold ?? 0,
+        buyers: sales.avg_customers_count
+          ?? sales.customers_count
+          ?? sales.customers
+          ?? sales.avg_customers
+          ?? interval.buyers
+          ?? 0,
+        product_impressions: traffic.product_impressions
           ?? traffic.impressions
+          ?? traffic.avg_visitors
+          ?? interval.product_impressions
           ?? sumBreakdownMetric(trafficBreakdowns, 'impressions'),
-        product_page_views: interval.product_page_views
+        product_page_views: traffic.avg_page_views
           ?? traffic.page_views
+          ?? interval.product_page_views
           ?? sumBreakdownMetric(trafficBreakdowns, 'page_views'),
-        refunds: interval.refunds ?? cancelAndRefunds.refunded ?? 0,
-        cancellations_and_returns: interval.cancellations_and_returns
-          ?? ((Number(cancelAndRefunds.canceled) || 0) + (Number(cancelAndRefunds.returned) || 0)),
-        gmv_breakdowns: Array.isArray(interval.gmv_breakdowns)
+        refunds: sales.refunds ?? interval.refunds ?? cancelAndRefunds?.refunded ?? null,
+        cancellations_and_returns: cancelAndRefunds
+          ? ((Number(cancelAndRefunds.canceled) || 0) + (Number(cancelAndRefunds.returned) || 0))
+          : (interval.sales || interval.traffic ? null : interval.cancellations_and_returns ?? null),
+        gmv_breakdowns: Array.isArray(interval.gmv_breakdowns) && interval.gmv_breakdowns.length
           ? interval.gmv_breakdowns
-          : salesBreakdowns.map((item) => ({
-            type: item.content_type,
-            amount: item.sales?.gmv?.amount ?? 0,
-            currency: item.sales?.gmv?.currency || sales.gmv?.currency || null,
+          : gmvBreakdowns.map((item) => ({
+            type: item.type || item.content_type,
+            amount: item.gmv?.amount ?? item.sales?.gmv?.amount ?? 0,
+            currency: item.gmv?.currency || item.sales?.gmv?.currency || gmv?.currency || null,
           })),
       };
     }),

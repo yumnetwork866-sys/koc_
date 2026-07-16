@@ -15,6 +15,7 @@ const {
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
   getSellerCreatorContentDetails,
+  normalizeShopPerformance,
 } = require('../services/tiktokShopService');
 const { createTtlPromiseCache } = require('../lib/ttlPromiseCache');
 const { isDemoAuthorization, sellerAffiliateFixture } = require('../lib/tiktokDemoFixtures');
@@ -154,7 +155,13 @@ const getShopAnalytics = async (req, res) => {
     if (endDate) where.end_date = endDate;
     if (['LOCAL', 'USD'].includes(req.query.currency)) where.currency = req.query.currency;
     const snapshots = await TikTokShopAnalyticsSnapshot.findAll({ where, order: [['synced_at', 'DESC']], limit: 30 });
-    res.json({ shop, snapshots });
+    res.json({
+      shop,
+      snapshots: snapshots.map((snapshot) => {
+        const value = snapshot.toJSON();
+        return { ...value, metrics: normalizeShopPerformance(value.metrics) };
+      }),
+    });
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
