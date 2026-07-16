@@ -4,7 +4,7 @@ const { encryptPartnerToken, decryptPartnerToken } = require('../lib/tiktokPartn
 const STATE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_SKEW_MS = 5 * 60 * 1000;
 const AUTHORIZED_SHOPS_PATH = '/authorization/202309/shops';
-const SHOP_PERFORMANCE_PATH = '/analytics/202405/shop/performance';
+const SHOP_PERFORMANCE_PATH = '/analytics/202509/shop/performance';
 const SELLER_AFFILIATE_SCOPE = 'seller.affiliate_collaboration.read';
 const OPEN_COLLABORATIONS_PATH = '/affiliate_seller/202412/open_collaborations/search';
 const TARGET_COLLABORATIONS_PATH = '/affiliate_seller/202409/target_collaborations/search';
@@ -121,8 +121,60 @@ const requestShopApi = async ({ path, accessToken, method = 'GET', query = {}, b
     ...(typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? { signal: AbortSignal.timeout(config.requestTimeoutMs) } : {}),
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok || Number(payload?.code) !== 0) throw new Error(`TikTok Shop API error: ${payload?.message || response.statusText || response.status}`);
+  if (!response.ok || Number(payload?.code) !== 0) {
+    const details = [
+      payload?.message || response.statusText || response.status,
+      payload?.code !== undefined ? `code=${payload.code}` : null,
+      payload?.request_id ? `request_id=${payload.request_id}` : null,
+    ].filter(Boolean).join(', ');
+    const error = new Error(`TikTok Shop API error: ${details}`);
+    error.tiktokCode = payload?.code ?? null;
+    error.requestId = payload?.request_id || null;
+    throw error;
+  }
   return payload;
+};
+
+const sumBreakdownMetric = (breakdowns, key) => (Array.isArray(breakdowns) ? breakdowns : [])
+  .reduce((total, item) => total + (Number(item?.traffic?.[key]) || 0), 0);
+
+const normalizeShopPerformance = (performance) => {
+  if (!performance || !Array.isArray(performance.intervals)) return performance;
+  return {
+    ...performance,
+    intervals: performance.intervals.map((interval) => {
+      // Keep the flat 202405 fields for existing snapshots/UI while adapting the
+      // nested sales/traffic response returned by Analytics API 202509.
+      const sales = interval?.sales || {};
+      const traffic = interval?.traffic || {};
+      const trafficBreakdowns = traffic.breakdowns || [];
+      const cancelAndRefunds = interval?.cancel_and_refunds || {};
+      const salesBreakdowns = Array.isArray(sales.breakdowns) ? sales.breakdowns : [];
+      return {
+        ...interval,
+        gmv: interval.gmv || sales.gmv || null,
+        orders: interval.orders ?? sales.orders ?? sales.sku_orders ?? 0,
+        units_sold: interval.units_sold ?? sales.items_sold ?? 0,
+        buyers: interval.buyers ?? sales.customers ?? sales.avg_customers ?? 0,
+        product_impressions: interval.product_impressions
+          ?? traffic.impressions
+          ?? sumBreakdownMetric(trafficBreakdowns, 'impressions'),
+        product_page_views: interval.product_page_views
+          ?? traffic.page_views
+          ?? sumBreakdownMetric(trafficBreakdowns, 'page_views'),
+        refunds: interval.refunds ?? cancelAndRefunds.refunded ?? 0,
+        cancellations_and_returns: interval.cancellations_and_returns
+          ?? ((Number(cancelAndRefunds.canceled) || 0) + (Number(cancelAndRefunds.returned) || 0)),
+        gmv_breakdowns: Array.isArray(interval.gmv_breakdowns)
+          ? interval.gmv_breakdowns
+          : salesBreakdowns.map((item) => ({
+            type: item.content_type,
+            amount: item.sales?.gmv?.amount ?? 0,
+            currency: item.sales?.gmv?.currency || sales.gmv?.currency || null,
+          })),
+      };
+    }),
+  };
 };
 
 const sellerAffiliateRequest = async ({ authorization, shopCipher, path, method = 'POST', query = {}, body }, fetchImpl) => {
@@ -208,12 +260,14 @@ const getAuthorizedShops = async (accessToken, fetchImpl) => {
 
 const getShopPerformance = async ({ authorization, shopCipher, startDate, endDate, currency = 'LOCAL' }, fetchImpl) => {
   const accessToken = await getUsableShopToken(authorization, fetchImpl || fetch);
-  return requestShopApi({
+  const payload = await requestShopApi({
     path: SHOP_PERFORMANCE_PATH,
     accessToken,
     fetchImpl: fetchImpl || fetch,
-    query: { shop_cipher: shopCipher, start_date_ge: startDate, end_date_lt: endDate, with_comparison: true, granularity: '1D', currency },
+    query: { shop_cipher: shopCipher, start_date_ge: startDate, end_date_lt: endDate, granularity: '1D', currency },
   });
+  if (payload.data?.performance) payload.data.performance = normalizeShopPerformance(payload.data.performance);
+  return payload;
 };
 
 module.exports = {
@@ -230,6 +284,7 @@ module.exports = {
   signature,
   getAuthorizedShops,
   getShopPerformance,
+  normalizeShopPerformance,
   searchOpenCollaborations,
   searchTargetCollaborations,
   searchAffiliateOrders,

@@ -14,6 +14,7 @@ const {
   signature,
   getAuthorizedShops,
   getShopPerformance,
+  normalizeShopPerformance,
   searchOpenCollaborations,
   searchTargetCollaborations,
   searchAffiliateOrders,
@@ -125,7 +126,7 @@ test('shop performance request uses the selected shop cipher and date range', as
     assert.equal(url.searchParams.get('start_date_ge'), '2026-06-01');
     assert.equal(url.searchParams.get('end_date_lt'), '2026-07-01');
     assert.equal(url.searchParams.get('granularity'), '1D');
-    assert.equal(url.searchParams.get('with_comparison'), 'true');
+    assert.equal(url.searchParams.has('with_comparison'), false);
     assert.equal(options.headers['x-tts-access-token'], 'seller-token');
     return {
       ok: true,
@@ -134,6 +135,41 @@ test('shop performance request uses the selected shop cipher and date range', as
     };
   });
   assert.equal(payload.request_id, 'request-1');
+});
+
+test('shop performance 202509 response is normalized for the existing analytics UI', () => {
+  const performance = normalizeShopPerformance({
+    intervals: [{
+      start_date: '2026-07-01',
+      end_date: '2026-07-02',
+      sales: {
+        gmv: { amount: '233', currency: 'MYR' },
+        orders: 23,
+        items_sold: 25,
+        breakdowns: [{
+          content_type: 'LIVE',
+          sales: { gmv: { amount: '43', currency: 'MYR' } },
+        }],
+      },
+      traffic: {
+        breakdowns: [
+          { traffic: { impressions: 34, page_views: 43 } },
+          { traffic: { impressions: 6, page_views: 7 } },
+        ],
+      },
+      cancel_and_refunds: { returned: 2, canceled: 3, refunded: 1 },
+    }],
+  });
+  assert.deepEqual(performance.intervals[0].gmv, { amount: '233', currency: 'MYR' });
+  assert.equal(performance.intervals[0].orders, 23);
+  assert.equal(performance.intervals[0].units_sold, 25);
+  assert.equal(performance.intervals[0].product_impressions, 40);
+  assert.equal(performance.intervals[0].product_page_views, 50);
+  assert.equal(performance.intervals[0].refunds, 1);
+  assert.equal(performance.intervals[0].cancellations_and_returns, 5);
+  assert.deepEqual(performance.intervals[0].gmv_breakdowns, [
+    { type: 'LIVE', amount: '43', currency: 'MYR' },
+  ]);
 });
 
 const sellerAuthorization = () => ({

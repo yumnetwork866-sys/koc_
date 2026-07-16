@@ -193,7 +193,10 @@ const syncShopAnalytics = async (req, res) => {
   } catch (error) {
     await shop?.update({ last_synced_at: new Date(), last_sync_status: 'failed', last_sync_error: String(error.message).slice(0, 2000) }).catch(() => {});
     await shop?.authorization?.update({ last_sync_status: 'failed', last_sync_error: String(error.message).slice(0, 2000), updated_at: new Date() }).catch(() => {});
-    res.status(shop ? 502 : 500).json({ message: error.message });
+    res.status(shop ? 424 : 500).json({
+      message: error.message,
+      ...(error.requestId ? { request_id: error.requestId } : {}),
+    });
   }
 };
 

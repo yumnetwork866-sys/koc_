@@ -89,6 +89,23 @@ const numericValue = (value) => {
 };
 
 const moneyValue = (value) => numericValue(value?.amount ?? value);
+const padDatePart = (value) => String(value).padStart(2, '0');
+
+const dateParts = (value) => {
+  const match = String(value || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? { year: match[1], month: match[2], day: match[3] } : null;
+};
+
+const formatDisplayDate = (value, fallback) => {
+  const parts = dateParts(value);
+  return parts ? `${parts.day}/${parts.month}/${parts.year}` : fallback;
+};
+
+const formatDisplayDateTime = (value, fallback) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return `${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())} ${padDatePart(date.getDate())}/${padDatePart(date.getMonth() + 1)}/${date.getFullYear()}`;
+};
 
 const scopesOf = (authorization) => {
   if (Array.isArray(authorization?.granted_scopes)) return authorization.granted_scopes;
@@ -149,13 +166,8 @@ const ShopAnalytics = () => {
   const formatPercent = (value) => `${numericValue(value).toLocaleString(locale, {
     maximumFractionDigits: 1,
   })}%`;
-  const formatDate = (value) => value
-    ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
-      .format(new Date(`${String(value).slice(0, 10)}T00:00:00`))
-    : t('common.noData');
-  const formatDateTime = (value) => value
-    ? new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
-    : t('common.noData');
+  const formatDate = (value) => formatDisplayDate(value, t('common.noData'));
+  const formatDateTime = (value) => formatDisplayDateTime(value, t('common.noData'));
 
   const loadInventory = useCallback(async (signal) => {
     setLoading(true);
@@ -474,25 +486,6 @@ const ShopAnalytics = () => {
         </div>
 
         <div className="shop-analytics__hero-context">
-          <div className="shop-analytics__hero-shop">
-            <span className="shop-analytics__shop-mark" aria-hidden="true">
-              <AnalyticsIcon name="shop" />
-            </span>
-            <span>
-              <small>{t('shopAnalytics.selectedShop')}</small>
-              <strong>{selectedShop?.name || t('shopAnalytics.noShopSelected')}</strong>
-            </span>
-          </div>
-          <div className="shop-analytics__hero-freshness">
-            <small>{t('shopAnalytics.dataFreshness')}</small>
-            <strong>
-              {analyticsLoading
-                ? t('common.loading')
-                : snapshot?.synced_at
-                  ? formatDateTime(snapshot.synced_at)
-                  : t('shopAnalytics.notSynced')}
-            </strong>
-          </div>
           {selectedShop ? (
             <span className={`shop-analytics__status shop-analytics__status--${connectionState}`}>
               <i aria-hidden="true" />
@@ -738,10 +731,10 @@ const ShopAnalytics = () => {
                             tickLine={false}
                             minTickGap={26}
                             tick={CHART_TICK}
-                            tickFormatter={(value) => new Intl.DateTimeFormat(locale, {
-                              month: 'short',
-                              day: 'numeric',
-                            }).format(new Date(`${value}T00:00:00`))}
+                            tickFormatter={(value) => {
+                              const parts = dateParts(value);
+                              return parts ? `${parts.day}/${parts.month}` : value;
+                            }}
                           />
                           <YAxis
                             width={64}
