@@ -12,8 +12,9 @@ import {
   startTikTokPartnerOauth,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import SellerAffiliatePanel from './SellerAffiliatePanel';
 
-const REQUIRED_CREATOR_SCOPES = ['creator.affiliate_collaboration.read', 'creator.showcase.read'];
+const REQUIRED_CREATOR_SCOPES = ['creator.affiliate.info', 'creator.affiliate_collaboration.read', 'creator.showcase.read'];
 const PAGE_SIZE = 10;
 const OAUTH_UI_STATE_KEY = 'koc-performance-oauth-ui-state';
 const CHART_TOOLTIP_STYLE = {
@@ -70,12 +71,13 @@ const KOCPerformance = ({ heroTitle }) => {
     setLoading(true);
     setError('');
     try {
-      const [loadedKpis, loadedStatuses] = await Promise.all([
+      const [kpiResult, statusResult] = await Promise.allSettled([
         fetchKpis(signal, 'koc', { startDate, endDate }),
         fetchTikTokPartnerStatuses(signal),
       ]);
-      setKpis(loadedKpis);
-      setPartnerStatuses(loadedStatuses);
+      if (kpiResult.status === 'rejected') throw kpiResult.reason;
+      setKpis(kpiResult.value);
+      setPartnerStatuses(statusResult.status === 'fulfilled' ? statusResult.value : []);
     } catch (err) {
       if (err.name !== 'AbortError') setError(err.message || t('koc.errorLoad'));
     } finally {
@@ -294,14 +296,14 @@ const KOCPerformance = ({ heroTitle }) => {
   const toggleSort = (key) => setSort((current) => ({ key, direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc' }));
   const sortMark = (key) => sort.key === key ? (sort.direction === 'asc' ? ' ↑' : ' ↓') : '';
 
-  const connectPartner = async () => {
+  const connectPartner = async ({ creatorId, createKoc = false } = {}) => {
     try {
       sessionStorage.setItem(OAUTH_UI_STATE_KEY, JSON.stringify({
         scrollY: window.scrollY,
         filters: { search, connectionFilter, showcaseFilter, regionFilter, minViews, periodPreset, startDate, endDate },
       }));
       setToast({ type: 'info', message: t('koc.oauthRedirecting') });
-      const { authorizeUrl } = await startTikTokPartnerOauth('/manage/koc-performance');
+      const { authorizeUrl } = await startTikTokPartnerOauth('/manage/koc-performance', { creatorId, createKoc });
       window.location.assign(authorizeUrl);
     } catch (err) { setToast({ type: 'error', message: err.message || t('koc.partnerError') }); }
   };
@@ -369,16 +371,17 @@ const KOCPerformance = ({ heroTitle }) => {
         <div>
           <h1 className="page__title">{t('koc.heroTitle') || heroTitle}</h1>
         </div>
-        <div className="koc-tabs" role="tablist" aria-label={t('koc.tabsLabel')} onKeyDown={(event) => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') setActiveTab((value) => value === 'performance' ? 'creator' : 'performance'); }}>
+        <div className="koc-tabs" role="tablist" aria-label={t('koc.tabsLabel')}>
           <button id="performance-tab" aria-controls="performance-panel" className={activeTab === 'performance' ? 'is-active' : ''} role="tab" aria-selected={activeTab === 'performance'} tabIndex={activeTab === 'performance' ? 0 : -1} onClick={() => setActiveTab('performance')}>{t('koc.performanceTab')}</button>
           <button id="creator-tab" aria-controls="creator-panel" className={activeTab === 'creator' ? 'is-active' : ''} role="tab" aria-selected={activeTab === 'creator'} tabIndex={activeTab === 'creator' ? 0 : -1} onClick={() => setActiveTab('creator')}>{t('koc.creatorTab')}</button>
+          <button id="seller-affiliate-tab" aria-controls="seller-affiliate-panel" className={activeTab === 'sellerAffiliate' ? 'is-active' : ''} role="tab" aria-selected={activeTab === 'sellerAffiliate'} tabIndex={activeTab === 'sellerAffiliate' ? 0 : -1} onClick={() => setActiveTab('sellerAffiliate')}>{t('sellerAffiliate.tab')}</button>
         </div>
       </section>
 
       {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
       {toast ? <div className={`koc-toast koc-toast--${toast.type}`} role={toast.type === 'error' ? 'alert' : 'status'} aria-live="polite"><span>{toast.type === 'info' ? <span className="loading-dot" aria-hidden="true" /> : null}{toast.message}</span><div className="actions actions--inline">{toast.retryId ? <button className="button button--small" type="button" onClick={(event) => syncPartner(toast.retryId, event)}>{t('koc.retry')}</button> : null}<button className="koc-toast__close" type="button" aria-label={t('common.close')} onClick={() => setToast(null)}>×</button></div></div> : null}
 
-      <section className="section-card koc-filters" aria-labelledby="koc-filters-title">
+      {activeTab !== 'sellerAffiliate' ? <section className="section-card koc-filters" aria-labelledby="koc-filters-title">
         <div className="section-card__header"><div><h2 className="section-card__title" id="koc-filters-title">{t('koc.filters')}</h2></div>{activeFilters.length ? <button className="button button--ghost" type="button" onClick={clearAllFilters}>{t('koc.clearAll')}</button> : null}</div>
         <div className="koc-filter-grid">
           <div className="field"><label htmlFor="koc-search">{t('common.search')}</label><input id="koc-search" type="search" value={search} placeholder={t('koc.searchExtendedPlaceholder')} onChange={(event) => setSearch(event.target.value)} /></div>
@@ -390,7 +393,7 @@ const KOCPerformance = ({ heroTitle }) => {
           {periodPreset === 'custom' ? <><div className="field"><label htmlFor="koc-start-date">{t('koc.startDate')}</label><input id="koc-start-date" type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} /></div><div className="field"><label htmlFor="koc-end-date">{t('koc.endDate')}</label><input id="koc-end-date" type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} /></div></> : null}
         </div>
         {activeFilters.length ? <div className="active-filter-row" aria-label={t('koc.activeFilters')}>{activeFilters.map((filter) => <button className="filter-chip" type="button" key={filter.key} onClick={() => clearFilter(filter.key)} aria-label={`${t('koc.removeFilter')} ${filter.label}`}>{filter.label}<span aria-hidden="true">×</span></button>)}</div> : null}
-      </section>
+      </section> : null}
 
       {activeTab === 'performance' ? (
         <div id="performance-panel" role="tabpanel" aria-labelledby="performance-tab" className="koc-tab-panel">
@@ -419,12 +422,12 @@ const KOCPerformance = ({ heroTitle }) => {
             <div className="top-video-grid">{(kpis?.topVideos || []).map((video) => <article className="top-video-card" key={video.id}>{video.thumbnailUrl ? <a href={video.videoUrl || '#'} target={video.videoUrl ? '_blank' : undefined} rel="noreferrer"><img src={video.thumbnailUrl} alt="" loading="lazy" /></a> : <div className="top-video-card__placeholder" aria-hidden="true">▶</div>}<div className="top-video-card__body"><h3>{video.videoUrl ? <a href={video.videoUrl} target="_blank" rel="noreferrer">{video.title}</a> : video.title}</h3><span className="row-subtitle">{video.creatorNames || t('common.unknown')}</span><div className="top-video-card__meta"><strong>{formatNumber(video.views)} {t('common.views')}</strong><span>{formatDate(video.publishedAt)}</span></div>{video.videoUrl ? <a className="top-video-card__link" href={video.videoUrl} target="_blank" rel="noreferrer" aria-label={`${t('koc.openTikTok')}: ${video.title}`}>{t('koc.openTikTok')} ↗</a> : null}</div></article>)}{!kpis?.topVideos?.length ? <div className="empty-state">{t('koc.noVideoData')}</div> : null}</div>
           </section>
         </div>
-      ) : (
+      ) : activeTab === 'creator' ? (
         <div id="creator-panel" role="tabpanel" aria-labelledby="creator-tab" className="koc-tab-panel">
           <section className="section-card">
             <div className="section-card__header">
               <div><h2 className="section-card__title">{t('koc.creatorTableTitle')}</h2></div>
-              <div className="actions"><button className="button button--ghost koc-column-toggle" type="button" onClick={() => setShowExtraColumns((value) => !value)}>{t(showExtraColumns ? 'koc.hideExtraColumns' : 'koc.showExtraColumns')}</button></div>
+              <div className="actions"><button className="button" type="button" onClick={() => connectPartner({ createKoc: true })}>{t('koc.addFromTikTok')}</button><button className="button button--ghost koc-column-toggle" type="button" onClick={() => setShowExtraColumns((value) => !value)}>{t(showExtraColumns ? 'koc.hideExtraColumns' : 'koc.showExtraColumns')}</button></div>
             </div>
             <div className="table-wrap koc-table-wrap">
               <table className={`data-table koc-table ${showExtraColumns ? 'koc-table--expanded' : ''}`}>
@@ -438,7 +441,7 @@ const KOCPerformance = ({ heroTitle }) => {
                       <td>{partner?.username ? <><span className="row-title">@{partner.username.replace(/^@/, '')}</span><span className="row-subtitle">{partner.register_region || ''}</span></> : <span className="row-subtitle">{t('koc.partnerManualUser')}</span>}</td>
                       <td className="cell-number koc-col--secondary">{formatNumber(user.videoCount)}</td><td className="cell-number">{formatNumber(user.totalViews)}</td><td className="cell-number koc-col--secondary">{formatNumber(user.avgViewsPerVideo)}</td><td className="cell-number koc-col--secondary">{user.over10kRate}%</td><td className="cell-number">{formatNumber(partner?.showcase_count)}</td>
                       <td><span className={`chip creator-status--${status}`}>{t(`koc.partnerStatus${status.charAt(0).toUpperCase()}${status.slice(1)}`)}</span>{partner?.last_sync_status === 'failed' ? <span className="chip chip--amber">{t('koc.syncFailed')}</span> : null}<span className="row-subtitle">{partner?.connected ? `${t('koc.partnerLastSync')}: ${formatDateTime(partner.last_synced_at)}` : ''}</span></td>
-                      <td onClick={(event) => event.stopPropagation()}>{partner?.connected ? <div className="actions actions--inline"><button className="button button--small" type="button" aria-label={`${t('koc.partnerView')} ${displayKocName(user.name)}`} onClick={() => openDrawer(user)}>{t('koc.partnerView')}</button><button className="button button--small button--ghost" type="button" aria-label={`${t('koc.partnerSync')} ${displayKocName(user.name)}`} disabled={String(actionId) === String(user.id)} onClick={(event) => syncPartner(user.id, event)}>{String(actionId) === String(user.id) ? t('common.loading') : t('koc.partnerSync')}</button><details className="action-menu"><summary className="button button--small button--ghost" aria-label={`${t('koc.partnerMoreActions')} ${displayKocName(user.name)}`}>•••</summary><div className="action-menu__panel"><button type="button" onClick={connectPartner}>{t('koc.partnerReconnect')}</button><button className="action-menu__danger" type="button" onClick={(event) => disconnectPartner(user.id, event)}>{t('koc.partnerDisconnect')}</button></div></details></div> : <span className="row-subtitle">—</span>}</td>
+                      <td onClick={(event) => event.stopPropagation()}>{partner?.connected ? <div className="actions actions--inline"><button className="button button--small" type="button" aria-label={`${t('koc.partnerView')} ${displayKocName(user.name)}`} onClick={() => openDrawer(user)}>{t('koc.partnerView')}</button><button className="button button--small button--ghost" type="button" aria-label={`${t('koc.partnerSync')} ${displayKocName(user.name)}`} disabled={String(actionId) === String(user.id)} onClick={(event) => syncPartner(user.id, event)}>{String(actionId) === String(user.id) ? t('common.loading') : t('koc.partnerSync')}</button><details className="action-menu"><summary className="button button--small button--ghost" aria-label={`${t('koc.partnerMoreActions')} ${displayKocName(user.name)}`}>•••</summary><div className="action-menu__panel"><button type="button" onClick={() => connectPartner({ creatorId: user.id })}>{t('koc.partnerReconnect')}</button><button className="action-menu__danger" type="button" onClick={(event) => disconnectPartner(user.id, event)}>{t('koc.partnerDisconnect')}</button></div></details></div> : <button className="button button--small" type="button" onClick={() => connectPartner({ creatorId: user.id })}>{t('koc.partnerConnect')}</button>}</td>
                     </tr>;
                   })}
                   {!loading && !pagedRows.length ? <tr><td colSpan={9}><div className="empty-state">{t('koc.noMatch')}</div></td></tr> : null}
@@ -450,7 +453,7 @@ const KOCPerformance = ({ heroTitle }) => {
                 const partner = statusById.get(String(user.id));
                 const status = partner?.status || (partner?.connected ? 'connected' : 'disconnected');
                 return <article id={`koc-card-${user.id}`} className={`koc-mobile-card ${String(highlightId) === String(user.id) ? 'is-highlighted' : ''}`} key={user.id}>
-                  <div className="koc-mobile-card__header"><button className="creator-identity koc-mobile-card__open" type="button" aria-label={`${t('koc.partnerView')} ${displayKocName(user.name)}`} onClick={() => openDrawer(user)}>{partner?.avatar_url ? <img className="creator-identity__avatar" src={partner.avatar_url} alt="" /> : <span className="creator-identity__avatar creator-identity__avatar--fallback">{displayKocName(user.name).charAt(0)}</span>}<span><strong>{displayKocName(user.name)}</strong><span className="row-subtitle">{partner?.username ? `@${partner.username.replace(/^@/, '')}` : t('koc.partnerManualUser')}</span></span></button><details className="action-menu action-menu--mobile"><summary className="button button--ghost" aria-label={`${t('koc.partnerMoreActions')} ${displayKocName(user.name)}`}>•••</summary><div className="action-menu__panel"><button type="button" onClick={() => openDrawer(user)}>{t('koc.partnerView')}</button>{partner?.connected ? <><button type="button" disabled={String(actionId) === String(user.id)} onClick={(event) => syncPartner(user.id, event)}>{t('koc.partnerSync')}</button><button type="button" onClick={connectPartner}>{t('koc.partnerReconnect')}</button><button className="action-menu__danger" type="button" onClick={(event) => disconnectPartner(user.id, event)}>{t('koc.partnerDisconnect')}</button></> : null}</div></details></div>
+                  <div className="koc-mobile-card__header"><button className="creator-identity koc-mobile-card__open" type="button" aria-label={`${t('koc.partnerView')} ${displayKocName(user.name)}`} onClick={() => openDrawer(user)}>{partner?.avatar_url ? <img className="creator-identity__avatar" src={partner.avatar_url} alt="" /> : <span className="creator-identity__avatar creator-identity__avatar--fallback">{displayKocName(user.name).charAt(0)}</span>}<span><strong>{displayKocName(user.name)}</strong><span className="row-subtitle">{partner?.username ? `@${partner.username.replace(/^@/, '')}` : t('koc.partnerManualUser')}</span></span></button><details className="action-menu action-menu--mobile"><summary className="button button--ghost" aria-label={`${t('koc.partnerMoreActions')} ${displayKocName(user.name)}`}>•••</summary><div className="action-menu__panel"><button type="button" onClick={() => openDrawer(user)}>{t('koc.partnerView')}</button>{partner?.connected ? <><button type="button" disabled={String(actionId) === String(user.id)} onClick={(event) => syncPartner(user.id, event)}>{t('koc.partnerSync')}</button><button type="button" onClick={() => connectPartner({ creatorId: user.id })}>{t('koc.partnerReconnect')}</button><button className="action-menu__danger" type="button" onClick={(event) => disconnectPartner(user.id, event)}>{t('koc.partnerDisconnect')}</button></> : <button type="button" onClick={() => connectPartner({ creatorId: user.id })}>{t('koc.partnerConnect')}</button>}</div></details></div>
                   <div className="koc-mobile-card__status"><span className={`chip creator-status--${status}`}>{t(`koc.partnerStatus${status.charAt(0).toUpperCase()}${status.slice(1)}`)}</span>{partner?.last_sync_status === 'failed' ? <span className="chip chip--amber">{t('koc.syncFailed')}</span> : null}</div>
                   <dl><div><dt>{t('koc.totalViews')}</dt><dd>{formatNumber(user.totalViews)}</dd></div><div><dt>{t('koc.videos')}</dt><dd>{formatNumber(user.videoCount)}</dd></div><div><dt>{t('koc.partnerShowcaseProducts')}</dt><dd>{formatNumber(partner?.showcase_count)}</dd></div></dl>
                 </article>;
@@ -460,7 +463,7 @@ const KOCPerformance = ({ heroTitle }) => {
             <div className="table-pagination"><span>{t('koc.pageOf').replace('{{page}}', page).replace('{{total}}', pageCount)}</span><div className="actions actions--inline"><button className="button button--small button--ghost" type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>{t('koc.previous')}</button><button className="button button--small button--ghost" type="button" disabled={page >= pageCount} onClick={() => setPage((value) => value + 1)}>{t('koc.next')}</button></div></div>
           </section>
         </div>
-      )}
+      ) : <SellerAffiliatePanel />}
 
       {selectedKoc ? <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDrawer(); }}><aside className="koc-drawer" role="dialog" aria-modal="true" aria-labelledby="koc-detail-title"><div className="koc-drawer__header"><div><h2 id="koc-detail-title">{displayKocName(selectedKoc.name)}</h2><p>{selectedKoc.email}</p></div><button ref={closeDrawerRef} className="button button--ghost" type="button" onClick={closeDrawer} aria-label={t('common.close')}>×</button></div>{drawerLoading ? <div className="empty-state"><div className="loading-dot" />{t('koc.detailLoading')}</div> : <div className="koc-drawer__body">{drawerError ? <div className="empty-state">{drawerError}</div> : null}<CreatorDetail partner={statusById.get(String(selectedKoc.id))} overview={drawerOverview} detail={drawerData} collaborations={drawerCollaborations} chartPoints={chartPoints} formatNumber={formatNumber} formatDate={formatDate} t={t} requiredScopes={REQUIRED_CREATOR_SCOPES} /> </div>}</aside></div> : null}
     </div>

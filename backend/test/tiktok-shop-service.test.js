@@ -5,12 +5,18 @@ const test = require('node:test');
 const {
   AUTHORIZED_SHOPS_PATH,
   SHOP_PERFORMANCE_PATH,
+  OPEN_COLLABORATIONS_PATH,
+  TARGET_COLLABORATIONS_PATH,
+  AFFILIATE_ORDERS_PATH,
   buildShopAuthorizationUrl,
   parseShopAuthorizationState,
   exchangeShopAuthorizationCode,
   signature,
   getAuthorizedShops,
   getShopPerformance,
+  searchOpenCollaborations,
+  searchTargetCollaborations,
+  searchAffiliateOrders,
 } = require('../src/services/tiktokShopService');
 const { encryptPartnerToken } = require('../src/lib/tiktokPartnerTokenEncryption');
 
@@ -128,4 +134,64 @@ test('shop performance request uses the selected shop cipher and date range', as
     };
   });
   assert.equal(payload.request_id, 'request-1');
+});
+
+const sellerAuthorization = () => ({
+  granted_scopes: ['seller.affiliate_collaboration.read'],
+  access_token_encrypted: encryptPartnerToken('seller-token'),
+  access_token_expires_at: new Date(Date.now() + 60 * 60 * 1000),
+});
+
+const successResponse = (data = {}) => ({
+  ok: true,
+  status: 200,
+  json: async () => ({ code: 0, data, request_id: 'affiliate-request' }),
+});
+
+test('search open collaborations uses Seller scope, shop cipher, pagination and product keyword', async (t) => {
+  configure(t);
+  const payload = await searchOpenCollaborations({
+    authorization: sellerAuthorization(), shopCipher: 'cipher-1', pageSize: 20, keyword: 'Blue shirt',
+  }, async (url, options) => {
+    assert.equal(url.pathname, OPEN_COLLABORATIONS_PATH);
+    assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
+    assert.equal(url.searchParams.get('page_size'), '20');
+    assert.equal(options.method, 'POST');
+    assert.deepEqual(JSON.parse(options.body), { keyword_type: 'PRODUCT_NAME', keyword: 'Blue shirt' });
+    return successResponse({ open_collaborations: [] });
+  });
+  assert.equal(payload.request_id, 'affiliate-request');
+});
+
+test('search target collaborations sends supported seller filters', async (t) => {
+  configure(t);
+  await searchTargetCollaborations({
+    authorization: sellerAuthorization(), shopCipher: 'cipher-1', keyword: 'Launch invite', status: 'ONGOING',
+  }, async (url, options) => {
+    assert.equal(url.pathname, TARGET_COLLABORATIONS_PATH);
+    assert.deepEqual(JSON.parse(options.body), {
+      search_param: { keyword_type: 'TARGET_COLLABORATION_NAME', keyword: 'Launch invite' },
+      collaboration_status: 'ONGOING',
+    });
+    return successResponse({ target_collaborations: [] });
+  });
+});
+
+test('search affiliate orders sends the time window and program id', async (t) => {
+  configure(t);
+  await searchAffiliateOrders({
+    authorization: sellerAuthorization(), shopCipher: 'cipher-1', startTime: 1700000000, endTime: 1700100000, programId: 'program-1',
+  }, async (url, options) => {
+    assert.equal(url.pathname, AFFILIATE_ORDERS_PATH);
+    assert.deepEqual(JSON.parse(options.body), { create_time_ge: 1700000000, create_time_lt: 1700100000, program_id: 'program-1' });
+    return successResponse({ orders: [] });
+  });
+});
+
+test('seller affiliate API fails before network access when the read scope is missing', async (t) => {
+  configure(t);
+  await assert.rejects(
+    searchOpenCollaborations({ authorization: { ...sellerAuthorization(), granted_scopes: [] }, shopCipher: 'cipher-1' }),
+    /seller\.affiliate_collaboration\.read/,
+  );
 });

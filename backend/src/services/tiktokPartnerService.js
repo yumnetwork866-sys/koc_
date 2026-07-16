@@ -9,12 +9,14 @@ const CREATOR_PROFILE_PATH = '/affiliate_creator/202508/profiles';
 const SHOWCASE_PRODUCTS_PATH = '/affiliate_creator/202405/showcases/products';
 const STATE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000;
+const CREATOR_PROFILE_SCOPE = 'creator.affiliate.info';
+const CREATOR_SHOWCASE_SCOPE = 'creator.showcase.read';
+const CREATOR_COLLABORATION_SCOPE = 'creator.affiliate_collaboration.read';
 
 const getConfig = () => ({
   appKey: String(process.env.TIKTOK_PARTNER_APP_KEY || '').trim(),
   appSecret: String(process.env.TIKTOK_PARTNER_APP_SECRET || '').trim(),
   redirectUri: String(process.env.TIKTOK_PARTNER_REDIRECT_URI || '').trim(),
-  shopId: String(process.env.TIKTOK_PARTNER_SHOP_ID || '').trim(),
   apiBaseUrl: String(process.env.TIKTOK_PARTNER_API_BASE_URL || DEFAULT_API_BASE_URL).trim().replace(/\/+$/, ''),
   authorizeUrl: String(process.env.TIKTOK_PARTNER_AUTHORIZE_URL || DEFAULT_AUTHORIZE_URL).trim(),
   tokenBaseUrl: String(process.env.TIKTOK_PARTNER_TOKEN_BASE_URL || DEFAULT_TOKEN_BASE_URL).trim().replace(/\/+$/, ''),
@@ -33,12 +35,17 @@ const assertAppConfigured = (config, { requireRedirect = false } = {}) => {
 
 const signState = (payload, appSecret) => crypto.createHmac('sha256', appSecret).update(payload).digest('base64url');
 
-const buildAuthorizationUrl = (returnPath = '/bookings') => {
+const buildAuthorizationUrl = (options = {}) => {
+  const normalizedOptions = typeof options === 'string' ? { returnPath: options } : options;
+  const returnPath = normalizedOptions.returnPath || '/bookings';
+  const creatorId = Number(normalizedOptions.creatorId);
   const config = getConfig();
   assertAppConfigured(config, { requireRedirect: true });
   const payload = Buffer.from(JSON.stringify({
     oauthType: 'creator',
     returnPath: ['/bookings', '/manage/koc-performance'].includes(returnPath) ? returnPath : '/bookings',
+    creator_id: Number.isInteger(creatorId) && creatorId > 0 ? creatorId : null,
+    create_koc: normalizedOptions.createKoc === true,
     nonce: crypto.randomBytes(16).toString('hex'),
     expiresAt: Date.now() + STATE_TTL_MS,
   })).toString('base64url');
@@ -47,6 +54,19 @@ const buildAuthorizationUrl = (returnPath = '/bookings') => {
   url.searchParams.set('app_key', config.appKey);
   url.searchParams.set('state', state);
   return url.toString();
+};
+
+const grantedScopesOf = (authorization) => {
+  const value = authorization?.granted_scopes;
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+    // Older rows may contain a comma-delimited scope list.
+  }
+  return String(value).split(',').map((scope) => scope.trim()).filter(Boolean);
 };
 
 const parseAuthorizationState = (state) => {
@@ -170,9 +190,12 @@ const requestTikTokPartner = async ({ path, method = 'GET', query = {}, body, ac
 
 const searchTargetCollaborations = async ({ authorization, accessToken, shopId, pageToken, pageSize, keyword } = {}, dependencies = {}) => {
   if (!authorization) throw new Error('TikTok Creator is not connected.');
+  if (!grantedScopesOf(authorization).includes(CREATOR_COLLABORATION_SCOPE)) {
+    throw new Error(`Missing ${CREATOR_COLLABORATION_SCOPE}.`);
+  }
   const config = getConfig();
-  const resolvedShopId = String(shopId || authorization.shop_id || config.shopId || '').trim();
-  if (!resolvedShopId) throw new Error('Set TIKTOK_PARTNER_SHOP_ID or save a shop ID for this Creator.');
+  const resolvedShopId = String(shopId || authorization.shop_id || '').trim();
+  if (!resolvedShopId) throw new Error('Select a Seller-authorized TikTok Shop before loading Creator collaborations.');
   const resolvedAccessToken = accessToken || await getUsableAccessToken(authorization, dependencies.fetchImpl || fetch);
   const normalizedKeyword = String(keyword || '').trim();
   const body = {
@@ -204,34 +227,52 @@ const getCreatorOverview = async (authorization, dependencies = {}) => {
   const fetchImpl = dependencies.fetchImpl || fetch;
   const accessToken = await getUsableAccessToken(authorization, fetchImpl);
   const config = getConfig();
-  const [profilePayload, showcasePayload, collaborationsPayload] = await Promise.all([
-    requestTikTokPartner({
+  const scopes = grantedScopesOf(authorization);
+  const canUse = (scope) => scopes.includes(scope);
+  const tasks = {
+    profile: canUse(CREATOR_PROFILE_SCOPE)
+      ? requestTikTokPartner({
       path: CREATOR_PROFILE_PATH,
       accessToken,
       fetchImpl,
-    }),
-    requestTikTokPartner({
+      }) : Promise.reject(new Error(`Missing ${CREATOR_PROFILE_SCOPE}.`)),
+    showcase: canUse(CREATOR_SHOWCASE_SCOPE)
+      ? requestTikTokPartner({
       path: SHOWCASE_PRODUCTS_PATH,
       query: { page_size: Math.min(20, config.pageSize), origin: 'SHOWCASE' },
       accessToken,
       fetchImpl,
-    }),
-    searchTargetCollaborations({
+      }) : Promise.reject(new Error(`Missing ${CREATOR_SHOWCASE_SCOPE}.`)),
+    collaborations: canUse(CREATOR_COLLABORATION_SCOPE)
+      ? searchTargetCollaborations({
       authorization,
       accessToken,
+      shopId: dependencies.shopId,
       pageSize: config.pageSize,
-    }, { fetchImpl }),
+      }, { fetchImpl }) : Promise.reject(new Error(`Missing ${CREATOR_COLLABORATION_SCOPE}.`)),
+  };
+  const [profileResult, showcaseResult, collaborationsResult] = await Promise.allSettled([
+    tasks.profile, tasks.showcase, tasks.collaborations,
   ]);
-  const showcaseData = showcasePayload.data || {};
+  const errorMessage = (result) => result.status === 'rejected' ? String(result.reason?.message || result.reason) : null;
+  const profilePayload = profileResult.status === 'fulfilled' ? profileResult.value : null;
+  const showcasePayload = showcaseResult.status === 'fulfilled' ? showcaseResult.value : null;
+  const collaborationsPayload = collaborationsResult.status === 'fulfilled' ? collaborationsResult.value : null;
+  const showcaseData = showcasePayload?.data || {};
   const collaborationsData = collaborationsPayload || {};
   return {
-    profile: profilePayload.data || {},
+    profile: profilePayload?.data || {},
     showcase: {
       products: Array.isArray(showcaseData.products) ? showcaseData.products : [],
       nextPageToken: showcaseData.next_page_token || null,
       totalCount: Number(showcaseData.total_count || showcaseData.products?.length || 0),
     },
     collaborations: Array.isArray(collaborationsData.collaborations) ? collaborationsData.collaborations : [],
+    errors: {
+      profile: errorMessage(profileResult),
+      showcase: errorMessage(showcaseResult),
+      collaborations: errorMessage(collaborationsResult),
+    },
   };
 };
 
@@ -246,6 +287,9 @@ const getCreatorProfileWithAccessToken = async (accessToken, fetchImpl = fetch) 
 
 module.exports = {
   TARGET_COLLABORATIONS_PATH,
+  CREATOR_PROFILE_SCOPE,
+  CREATOR_SHOWCASE_SCOPE,
+  CREATOR_COLLABORATION_SCOPE,
   buildAuthorizationUrl,
   parseAuthorizationState,
   exchangeAuthorizationCode,
@@ -255,4 +299,5 @@ module.exports = {
   searchTargetCollaborations,
   getCreatorOverview,
   getCreatorProfileWithAccessToken,
+  grantedScopesOf,
 };

@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { User, Booking, TikTokPartnerAuthorization, sequelize } = require('../models');
+const { User, Booking, TikTokPartnerAuthorization, TikTokShop, sequelize } = require('../models');
 const {
   buildAuthorizationUrl,
   parseAuthorizationState,
@@ -8,6 +8,8 @@ const {
   getCreatorProfileWithAccessToken,
   searchTargetCollaborations,
   tokenFields,
+  grantedScopesOf,
+  CREATOR_PROFILE_SCOPE,
 } = require('../services/tiktokPartnerService');
 const { handleShopOauthCallback } = require('./tiktokShopController');
 
@@ -38,6 +40,13 @@ const bookingInclude = [
   { model: User, as: 'staff' },
   { model: User, as: 'creator' },
 ];
+
+const resolveSellerShopId = async (authorization, requestedShopId) => {
+  const explicitShopId = String(requestedShopId || '').trim();
+  if (explicitShopId) return explicitShopId;
+  const sellerShop = await TikTokShop.findOne({ order: [['id', 'ASC']] });
+  return String(sellerShop?.platform_shop_id || authorization?.shop_id || '').trim();
+};
 
 const getBookings = async (req, res) => {
   try {
@@ -145,9 +154,10 @@ const getTikTokPartnerCollaborations = async (req, res) => {
     if (!Number.isInteger(creatorId)) return res.status(400).json({ message: 'creator_id is required.' });
     const authorization = await TikTokPartnerAuthorization.findOne({ where: { creator_id: creatorId } });
     if (!authorization) return res.status(409).json({ message: 'This KOC has not connected TikTok Partner.' });
+    const shopId = await resolveSellerShopId(authorization, req.query.shop_id);
     const result = await searchTargetCollaborations({
       authorization,
-      shopId: req.query.shop_id,
+      shopId,
       pageToken: req.query.page_token,
       pageSize: req.query.page_size,
       keyword: req.query.keyword,
@@ -168,7 +178,7 @@ const getTikTokPartnerStatuses = async (req, res) => {
     });
     res.json(creators.map((creator) => {
       const authorization = creator.tiktok_partner_authorization;
-      const grantedScopes = authorization?.granted_scopes ? JSON.parse(authorization.granted_scopes) : [];
+      const grantedScopes = grantedScopesOf(authorization);
       const refreshExpiresAt = authorization?.refresh_token_expires_at
         ? new Date(authorization.refresh_token_expires_at).getTime()
         : null;
@@ -197,7 +207,19 @@ const getTikTokPartnerStatuses = async (req, res) => {
 
 const startTikTokPartnerOauth = async (req, res) => {
   try {
-    res.json({ authorizeUrl: buildAuthorizationUrl(req.query.return_path) });
+    const creatorId = Number(req.query.creator_id);
+    const createKoc = req.query.create_koc === 'true';
+    if (createKoc && Number.isInteger(creatorId)) return res.status(400).json({ message: 'Choose either an existing KOC or create a new KOC, not both.' });
+    if (!createKoc) {
+      if (!Number.isInteger(creatorId) || creatorId <= 0) return res.status(400).json({ message: 'creator_id is required when connecting an existing KOC.' });
+      const creator = await User.findOne({ where: { id: creatorId, role: 'koc' }, attributes: ['id'] });
+      if (!creator) return res.status(404).json({ message: 'KOC not found.' });
+    }
+    res.json({ authorizeUrl: buildAuthorizationUrl({
+      returnPath: req.query.return_path,
+      creatorId: createKoc ? null : creatorId,
+      createKoc,
+    }) });
   } catch (error) {
     const status = error.message.startsWith('TikTok Partner is not configured') ? 503 : 500;
     res.status(status).json({ message: error.message });
@@ -221,33 +243,47 @@ const handleTikTokPartnerOauthCallback = async (req, res) => {
     if (state.oauthType === 'shop') return handleShopOauthCallback(req, res);
     if (state.oauthType && state.oauthType !== 'creator') throw new Error('TikTok OAuth state has an unsupported authorization type.');
     returnPath = state.returnPath;
+    const targetCreatorId = Number(state.creator_id ?? state.creatorId);
+    const createKoc = (state.create_koc ?? state.createKoc) === true;
+    if ((!Number.isInteger(targetCreatorId) || targetCreatorId <= 0) && !createKoc) {
+      throw new Error('TikTok Creator authorization is not linked to a KOC. Start the connection again.');
+    }
     if (!req.query.code || req.query.code === 'null') throw new Error(req.query.error || 'Creator denied TikTok authorization.');
     const tokenData = await exchangeAuthorizationCode(req.query.code);
     if (Number(tokenData.user_type) !== 1) throw new Error('TikTok authorization must return a Creator token (user_type=1).');
     const scopes = tokenData.granted_scopes || tokenData.granted_permissions || [];
     const normalizedScopes = Array.isArray(scopes) ? scopes : String(scopes).split(',').map((item) => item.trim()).filter(Boolean);
-    if (normalizedScopes.length && !normalizedScopes.includes('creator.affiliate_collaboration.read')) {
-      throw new Error('Creator did not grant creator.affiliate_collaboration.read.');
+    if (!normalizedScopes.includes(CREATOR_PROFILE_SCOPE)) {
+      throw new Error(`Creator did not grant ${CREATOR_PROFILE_SCOPE}.`);
     }
     const profile = await getCreatorProfileWithAccessToken(tokenData.access_token);
     const openId = profile.creator_user_open_id || tokenData.open_id;
     if (!openId) throw new Error('TikTok Creator profile did not return an open ID.');
-    const existing = await TikTokPartnerAuthorization.findOne({ where: { open_id: openId } });
-    let creator = existing ? await User.findByPk(existing.creator_id) : null;
-    if (!creator) {
+    const existingByOpenId = await TikTokPartnerAuthorization.findOne({ where: { open_id: openId } });
+    const existingByCreator = Number.isInteger(targetCreatorId)
+      ? await TikTokPartnerAuthorization.findOne({ where: { creator_id: targetCreatorId } })
+      : null;
+    if (existingByOpenId && Number.isInteger(targetCreatorId) && existingByOpenId.creator_id !== targetCreatorId) {
+      throw new Error('This TikTok Creator is already linked to another KOC.');
+    }
+    let creator = Number.isInteger(targetCreatorId)
+      ? await User.findOne({ where: { id: targetCreatorId, role: 'koc' } })
+      : existingByOpenId ? await User.findByPk(existingByOpenId.creator_id) : null;
+    if (!creator && createKoc) {
       const identifier = crypto.createHash('sha256').update(openId).digest('hex').slice(0, 24);
       creator = await User.create({
         name: profile.username || `TikTok Creator ${openId.slice(-6)}`,
         email: `tiktok.${identifier}@creators.yumnetwork.vn`,
         role: 'koc',
       });
-    } else if (profile.username && creator.name !== profile.username) {
-      await creator.update({ name: profile.username });
     }
+    if (!creator) throw new Error('The selected KOC no longer exists.');
     creatorId = creator.id;
+    const existing = existingByCreator || existingByOpenId;
+    const sellerShopId = await resolveSellerShopId(existing);
     const values = {
       creator_id: creatorId,
-      shop_id: existing?.shop_id || process.env.TIKTOK_PARTNER_SHOP_ID || null,
+      shop_id: sellerShopId || null,
       connected_at: new Date(),
       username: profile.username || existing?.username || null,
       avatar_url: profile.avatar?.url || profile.avatar_url || existing?.avatar_url || null,
@@ -282,7 +318,8 @@ const getTikTokPartnerCreatorOverview = async (req, res) => {
       ? await TikTokPartnerAuthorization.findOne({ where: { creator_id: creatorId } })
       : null;
     if (!authorization) return res.status(409).json({ message: 'This KOC has not connected TikTok Partner.' });
-    const overview = await getCreatorOverview(authorization);
+    const shopId = await resolveSellerShopId(authorization);
+    const overview = await getCreatorOverview(authorization, { shopId });
     await authorization.update({
       username: overview.profile?.username || authorization.username,
       avatar_url: overview.profile?.avatar?.url || overview.profile?.avatar_url || authorization.avatar_url,
@@ -291,6 +328,7 @@ const getTikTokPartnerCreatorOverview = async (req, res) => {
       last_synced_at: new Date(),
       last_sync_status: 'success',
       last_sync_error: null,
+      ...(shopId ? { shop_id: shopId } : {}),
     });
     await sequelize.query(`
       INSERT INTO tiktok_partner_sync_logs (authorization_id, creator_id, status, synced_at)

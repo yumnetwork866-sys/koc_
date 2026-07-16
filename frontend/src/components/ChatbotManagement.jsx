@@ -34,6 +34,17 @@ const formatTime = (value) => {
   }).format(new Date(value));
 };
 
+const formatConversationTime = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const today = new Date();
+  const isToday = date.toDateString() === today.toDateString();
+  return new Intl.DateTimeFormat('vi-VN', isToday
+    ? { hour: '2-digit', minute: '2-digit' }
+    : { day: '2-digit', month: '2-digit' }).format(date);
+};
+
 const orderStatuses = ['new', 'confirmed', 'done', 'cancelled'];
 
 const getConversationKey = (conversation) => `${conversation?.pageId !== undefined && conversation?.pageId !== null ? String(conversation.pageId) : 'unknown'}:${conversation?.senderId || ''}`;
@@ -106,10 +117,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const [settingsForm, setSettingsForm] = useState({ modelKey: '' });
   const [stats, setStats] = useState({});
   const [conversations, setConversations] = useState([]);
-  const [selectedPageId, setSelectedPageId] = useState('');
+  const [selectedPageId, setSelectedPageId] = useState(null);
   const [selectedSenderId, setSelectedSenderId] = useState('');
+  const [selectedConversationPageId, setSelectedConversationPageId] = useState('');
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [conversationQuery, setConversationQuery] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
   const [orders, setOrders] = useState([]);
   const [docs, setDocs] = useState([]);
   const [replyText, setReplyText] = useState('');
@@ -121,6 +135,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const pagePickerTriggerRef = useRef(null);
   const pagePickerMenuRef = useRef(null);
   const messagesRequestRef = useRef(0);
+  const messageListRef = useRef(null);
   const [pagePickerMenuStyle, setPagePickerMenuStyle] = useState(null);
 
   const managedPageMap = useMemo(
@@ -141,15 +156,27 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     return conversations.filter((conversation) => String(conversation.pageId) === selPageIdStr);
   }, [conversations, selectedPageId]);
 
+  const visibleConversations = useMemo(() => {
+    const query = conversationQuery.trim().toLocaleLowerCase('vi');
+    if (!query) return filteredConversations;
+    return filteredConversations.filter((conversation) => (
+      [conversation.displayName, conversation.senderId, conversation.lastText]
+        .some((value) => String(value || '').toLocaleLowerCase('vi').includes(query))
+    ));
+  }, [conversationQuery, filteredConversations]);
+
   const selectedConversation = useMemo(() => {
     if (!selectedSenderId) return null;
-    return filteredConversations.find((conversation) => conversation.senderId === selectedSenderId)
+    return filteredConversations.find((conversation) => (
+      conversation.senderId === selectedSenderId
+      && (!selectedConversationPageId || String(conversation.pageId) === String(selectedConversationPageId))
+    ))
       || conversations.find((conversation) => (
         conversation.senderId === selectedSenderId
-        && (!selectedPageId || String(conversation.pageId) === String(selectedPageId))
+        && (!selectedConversationPageId || String(conversation.pageId) === String(selectedConversationPageId))
       ))
       || null;
-  }, [conversations, filteredConversations, selectedPageId, selectedSenderId]);
+  }, [conversations, filteredConversations, selectedConversationPageId, selectedSenderId]);
 
   const selectedConversationKey = useMemo(
     () => (selectedConversation ? getConversationKey(selectedConversation) : ''),
@@ -263,11 +290,12 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
   useEffect(() => {
     if (!chatPageOptions.length) {
-      setSelectedPageId('');
+      setSelectedPageId(null);
       return;
     }
 
     setSelectedPageId((current) => {
+      if (current === '') return current;
       const currentStr = current ? String(current) : '';
       if (currentStr && chatPageOptions.some((page) => String(page.id) === currentStr)) {
         return current;
@@ -280,12 +308,20 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   }, [chatPageOptions, conversations]);
 
   useEffect(() => {
-    setSelectedSenderId((current) => (
-      current && filteredConversations.some((conversation) => conversation.senderId === current)
-        ? current
-        : filteredConversations[0]?.senderId || ''
+    const list = messageListRef.current;
+    if (!list || messagesLoading) return;
+    list.scrollTop = list.scrollHeight;
+  }, [messages, messagesLoading, selectedConversationKey]);
+
+  useEffect(() => {
+    const currentConversation = filteredConversations.find((conversation) => (
+      conversation.senderId === selectedSenderId
+      && String(conversation.pageId || '') === String(selectedConversationPageId || '')
     ));
-  }, [filteredConversations]);
+    const nextConversation = currentConversation || filteredConversations[0] || null;
+    setSelectedSenderId(nextConversation?.senderId || '');
+    setSelectedConversationPageId(nextConversation?.pageId || '');
+  }, [filteredConversations, selectedConversationPageId, selectedSenderId]);
 
   useEffect(() => {
     if (!pagePickerOpen) {
@@ -362,6 +398,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       return;
     }
 
+    setMessages([]);
     setMessagesLoading(true);
     try {
       const nextMessages = await fetchChatbotMessages(senderId, pageId, signal);
@@ -475,6 +512,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     const text = replyText.trim();
     if (!selectedMessagePageId || !selectedSenderId || !text) return;
     try {
+      setSendingReply(true);
       await sendChatbotMessage({
         senderId: selectedSenderId,
         pageId: selectedMessagePageId,
@@ -484,6 +522,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       await Promise.all([loadMessages(selectedSenderId, selectedMessagePageId), loadOverview()]);
     } catch (err) {
       setError(err.message || 'Không gửi được tin nhắn');
+    } finally {
+      setSendingReply(false);
     }
   };
 
@@ -524,11 +564,15 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   const renderSection = () => {
     if (activeSection === 'chat') {
       return (
-        <>
-          <section className="section-card chatbot-chat-card" id="chat">
+        <section className="section-card chatbot-chat-card" id="chat">
             <div className="section-card__header chatbot-chat-card__header">
-              <div className="chatbot-page-picker">
-                <span>Page</span>
+              <div className="chatbot-chat-card__heading">
+                <span className="chatbot-chat-card__eyebrow">Facebook Messenger</span>
+                <h1>Hộp thư hội thoại</h1>
+              </div>
+              <div className="chatbot-chat-card__tools">
+                <div className="chatbot-page-picker">
+                  <span className="chatbot-page-picker__label">Page</span>
                 <div className="chatbot-page-picker__menu-wrap">
                   <button
                     ref={pagePickerTriggerRef}
@@ -543,10 +587,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                       {selectedChatPage && getPageAvatarUrl(selectedChatPage) ? (
                         <img src={getPageAvatarUrl(selectedChatPage)} alt="" />
                       ) : (
-                        getPageAvatarText(selectedChatPage?.name || 'All Pages')
+                        getPageAvatarText(selectedChatPage?.name || 'Tất cả Page')
                       )}
                     </span>
-                    <span className="chatbot-page-picker__name">{selectedChatPage?.name?.trim() || selectedChatPage?.id || 'All Pages'}</span>
+                    <span className="chatbot-page-picker__name">{selectedChatPage?.name?.trim() || selectedChatPage?.id || 'Tất cả Page'}</span>
+                    <svg className="chatbot-page-picker__chevron" aria-hidden="true" viewBox="0 0 20 20">
+                      <path d="m5 7.5 5 5 5-5" />
+                    </svg>
                   </button>
                   {pagePickerOpen && typeof document !== 'undefined' ? createPortal(
                     <div
@@ -566,9 +613,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                         }}
                       >
                         <span className="mini-card__avatar chatbot-page-picker__avatar" aria-hidden="true">
-                          {getPageAvatarText('All Pages')}
+                          {getPageAvatarText('Tất cả Page')}
                         </span>
-                        <span className="chatbot-page-picker__name">All Pages</span>
+                        <span className="chatbot-page-picker__name">Tất cả Page</span>
                       </button>
                       {chatPageOptions.map((page) => (
                         <button
@@ -596,25 +643,45 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     document.body,
                   ) : null}
                 </div>
-              </div>
-              <div className="chatbot-chat-card__tools">
-                <div className="chatbot-hero__chips" aria-label="Chatbot summary">
-                  <span className="chip chip--blue">Messages {stats.totalMessages || 0}</span>
-                  <span className="chip chip--positive">Conversations {filteredConversations.length || 0}</span>
-                  <span className="chip chip--amber">New orders {stats.newOrders || 0}</span>
                 </div>
               </div>
             </div>
+            <div className="chatbot-chat-card__summary" aria-label="Tổng quan hộp thư">
+              <span><strong>{filteredConversations.length || 0}</strong> hội thoại</span>
+              <span><strong>{stats.totalMessages || 0}</strong> tin nhắn</span>
+              <span className="chatbot-chat-card__summary-alert"><strong>{stats.newOrders || 0}</strong> đơn mới</span>
+            </div>
+            {error ? <div className="chatbot-chat-card__error" role="alert">{error}</div> : null}
             <div className="chatbot-inbox__layout">
               <div className="chatbot-inbox__list">
-                {filteredConversations.map((conversation) => (
+                <div className="chatbot-inbox__list-head">
+                  <div>
+                    <strong>Hội thoại</strong>
+                    <span>{filteredConversations.length}</span>
+                  </div>
+                  <label className="chatbot-conversation-search">
+                    <svg aria-hidden="true" viewBox="0 0 20 20">
+                      <circle cx="8.5" cy="8.5" r="5.5" />
+                      <path d="m13 13 4 4" />
+                    </svg>
+                    <span className="sr-only">Tìm hội thoại</span>
+                    <input
+                      type="search"
+                      value={conversationQuery}
+                      onChange={(event) => setConversationQuery(event.target.value)}
+                      placeholder="Tìm khách hàng, tin nhắn..."
+                    />
+                  </label>
+                </div>
+                <div className="chatbot-inbox__list-scroll">
+                {visibleConversations.map((conversation) => (
                   <button
                     key={`${conversation.pageId || 'page'}:${conversation.senderId}`}
                     type="button"
                     className={`conversation-row${getConversationKey(conversation) === selectedConversationKey ? ' conversation-row--active' : ''}`}
                     onClick={() => {
-                      setSelectedPageId(conversation.pageId || '');
                       setSelectedSenderId(conversation.senderId);
+                      setSelectedConversationPageId(conversation.pageId || '');
                     }}
                   >
                     <span className="conversation-row__avatar" aria-hidden="true">
@@ -625,19 +692,48 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                       )}
                     </span>
                     <span className="conversation-row__content">
-                      <span>{conversation.displayName || conversation.senderId}</span>
-                      <small>{conversation.lastText}</small>
+                      <span className="conversation-row__title">
+                        <strong>{conversation.displayName || conversation.senderId}</strong>
+                        <time dateTime={conversation.lastTs ? new Date(conversation.lastTs).toISOString() : undefined}>{formatConversationTime(conversation.lastTs)}</time>
+                      </span>
+                      <small>{conversation.lastDirection === 'out' ? 'Bạn: ' : ''}{conversation.lastText || 'Chưa có nội dung'}</small>
                     </span>
                   </button>
                 ))}
-                {!filteredConversations.length ? (
-                  <div className="chatbot-inbox__empty">No conversations for this Page.</div>
+                {!visibleConversations.length ? (
+                  <div className="chatbot-inbox__empty chatbot-inbox__empty--centered">
+                    <span className="chatbot-inbox__empty-icon" aria-hidden="true">{conversationQuery ? '⌕' : '✦'}</span>
+                    <strong>{conversationQuery ? 'Không tìm thấy hội thoại' : 'Chưa có hội thoại'}</strong>
+                    <span>{conversationQuery ? 'Thử tìm bằng tên hoặc nội dung khác.' : 'Tin nhắn mới từ khách hàng sẽ xuất hiện tại đây.'}</span>
+                  </div>
                 ) : null}
+                </div>
               </div>
               <div className="chatbot-inbox__thread">
-                <div className="message-list">
+                <div className="chatbot-thread__header">
+                  {selectedConversation ? (
+                    <>
+                      <span className="conversation-row__avatar chatbot-thread__avatar" aria-hidden="true">
+                        {selectedConversation.avatarUrl ? <img src={selectedConversation.avatarUrl} alt="" /> : getConversationAvatarText(selectedConversation)}
+                      </span>
+                      <div>
+                        <strong>{selectedConversation.displayName || selectedConversation.senderId}</strong>
+                      </div>
+                    </>
+                  ) : (
+                    <div><strong>Chi tiết hội thoại</strong><span>Chọn một khách hàng để xem tin nhắn.</span></div>
+                  )}
+                </div>
+                <div className="message-list" ref={messageListRef}>
                   {messagesLoading ? (
-                    <div className="chatbot-inbox__empty">Đang tải hội thoại...</div>
+                    <div className="chatbot-message-loading"><span /><span /><span /><small>Đang tải tin nhắn</small></div>
+                  ) : null}
+                  {!messagesLoading && !selectedConversation ? (
+                    <div className="chatbot-thread__empty">
+                      <span aria-hidden="true">✦</span>
+                      <strong>Bắt đầu từ một hội thoại</strong>
+                      <p>Chọn khách hàng ở danh sách bên trái để xem lịch sử và gửi phản hồi.</p>
+                    </div>
                   ) : null}
                   {messages.map((message) => (
                     <article key={message.id} className={`message-bubble message-bubble--${message.direction}`}>
@@ -659,18 +755,28 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                   ))}
                 </div>
                 <form className="reply-box" onSubmit={handleSendReply}>
-                  <input
+                  <textarea
                     value={replyText}
                     onChange={(event) => setReplyText(event.target.value)}
-                    placeholder="Nhập tin nhắn..."
-                    disabled={!selectedMessagePageId || !selectedSenderId}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    placeholder={selectedConversation ? `Nhắn tin cho ${selectedConversation.displayName || 'khách hàng'}...` : 'Chọn một hội thoại để trả lời'}
+                    rows={1}
+                    disabled={!selectedMessagePageId || !selectedSenderId || sendingReply}
+                    aria-label="Nội dung tin nhắn"
                   />
-                  <button className="button" type="submit" disabled={!selectedMessagePageId || !selectedSenderId || !replyText.trim()}>Gửi</button>
+                  <button className="button reply-box__send" type="submit" disabled={!selectedMessagePageId || !selectedSenderId || !replyText.trim() || sendingReply}>
+                    <span>{sendingReply ? 'Đang gửi' : 'Gửi'}</span>
+                    <svg aria-hidden="true" viewBox="0 0 20 20"><path d="m3 3 14 7-14 7 2.2-6L12 10 5.2 9 3 3Z" /></svg>
+                  </button>
                 </form>
               </div>
             </div>
           </section>
-        </>
       );
     }
 

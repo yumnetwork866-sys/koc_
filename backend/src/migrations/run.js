@@ -27,6 +27,7 @@ const migrations = [
   require('./017_create_tiktok_shop_analytics'),
   require('./018_create_roles'),
   require('./019_add_user_avatar_url'),
+  require('./020_add_koc_tiktok_channel_mapping'),
 ];
 
 const createMigrationRunner = ({

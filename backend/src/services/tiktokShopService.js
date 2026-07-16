@@ -5,6 +5,11 @@ const STATE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_SKEW_MS = 5 * 60 * 1000;
 const AUTHORIZED_SHOPS_PATH = '/authorization/202309/shops';
 const SHOP_PERFORMANCE_PATH = '/analytics/202405/shop/performance';
+const SELLER_AFFILIATE_SCOPE = 'seller.affiliate_collaboration.read';
+const OPEN_COLLABORATIONS_PATH = '/affiliate_seller/202412/open_collaborations/search';
+const TARGET_COLLABORATIONS_PATH = '/affiliate_seller/202409/target_collaborations/search';
+const AFFILIATE_ORDERS_PATH = '/affiliate_seller/202410/orders/search';
+const OPEN_COLLABORATION_SETTINGS_PATH = '/affiliate_seller/202409/open_collaboration_settings';
 
 const getConfig = () => ({
   appKey: String(process.env.TIKTOK_PARTNER_APP_KEY || '').trim(),
@@ -29,12 +34,12 @@ const assertConfigured = (config, { oauth = false } = {}) => {
 
 const signState = (payload, secret) => crypto.createHmac('sha256', secret).update(payload).digest('base64url');
 
-const buildShopAuthorizationUrl = () => {
+const buildShopAuthorizationUrl = (returnPath = '/manage/shop-analytics') => {
   const config = getConfig();
   assertConfigured(config, { oauth: true });
   const payload = Buffer.from(JSON.stringify({
     oauthType: 'shop',
-    returnPath: '/manage/shop-analytics',
+    returnPath: ['/manage/shop-analytics', '/manage/koc-performance'].includes(returnPath) ? returnPath : '/manage/shop-analytics',
     nonce: crypto.randomBytes(16).toString('hex'),
     expiresAt: Date.now() + STATE_TTL_MS,
   })).toString('base64url');
@@ -101,21 +106,88 @@ const signature = ({ path, query, body = '' }) => {
   return crypto.createHmac('sha256', config.appSecret).update(input).digest('hex');
 };
 
-const requestShopApi = async ({ path, accessToken, query = {}, fetchImpl = fetch }) => {
+const requestShopApi = async ({ path, accessToken, method = 'GET', query = {}, body, fetchImpl = fetch }) => {
   const config = getConfig();
   assertConfigured(config);
   const signed = { ...query, app_key: config.appKey, timestamp: Math.floor(Date.now() / 1000) };
-  signed.sign = signature({ path, query: signed });
+  const bodyString = body && Object.keys(body).length ? JSON.stringify(body) : '';
+  signed.sign = signature({ path, query: signed, body: bodyString });
   const url = new URL(`${config.apiBaseUrl}${path}`);
   Object.entries(signed).forEach(([key, value]) => { if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value)); });
   const response = await fetchImpl(url, {
+    method,
     headers: { 'content-type': 'application/json', 'x-tts-access-token': accessToken },
+    ...(bodyString ? { body: bodyString } : {}),
     ...(typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? { signal: AbortSignal.timeout(config.requestTimeoutMs) } : {}),
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok || Number(payload?.code) !== 0) throw new Error(`TikTok Shop API error: ${payload?.message || response.statusText || response.status}`);
   return payload;
 };
+
+const sellerAffiliateRequest = async ({ authorization, shopCipher, path, method = 'POST', query = {}, body }, fetchImpl) => {
+  if (!authorization) throw new Error('TikTok Seller is not connected.');
+  const scopes = Array.isArray(authorization.granted_scopes) ? authorization.granted_scopes : [];
+  if (!scopes.includes(SELLER_AFFILIATE_SCOPE)) {
+    throw new Error(`Reconnect TikTok Shop and grant ${SELLER_AFFILIATE_SCOPE}.`);
+  }
+  const accessToken = await getUsableShopToken(authorization, fetchImpl || fetch);
+  return requestShopApi({
+    path,
+    method,
+    accessToken,
+    fetchImpl: fetchImpl || fetch,
+    query: { shop_cipher: shopCipher, ...query },
+    body,
+  });
+};
+
+const searchOpenCollaborations = ({ authorization, shopCipher, pageToken, pageSize = 20, keyword } = {}, fetchImpl) => {
+  const normalizedKeyword = String(keyword || '').trim();
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: OPEN_COLLABORATIONS_PATH,
+    query: { page_size: pageSize, ...(pageToken ? { page_token: pageToken } : {}), sort_order: 'DESC' },
+    body: normalizedKeyword ? {
+      keyword_type: /^\d+$/.test(normalizedKeyword) ? 'PRODUCT_ID' : 'PRODUCT_NAME',
+      keyword: normalizedKeyword,
+    } : {},
+  }, fetchImpl);
+};
+
+const searchTargetCollaborations = ({ authorization, shopCipher, pageToken, pageSize = 20, keyword, status } = {}, fetchImpl) => {
+  const normalizedKeyword = String(keyword || '').trim();
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: TARGET_COLLABORATIONS_PATH,
+    query: { page_size: pageSize, ...(pageToken ? { page_token: pageToken } : {}) },
+    body: {
+      ...(normalizedKeyword ? { search_param: { keyword_type: /^\d+$/.test(normalizedKeyword) ? 'TARGET_COLLABORATION_ID' : 'TARGET_COLLABORATION_NAME', keyword: normalizedKeyword } } : {}),
+      ...(status ? { collaboration_status: status } : {}),
+    },
+  }, fetchImpl);
+};
+
+const searchAffiliateOrders = ({ authorization, shopCipher, pageToken, pageSize = 20, startTime, endTime, programId } = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: AFFILIATE_ORDERS_PATH,
+  query: { page_size: pageSize, ...(pageToken ? { page_token: pageToken } : {}) },
+  body: {
+    ...(startTime ? { create_time_ge: startTime } : {}),
+    ...(endTime ? { create_time_lt: endTime } : {}),
+    ...(programId ? { program_id: String(programId) } : {}),
+  },
+}, fetchImpl);
+
+const getOpenCollaborationSettings = ({ authorization, shopCipher } = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: OPEN_COLLABORATION_SETTINGS_PATH,
+  method: 'GET',
+}, fetchImpl);
 
 const getUsableShopToken = async (authorization, fetchImpl = fetch) => {
   if (authorization.access_token_encrypted && new Date(authorization.access_token_expires_at || 0).getTime() > Date.now() + TOKEN_SKEW_MS) {
@@ -147,6 +219,10 @@ const getShopPerformance = async ({ authorization, shopCipher, startDate, endDat
 module.exports = {
   AUTHORIZED_SHOPS_PATH,
   SHOP_PERFORMANCE_PATH,
+  SELLER_AFFILIATE_SCOPE,
+  OPEN_COLLABORATIONS_PATH,
+  TARGET_COLLABORATIONS_PATH,
+  AFFILIATE_ORDERS_PATH,
   buildShopAuthorizationUrl,
   parseShopAuthorizationState,
   exchangeShopAuthorizationCode,
@@ -154,4 +230,8 @@ module.exports = {
   signature,
   getAuthorizedShops,
   getShopPerformance,
+  searchOpenCollaborations,
+  searchTargetCollaborations,
+  searchAffiliateOrders,
+  getOpenCollaborationSettings,
 };

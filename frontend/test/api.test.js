@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  fetchTikTokShopAnalytics, fetchUsers, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
+  fetchTikTokShopAnalytics, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
 } from '../src/lib/api.js';
 import { getStoredSession, saveStoredSession } from '../src/lib/session.js';
 
@@ -105,5 +105,25 @@ test('TikTok Shop API helpers preserve analytics filters and sync payload', asyn
     assert.deepEqual(JSON.parse(calls[2].options.body), {
       start_date: '2026-06-01', end_date: '2026-07-01', currency: 'LOCAL',
     });
+  });
+});
+
+test('Creator OAuth helper sends either creator_id or the explicit create_koc intent', async () => {
+  await withBrowser(async () => {
+    saveStoredSession(createSession('creator-admin'));
+    const calls = [];
+    globalThis.fetch = async (url) => {
+      calls.push(url);
+      return new Response(JSON.stringify({ authorizeUrl: 'https://services.example.test/authorize' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    await startTikTokPartnerOauth('/manage/koc-performance', { creatorId: 42 });
+    await startTikTokPartnerOauth('/manage/koc-performance', { createKoc: true });
+
+    assert.equal(calls[0], '/api/bookings/tiktok-partner/oauth/start?return_path=%2Fmanage%2Fkoc-performance&creator_id=42');
+    assert.equal(calls[1], '/api/bookings/tiktok-partner/oauth/start?return_path=%2Fmanage%2Fkoc-performance&create_koc=true');
   });
 });

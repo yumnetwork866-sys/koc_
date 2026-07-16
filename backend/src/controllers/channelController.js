@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { decryptToken, encryptToken } = require('../lib/tokenEncryption');
 const {
   TikTokChannel,
+  User,
   Video,
   VideoAssignment,
   VideoProduct,
@@ -765,7 +766,10 @@ const startTiktokOauth = async (req, res) => {
 const getChannels = async (req, res) => {
   try {
     const channels = await TikTokChannel.findAll({
-      include: [{ model: Video, as: 'videos' }],
+      include: [
+        { model: Video, as: 'videos' },
+        { model: User, as: 'creator', attributes: ['id', 'name', 'email', 'role'], required: false },
+      ],
       order: [['id', 'ASC']],
     });
     res.json(channels.map(serializeChannel));
@@ -802,15 +806,30 @@ const createChannel = async (req, res) => {
 
 const updateChannel = async (req, res) => {
   try {
-    const [updated] = await TikTokChannel.update(req.body, {
+    const channel = await TikTokChannel.findByPk(req.params.id);
+    if (!channel) return res.status(404).json({ message: 'Channel not found' });
+    let creatorId = channel.creator_id;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'creator_id')) {
+      creatorId = req.body.creator_id === null || req.body.creator_id === '' ? null : Number(req.body.creator_id);
+      if (creatorId !== null) {
+        if (!Number.isInteger(creatorId) || creatorId <= 0) return res.status(400).json({ message: 'A valid KOC id is required.' });
+        const creator = await User.findOne({ where: { id: creatorId, role: 'koc' }, attributes: ['id'] });
+        if (!creator) return res.status(404).json({ message: 'KOC not found.' });
+        const conflict = await TikTokChannel.findOne({ where: { creator_id: creatorId, id: { [Op.ne]: channel.id } }, attributes: ['id'] });
+        if (conflict) return res.status(409).json({ message: 'This KOC is already linked to another TikTok Channel.' });
+      }
+    }
+    const [updated] = await TikTokChannel.update({ ...req.body, creator_id: creatorId }, {
       where: { id: req.params.id },
     });
     if (!updated) {
       return res.status(404).json({ message: 'Channel not found' });
     }
 
-    const channel = await TikTokChannel.findByPk(req.params.id);
-    res.json(serializeChannel(channel));
+    const updatedChannel = await TikTokChannel.findByPk(req.params.id, {
+      include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email', 'role'], required: false }],
+    });
+    res.json(serializeChannel(updatedChannel));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -96,6 +96,11 @@ const getKpis = async (req, res) => {
         WITH user_videos AS (
           SELECT DISTINCT user_id, video_id
           FROM video_assignments
+          UNION
+          SELECT tc.creator_id AS user_id, v.id AS video_id
+          FROM tiktok_channels tc
+          JOIN videos v ON v.channel_id = tc.id
+          WHERE tc.creator_id IS NOT NULL
         ),
         video_product_counts AS (
           SELECT video_id, COUNT(*)::int AS product_count
@@ -173,6 +178,11 @@ const getKpis = async (req, res) => {
           FROM video_assignments va
           JOIN users u ON u.id = va.user_id
           WHERE u.role = 'koc'
+          UNION
+          SELECT v.id
+          FROM tiktok_channels tc
+          JOIN users u ON u.id = tc.creator_id AND u.role = 'koc'
+          JOIN videos v ON v.channel_id = tc.id
         ), snapshots AS (
           SELECT vds.video_id, vds.date, MAX(vds.views)::bigint AS views
           FROM koc_videos kv
@@ -194,6 +204,11 @@ const getKpis = async (req, res) => {
           FROM video_assignments va
           JOIN users u ON u.id = va.user_id
           WHERE u.role = 'koc'
+          UNION
+          SELECT v.id
+          FROM tiktok_channels tc
+          JOIN users u ON u.id = tc.creator_id AND u.role = 'koc'
+          JOIN videos v ON v.channel_id = tc.id
         )
         SELECT v.id, v.title, v.views, v.likes, v.comments, v.shares, v.thumbnail_url AS "thumbnailUrl",
                COALESCE(v.video_url, 'https://www.tiktok.com/@' || tc.username || '/video/' || v.platform_video_id) AS "videoUrl",
@@ -252,6 +267,11 @@ const getKocDetail = async (req, res) => {
       sequelize.query(`
         WITH creator_videos AS (
           SELECT DISTINCT video_id FROM video_assignments WHERE user_id = :creatorId
+          UNION
+          SELECT v.id
+          FROM tiktok_channels tc
+          JOIN videos v ON v.channel_id = tc.id
+          WHERE tc.creator_id = :creatorId
         )
         SELECT vds.date, COALESCE(SUM(vds.views), 0)::bigint AS views
         FROM creator_videos cv
@@ -260,11 +280,18 @@ const getKocDetail = async (req, res) => {
         ORDER BY vds.date ASC
       `, { type: QueryTypes.SELECT, replacements }),
       sequelize.query(`
+        WITH creator_videos AS (
+          SELECT DISTINCT video_id FROM video_assignments WHERE user_id = :creatorId
+          UNION
+          SELECT v.id
+          FROM tiktok_channels tc
+          JOIN videos v ON v.channel_id = tc.id
+          WHERE tc.creator_id = :creatorId
+        )
         SELECT DISTINCT v.id, v.title, v.views, v.likes, v.comments, v.shares,
           v.thumbnail_url AS "thumbnailUrl", v.video_url AS "videoUrl", v.published_at AS "publishedAt"
-        FROM video_assignments va
-        JOIN videos v ON v.id = va.video_id${videoDateSql}
-        WHERE va.user_id = :creatorId
+        FROM creator_videos cv
+        JOIN videos v ON v.id = cv.video_id${videoDateSql}
         ORDER BY v.views DESC, v.id DESC
         LIMIT 20
       `, { type: QueryTypes.SELECT, replacements }),

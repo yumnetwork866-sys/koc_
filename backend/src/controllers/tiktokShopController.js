@@ -9,11 +9,16 @@ const {
   shopTokenFields,
   getAuthorizedShops,
   getShopPerformance,
+  searchOpenCollaborations,
+  searchTargetCollaborations,
+  searchAffiliateOrders,
+  getOpenCollaborationSettings,
 } = require('../services/tiktokShopService');
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3005';
-const redirectUrl = (status, message) => {
-  const url = new URL('/manage/shop-analytics', FRONTEND_URL());
+const redirectUrl = (status, message, returnPath = '/manage/shop-analytics') => {
+  const safeReturnPath = ['/manage/shop-analytics', '/manage/koc-performance'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
+  const url = new URL(safeReturnPath, FRONTEND_URL());
   url.searchParams.set('shop_oauth_status', status);
   if (message) url.searchParams.set('shop_oauth_message', message);
   return url.toString();
@@ -25,6 +30,8 @@ const dateValue = (value) => {
   return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized ? null : normalized;
 };
 const idValue = (value) => /^[1-9]\d*$/.test(String(value || '')) ? Number(value) : null;
+const pageSizeValue = (value) => Math.min(100, Math.max(1, Number(value) || 20));
+const unixTimeValue = (value) => /^\d{1,12}$/.test(String(value || '')) ? Number(value) : null;
 const safeShop = (instance) => {
   const shop = instance?.toJSON ? instance.toJSON() : { ...(instance || {}) };
   delete shop.cipher;
@@ -37,14 +44,16 @@ const oauthErrorMessage = (error) => {
   return 'TikTok Shop OAuth could not be completed. Please try again.';
 };
 
-const startShopOauth = async (_req, res) => {
-  try { res.json({ authorizeUrl: buildShopAuthorizationUrl() }); }
+const startShopOauth = async (req, res) => {
+  try { res.json({ authorizeUrl: buildShopAuthorizationUrl(req.query.return_path) }); }
   catch (error) { res.status(error.message.includes('not configured') ? 503 : 500).json({ message: error.message }); }
 };
 
 const handleShopOauthCallback = async (req, res) => {
+  let returnPath = '/manage/shop-analytics';
   try {
-    parseShopAuthorizationState(req.query.state);
+    const oauthState = parseShopAuthorizationState(req.query.state);
+    returnPath = oauthState.returnPath;
     const code = req.query.code || req.query.auth_code;
     if (!code) throw new Error(req.query.error || 'TikTok Shop authorization was denied.');
     const tokenData = await exchangeShopAuthorizationCode(code);
@@ -83,16 +92,19 @@ const handleShopOauthCallback = async (req, res) => {
         transaction,
       });
     });
-    const hasAnalyticsScope = normalizedScopes.includes('data.shop_analytics.public.read');
+    const requestedAffiliate = oauthState.returnPath === '/manage/koc-performance';
+    const requiredScope = requestedAffiliate ? 'seller.affiliate_collaboration.read' : 'data.shop_analytics.public.read';
+    const hasRequiredScope = normalizedScopes.includes(requiredScope);
     return res.redirect(redirectUrl(
-      hasAnalyticsScope ? 'success' : 'warning',
-      hasAnalyticsScope
+      hasRequiredScope ? 'success' : 'warning',
+      hasRequiredScope
         ? `${validShops.length} TikTok Shop connected.`
-        : `${validShops.length} TikTok Shop connected, but Shop Analytics permission is missing.`,
+        : `${validShops.length} TikTok Shop connected, but ${requiredScope} permission is missing.`,
+      oauthState.returnPath,
     ));
   } catch (error) {
     console.error('[TikTok Shop OAuth] Callback failed', { message: error.message });
-    return res.redirect(redirectUrl('error', oauthErrorMessage(error)));
+    return res.redirect(redirectUrl('error', oauthErrorMessage(error), returnPath));
   }
 };
 
@@ -177,6 +189,64 @@ const syncShopAnalytics = async (req, res) => {
   }
 };
 
+const loadAffiliateShop = async (req, res) => {
+  const shopId = idValue(req.params.shopId);
+  if (!shopId) {
+    res.status(400).json({ message: 'A valid TikTok Shop id is required.' });
+    return null;
+  }
+  const shop = await TikTokShop.findByPk(shopId, { include: [{ model: TikTokShopAuthorization, as: 'authorization' }] });
+  if (!shop) {
+    res.status(404).json({ message: 'TikTok Shop not found.' });
+    return null;
+  }
+  return shop;
+};
+
+const affiliateResponse = (operation) => async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const payload = await operation(shop, req);
+    res.json({ ...payload.data, request_id: payload.request_id || null });
+  } catch (error) {
+    const permissionError = /grant seller\.affiliate_collaboration\.read/i.test(error.message);
+    res.status(permissionError ? 403 : 502).json({ message: error.message });
+  }
+};
+
+const listOpenCollaborations = affiliateResponse((shop, req) => searchOpenCollaborations({
+  authorization: shop.authorization,
+  shopCipher: shop.cipher,
+  pageToken: req.query.page_token,
+  pageSize: pageSizeValue(req.query.page_size),
+  keyword: req.query.keyword,
+}));
+
+const listTargetCollaborations = affiliateResponse((shop, req) => searchTargetCollaborations({
+  authorization: shop.authorization,
+  shopCipher: shop.cipher,
+  pageToken: req.query.page_token,
+  pageSize: pageSizeValue(req.query.page_size),
+  keyword: req.query.keyword,
+  status: ['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'].includes(req.query.status) ? req.query.status : null,
+}));
+
+const listAffiliateOrders = affiliateResponse((shop, req) => searchAffiliateOrders({
+  authorization: shop.authorization,
+  shopCipher: shop.cipher,
+  pageToken: req.query.page_token,
+  pageSize: pageSizeValue(req.query.page_size),
+  startTime: unixTimeValue(req.query.create_time_ge),
+  endTime: unixTimeValue(req.query.create_time_lt),
+  programId: req.query.program_id,
+}));
+
+const showOpenCollaborationSettings = affiliateResponse((shop) => getOpenCollaborationSettings({
+  authorization: shop.authorization,
+  shopCipher: shop.cipher,
+}));
+
 const disconnectShopAuthorization = async (req, res) => {
   try {
     const deleted = await TikTokShopAuthorization.destroy({ where: { id: { [Op.eq]: Number(req.params.authorizationId) || -1 } } });
@@ -188,4 +258,5 @@ const disconnectShopAuthorization = async (req, res) => {
 module.exports = {
   startShopOauth, handleShopOauthCallback, listShopConnections, listShops,
   getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization,
+  listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
 };

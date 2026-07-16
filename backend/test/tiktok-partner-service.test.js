@@ -17,7 +17,6 @@ const ENV_KEYS = [
   'TIKTOK_PARTNER_APP_SECRET',
   'TIKTOK_PARTNER_REDIRECT_URI',
   'TIKTOK_PARTNER_TOKEN_ENCRYPTION_KEY',
-  'TIKTOK_PARTNER_SHOP_ID',
   'TIKTOK_PARTNER_API_BASE_URL',
 ];
 
@@ -34,19 +33,27 @@ const configure = (t) => {
     TIKTOK_PARTNER_APP_SECRET: 'app-secret',
     TIKTOK_PARTNER_REDIRECT_URI: 'https://api.example.test/api/bookings/tiktok-partner/callback',
     TIKTOK_PARTNER_TOKEN_ENCRYPTION_KEY: 'test-encryption-secret-at-least-32-characters',
-    TIKTOK_PARTNER_SHOP_ID: 'shop-id',
     TIKTOK_PARTNER_API_BASE_URL: 'https://example.test',
   });
 };
 
-test('creator OAuth state is signed without requiring an internal creator id', (t) => {
+test('creator OAuth state binds the authorization to an existing KOC', (t) => {
   configure(t);
-  const url = new URL(buildAuthorizationUrl('/manage/koc-performance'));
+  const url = new URL(buildAuthorizationUrl({ returnPath: '/manage/koc-performance', creatorId: 42 }));
   assert.equal(url.searchParams.get('app_key'), 'app-key');
   const state = parseAuthorizationState(url.searchParams.get('state'));
   assert.equal(state.oauthType, 'creator');
-  assert.equal(state.creatorId, undefined);
+  assert.equal(state.creator_id, 42);
+  assert.equal(state.create_koc, false);
   assert.equal(state.returnPath, '/manage/koc-performance');
+});
+
+test('creator OAuth state only enables KOC creation when explicitly requested', (t) => {
+  configure(t);
+  const url = new URL(buildAuthorizationUrl({ returnPath: '/manage/koc-performance', createKoc: true }));
+  const state = parseAuthorizationState(url.searchParams.get('state'));
+  assert.equal(state.creator_id, null);
+  assert.equal(state.create_koc, true);
 });
 
 test('generateSignature follows TikTok Shop HMAC-SHA256 request signing', () => {
@@ -65,6 +72,7 @@ test('searchTargetCollaborations uses the selected creator token', async (t) => 
     access_token_encrypted: encryptPartnerToken('creator-token'),
     access_token_expires_at: new Date(Date.now() + 60 * 60 * 1000),
     shop_id: 'shop-id',
+    granted_scopes: JSON.stringify(['creator.affiliate.info', 'creator.showcase.read', 'creator.affiliate_collaboration.read']),
   };
   const result = await searchTargetCollaborations({ authorization }, {
     fetchImpl: async (url, options) => {
@@ -91,6 +99,8 @@ test('getCreatorOverview combines profile and showcase for one creator', async (
   const authorization = {
     access_token_encrypted: encryptPartnerToken('creator-token'),
     access_token_expires_at: new Date(Date.now() + 60 * 60 * 1000),
+    shop_id: 'shop-id',
+    granted_scopes: JSON.stringify(['creator.affiliate.info', 'creator.showcase.read', 'creator.affiliate_collaboration.read']),
   };
   const result = await getCreatorOverview(authorization, {
     fetchImpl: async (url, options) => {
@@ -122,4 +132,42 @@ test('getCreatorOverview combines profile and showcase for one creator', async (
   assert.equal(result.showcase.totalCount, 1);
   assert.equal(result.showcase.products[0].id, 'product-1');
   assert.equal(result.collaborations[0].id, 'collaboration-1');
+  assert.deepEqual(result.errors, { profile: null, showcase: null, collaborations: null });
+});
+
+test('getCreatorOverview returns partial data when optional Creator scopes are missing', async (t) => {
+  configure(t);
+  const authorization = {
+    access_token_encrypted: encryptPartnerToken('creator-token'),
+    access_token_expires_at: new Date(Date.now() + 60 * 60 * 1000),
+    granted_scopes: JSON.stringify(['creator.affiliate.info']),
+  };
+  const result = await getCreatorOverview(authorization, {
+    fetchImpl: async (url) => {
+      assert.ok(url.pathname.endsWith('/profiles'));
+      return { ok: true, status: 200, json: async () => ({ code: 0, data: { username: 'creator-name' } }) };
+    },
+  });
+  assert.equal(result.profile.username, 'creator-name');
+  assert.deepEqual(result.showcase.products, []);
+  assert.deepEqual(result.collaborations, []);
+  assert.match(result.errors.showcase, /creator\.showcase\.read/);
+  assert.match(result.errors.collaborations, /creator\.affiliate_collaboration\.read/);
+});
+
+test('searchTargetCollaborations rejects before the API call when its scope is missing', async (t) => {
+  configure(t);
+  let called = false;
+  await assert.rejects(
+    searchTargetCollaborations({
+      authorization: {
+        access_token_encrypted: encryptPartnerToken('creator-token'),
+        access_token_expires_at: new Date(Date.now() + 60 * 60 * 1000),
+        shop_id: 'shop-id',
+        granted_scopes: JSON.stringify(['creator.affiliate.info']),
+      },
+    }, { fetchImpl: async () => { called = true; } }),
+    /creator\.affiliate_collaboration\.read/,
+  );
+  assert.equal(called, false);
 });

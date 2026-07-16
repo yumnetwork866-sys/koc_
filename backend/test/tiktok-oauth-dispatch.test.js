@@ -38,3 +38,107 @@ test('the shared TikTok Partner callback dispatches Seller state to the Shop han
   assert.equal(shopHandlerCalls, 1);
   assert.equal(redirectedTo, '/manage/shop-analytics');
 });
+
+test('Creator callback updates the KOC selected in signed state without creating a duplicate', async (t) => {
+  const modelsPath = require.resolve('../src/models');
+  const partnerServicePath = require.resolve('../src/services/tiktokPartnerService');
+  const shopControllerPath = require.resolve('../src/controllers/tiktokShopController');
+  const bookingControllerPath = require.resolve('../src/controllers/bookingController');
+  const creator = { id: 42, role: 'koc' };
+  let createdUsers = 0;
+  let savedValues = null;
+  const authorization = {
+    id: 7,
+    creator_id: 42,
+    username: 'old-name',
+    update: async (values) => { savedValues = values; },
+  };
+  const restores = [
+    mockModule(modelsPath, {
+      User: {
+        findOne: async ({ where }) => where.id === 42 && where.role === 'koc' ? creator : null,
+        findByPk: async () => null,
+        create: async () => { createdUsers += 1; return { id: 99 }; },
+      },
+      Booking: {},
+      TikTokPartnerAuthorization: {
+        findOne: async ({ where }) => where.open_id ? null : authorization,
+        create: async () => { throw new Error('authorization should be updated'); },
+      },
+      TikTokShop: { findOne: async () => ({ platform_shop_id: 'seller-shop-1' }) },
+      sequelize: { query: async () => {} },
+    }),
+    mockModule(partnerServicePath, {
+      parseAuthorizationState: () => ({ oauthType: 'creator', returnPath: '/manage/koc-performance', creator_id: 42, create_koc: false }),
+      exchangeAuthorizationCode: async () => ({ access_token: 'token', user_type: 1, granted_scopes: ['creator.affiliate.info'] }),
+      getCreatorProfileWithAccessToken: async () => ({ creator_user_open_id: 'creator-open-id', username: 'TikTok name' }),
+      tokenFields: () => ({ open_id: 'creator-open-id', access_token_encrypted: 'encrypted' }),
+      CREATOR_PROFILE_SCOPE: 'creator.affiliate.info',
+    }),
+    mockModule(shopControllerPath, { handleShopOauthCallback: async () => {} }),
+  ];
+  delete require.cache[bookingControllerPath];
+  t.after(() => {
+    delete require.cache[bookingControllerPath];
+    restores.reverse().forEach((restore) => restore());
+  });
+
+  const { handleTikTokPartnerOauthCallback } = require(bookingControllerPath);
+  let redirectedTo = null;
+  await handleTikTokPartnerOauthCallback(
+    { query: { code: 'creator-code', state: 'signed-creator-state' } },
+    { redirect: (url) => { redirectedTo = url; return url; } },
+  );
+
+  assert.equal(createdUsers, 0);
+  assert.equal(savedValues.creator_id, 42);
+  assert.equal(savedValues.shop_id, 'seller-shop-1');
+  assert.match(redirectedTo, /creator_id=42/);
+});
+
+test('Creator callback only creates a KOC for explicit create_koc state', async (t) => {
+  const modelsPath = require.resolve('../src/models');
+  const partnerServicePath = require.resolve('../src/services/tiktokPartnerService');
+  const shopControllerPath = require.resolve('../src/controllers/tiktokShopController');
+  const bookingControllerPath = require.resolve('../src/controllers/bookingController');
+  let createdUsers = 0;
+  let authorizationValues = null;
+  const restores = [
+    mockModule(modelsPath, {
+      User: {
+        findOne: async () => null,
+        findByPk: async () => null,
+        create: async () => { createdUsers += 1; return { id: 51, role: 'koc' }; },
+      },
+      Booking: {},
+      TikTokPartnerAuthorization: {
+        findOne: async () => null,
+        create: async (values) => { authorizationValues = values; return { id: 8 }; },
+      },
+      TikTokShop: { findOne: async () => null },
+      sequelize: { query: async () => {} },
+    }),
+    mockModule(partnerServicePath, {
+      parseAuthorizationState: () => ({ oauthType: 'creator', returnPath: '/manage/koc-performance', creator_id: null, create_koc: true }),
+      exchangeAuthorizationCode: async () => ({ access_token: 'token', user_type: 1, granted_scopes: ['creator.affiliate.info'] }),
+      getCreatorProfileWithAccessToken: async () => ({ creator_user_open_id: 'new-open-id', username: 'New creator' }),
+      tokenFields: () => ({ open_id: 'new-open-id', access_token_encrypted: 'encrypted' }),
+      CREATOR_PROFILE_SCOPE: 'creator.affiliate.info',
+    }),
+    mockModule(shopControllerPath, { handleShopOauthCallback: async () => {} }),
+  ];
+  delete require.cache[bookingControllerPath];
+  t.after(() => {
+    delete require.cache[bookingControllerPath];
+    restores.reverse().forEach((restore) => restore());
+  });
+
+  const { handleTikTokPartnerOauthCallback } = require(bookingControllerPath);
+  await handleTikTokPartnerOauthCallback(
+    { query: { code: 'creator-code', state: 'signed-create-state' } },
+    { redirect: (url) => url },
+  );
+
+  assert.equal(createdUsers, 1);
+  assert.equal(authorizationValues.creator_id, 51);
+});

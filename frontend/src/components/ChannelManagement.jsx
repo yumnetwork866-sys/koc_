@@ -3,8 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   deleteChannel,
   fetchChannels,
+  fetchUsers,
   revokeChannelAuthorization,
   syncChannelVideos,
+  updateChannel,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 import { getPlatformLabel } from '../lib/platforms';
@@ -14,6 +16,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [channels, setChannels] = useState([]);
+  const [kocs, setKocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
@@ -35,6 +38,16 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
     setChannels(loadedChannels);
   };
 
+  const linkChannelToKoc = async (channel, value) => {
+    try {
+      setError('');
+      await updateChannel(channel.id, { creator_id: value ? Number(value) : null });
+      await loadChannels();
+    } catch (err) {
+      setError(err.message || t('channel.linkKocError'));
+    }
+  };
+
   useEffect(() => {
     const controller = new AbortController();
 
@@ -42,7 +55,12 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
       try {
         setLoading(true);
         setError('');
-        await loadChannels(controller.signal);
+        const [loadedChannels, loadedUsers] = await Promise.all([
+          fetchChannels(controller.signal),
+          fetchUsers(controller.signal),
+        ]);
+        setChannels(loadedChannels);
+        setKocs(loadedUsers.filter((user) => user.role === 'koc'));
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || t('channel.errorLoad'));
@@ -223,13 +241,14 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                 <th>{t('channel.sourceColumn')}</th>
                 <th className="cell-number">{t('channel.videosColumn')}</th>
                 <th>{t('channel.profileColumn')}</th>
+                <th>{t('channel.kocColumn')}</th>
                 <th className="cell-actions">{t('channel.actionsColumn')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={6}>
+                  <td className="table-state-cell" colSpan={7}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('channel.loading')}</div>
@@ -271,6 +290,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
                     <td><span className="chip">{channel.sync_source}</span></td>
                     <td className="cell-number">{channel.videos?.length || 0}</td>
                     <td>{channel.profile_url ? <a href={channel.profile_url}>{channel.profile_url}</a> : '-'}</td>
+                    <td><select className="table-select" value={channel.creator_id || ''} aria-label={`${t('channel.kocColumn')}: ${channel.display_name}`} onChange={(event) => linkChannelToKoc(channel, event.target.value)}><option value="">{t('channel.unassignedKoc')}</option>{kocs.map((koc) => <option key={koc.id} value={koc.id}>{koc.name}</option>)}</select></td>
                     <td className="cell-actions">
                       <div className="action-menu">
                         <button

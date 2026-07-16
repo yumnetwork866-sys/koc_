@@ -1,13 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AppLogo from './AppLogo';
-import { getFacebookOauthUrl, getTikTokOauthUrl, startTikTokPartnerOauth, startTikTokShopOauth, updateUser } from '../lib/api';
+import {
+  getFacebookOauthUrl,
+  getTikTokOauthUrl,
+  startTikTokPartnerOauth,
+  startTikTokShopOauth,
+  updateUser,
+} from '../lib/api';
 import { clearStoredSession, isAdminSession, saveStoredSession } from '../lib/session';
 import { useSession } from '../lib/useSession';
 import { useI18n } from '../lib/language';
 import { topNavItems } from '../routes/navigation';
-
-const KOC_OAUTH_UI_STATE_KEY = 'koc-performance-oauth-ui-state';
 
 const TikTokGlyph = () => (
   <svg viewBox="0 0 24 24" focusable="false">
@@ -217,13 +221,6 @@ const Header = () => {
     items[nextIndex].focus();
   };
 
-  const preserveKocOauthState = () => {
-    if (!location.pathname.startsWith('/manage/koc-performance')) return;
-    let saved = {};
-    try { saved = JSON.parse(sessionStorage.getItem(KOC_OAUTH_UI_STATE_KEY) || '{}'); } catch { saved = {}; }
-    sessionStorage.setItem(KOC_OAUTH_UI_STATE_KEY, JSON.stringify({ ...saved, scrollY: window.scrollY }));
-  };
-
   const startConnection = async (target) => {
     try {
       setConnectingTarget(target);
@@ -231,8 +228,7 @@ const Header = () => {
       let authorizeUrl;
       if (target === 'tiktok') authorizeUrl = await getTikTokOauthUrl();
       if (target === 'creator') {
-        preserveKocOauthState();
-        ({ authorizeUrl } = await startTikTokPartnerOauth('/manage/koc-performance'));
+        ({ authorizeUrl } = await startTikTokPartnerOauth('/manage/koc-performance', { createKoc: true }));
       }
       if (target === 'shop') ({ authorizeUrl } = await startTikTokShopOauth());
       if (target === 'facebook') authorizeUrl = await getFacebookOauthUrl();

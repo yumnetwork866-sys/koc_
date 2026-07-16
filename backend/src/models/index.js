@@ -213,6 +213,11 @@ const TikTokChannel = sequelize.define('TikTokChannel', {
     allowNull: true,
     unique: true,
   },
+  creator_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    unique: true,
+  },
   username: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -760,6 +765,8 @@ TikTokShopAnalyticsSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: '
 
 TikTokChannel.hasMany(Video, { foreignKey: 'channel_id', as: 'videos' });
 Video.belongsTo(TikTokChannel, { foreignKey: 'channel_id', as: 'channel' });
+User.hasOne(TikTokChannel, { foreignKey: 'creator_id', as: 'tiktok_channel' });
+TikTokChannel.belongsTo(User, { foreignKey: 'creator_id', as: 'creator' });
 
 Video.hasMany(VideoAssignment, { foreignKey: 'video_id', as: 'assignments' });
 VideoAssignment.belongsTo(Video, { foreignKey: 'video_id', as: 'video' });
