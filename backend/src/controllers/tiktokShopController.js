@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const {
   sequelize, TikTokShopAuthorization, TikTokShop, TikTokShopAnalyticsSnapshot,
+  TikTokCreatorPerformanceExport, TikTokCreatorPerformanceSnapshot,
 } = require('../models');
 const {
   buildShopAuthorizationUrl,
@@ -17,6 +18,12 @@ const {
   getSellerCreatorContentDetails,
   normalizeShopPerformance,
 } = require('../services/tiktokShopService');
+const {
+  createCreatorPerformanceExport,
+  processCreatorPerformanceExport,
+  refreshCreatorPerformanceProfiles,
+  yesterdayEndDay,
+} = require('../services/tiktokCreatorPerformanceService');
 const { createTtlPromiseCache } = require('../lib/ttlPromiseCache');
 const { isDemoAuthorization, sellerAffiliateFixture } = require('../lib/tiktokDemoFixtures');
 
@@ -316,10 +323,87 @@ const disconnectShopAuthorization = async (req, res) => {
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
+const creatorPerformanceOptions = (shop, input = {}) => ({
+  windowType: ['PAST_24H', 'PAST_7_DAYS', 'PAST_30_DAYS'].includes(input.window_type)
+    ? input.window_type : 'PAST_7_DAYS',
+  endDay: /^\d{8}$/.test(String(input.end_day || '')) ? Number(input.end_day) : yesterdayEndDay(shop.region),
+  planType: ['ALL', 'TARGET', 'OPEN', 'PARTNER'].includes(input.plan_type) ? input.plan_type : 'ALL',
+});
+
+const listCreatorPerformance = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const options = creatorPerformanceOptions(shop, req.query);
+    const exportRecord = await TikTokCreatorPerformanceExport.findOne({
+      where: {
+        shop_id: shop.id,
+        window_type: options.windowType,
+        plan_type: options.planType,
+        end_date: `${String(options.endDay).slice(0, 4)}-${String(options.endDay).slice(4, 6)}-${String(options.endDay).slice(6, 8)}`,
+      },
+      order: [['created_at', 'DESC']],
+    });
+    if (!exportRecord || exportRecord.status !== 'SUCCEEDED') {
+      return res.json({ export: exportRecord, creators: [], total_count: 0, totals: null });
+    }
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
+    const keyword = String(req.query.keyword || '').trim();
+    const where = {
+      shop_id: shop.id,
+      start_date: exportRecord.start_date,
+      end_date: exportRecord.end_date,
+      plan_type: exportRecord.plan_type,
+      ...(keyword ? { username: { [Op.iLike]: `%${keyword}%` } } : {}),
+    };
+    const { count, rows } = await TikTokCreatorPerformanceSnapshot.findAndCountAll({
+      where,
+      order: [['affiliate_gmv', 'DESC'], ['username', 'ASC']],
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    });
+    const [totals] = await sequelize.query(`
+      SELECT
+        COALESCE(SUM(affiliate_gmv), 0) AS affiliate_gmv,
+        COALESCE(SUM(affiliate_orders), 0) AS affiliate_orders,
+        COALESCE(SUM(items_sold), 0) AS items_sold,
+        COALESCE(SUM(product_impressions), 0) AS product_impressions,
+        COALESCE(SUM(refunded_gmv), 0) AS refunded_gmv
+      FROM tiktok_creator_performance_snapshots
+      WHERE shop_id = :shopId AND start_date = :startDate AND end_date = :endDate AND plan_type = :planType
+    `, {
+      replacements: {
+        shopId: shop.id, startDate: exportRecord.start_date, endDate: exportRecord.end_date, planType: exportRecord.plan_type,
+      },
+    });
+    res.json({ export: exportRecord, creators: rows, total_count: count, totals: totals[0], page, page_size: pageSize });
+  } catch (error) { res.status(500).json({ message: error.message }); }
+};
+
+const syncCreatorPerformance = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const exportRecord = await createCreatorPerformanceExport(shop, creatorPerformanceOptions(shop, req.body || {}));
+    if (exportRecord.status === 'PROCESSING') {
+      setImmediate(() => processCreatorPerformanceExport(shop, exportRecord).catch((error) => {
+        console.error('[Creator Performance] Export failed', { shopId: shop.id, taskId: exportRecord.task_id, message: error.message });
+      }));
+    }
+    const refreshed_profiles = exportRecord.status === 'SUCCEEDED'
+      ? await refreshCreatorPerformanceProfiles(shop, exportRecord)
+      : 0;
+    res.status(202).json({ export: exportRecord, refreshed_profiles });
+  } catch (error) { res.status(424).json({ message: error.message }); }
+};
+
 module.exports = {
   startShopOauth, handleShopOauthCallback, listShopConnections, listShops,
   getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization,
   listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
   listAffiliateCreators,
   listCreatorContentDetails,
+  listCreatorPerformance,
+  syncCreatorPerformance,
 };

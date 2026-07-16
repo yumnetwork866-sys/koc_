@@ -12,6 +12,8 @@ adminRouter.get('/shops/:shopId/affiliate/target-collaborations', controller.lis
 adminRouter.get('/shops/:shopId/affiliate/orders', controller.listAffiliateOrders);
 adminRouter.get('/shops/:shopId/affiliate/creators', controller.listAffiliateCreators);
 adminRouter.get('/shops/:shopId/affiliate/creator-content-details', controller.listCreatorContentDetails);
+adminRouter.get('/shops/:shopId/creator-performance', controller.listCreatorPerformance);
+adminRouter.post('/shops/:shopId/creator-performance/sync', controller.syncCreatorPerformance);
 adminRouter.get('/shops/:shopId/affiliate/open-collaboration-settings', controller.showOpenCollaborationSettings);
 adminRouter.delete('/connections/:authorizationId', controller.disconnectShopAuthorization);
 

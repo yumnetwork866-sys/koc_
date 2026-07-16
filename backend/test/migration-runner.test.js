@@ -27,6 +27,9 @@ const defaultMigrationNames = [
   '018_create_roles',
   '019_add_user_avatar_url',
   '020_add_koc_tiktok_channel_mapping',
+  '021_create_tiktok_creator_performance',
+  '022_add_creator_performance_profile',
+  '023_add_creator_performance_open_id',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

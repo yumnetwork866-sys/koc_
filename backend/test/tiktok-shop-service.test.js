@@ -10,6 +10,7 @@ const {
   AFFILIATE_ORDERS_PATH,
   SAMPLE_APPLICATIONS_PATH,
   CREATOR_CONTENT_DETAILS_PATH,
+  MARKETPLACE_CREATORS_PATH,
   buildShopAuthorizationUrl,
   parseShopAuthorizationState,
   exchangeShopAuthorizationCode,
@@ -21,7 +22,10 @@ const {
   searchTargetCollaborations,
   searchAffiliateOrders,
   searchSellerSampleApplications,
+  searchMarketplaceCreators,
   getSellerCreatorContentDetails,
+  createCompassExportTask,
+  listCompassExportTasks,
 } = require('../src/services/tiktokShopService');
 const { encryptPartnerToken } = require('../src/lib/tiktokPartnerTokenEncryption');
 
@@ -286,6 +290,43 @@ test('search Seller sample applications uses the existing Seller Affiliate read 
   });
 });
 
+test('search Marketplace creators uses creator marketplace scope and username keyword', async (t) => {
+  configure(t);
+  const authorization = sellerAuthorization();
+  authorization.granted_scopes.push('seller.creator_marketplace.read');
+  await searchMarketplaceCreators({
+    authorization,
+    shopCipher: 'cipher-1',
+    pageSize: 20,
+    keyword: '@demo.creator',
+  }, async (url, options) => {
+    assert.equal(url.pathname, MARKETPLACE_CREATORS_PATH);
+    assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
+    assert.equal(url.searchParams.get('page_size'), '20');
+    assert.deepEqual(JSON.parse(options.body), { keyword: '@demo.creator' });
+    return successResponse({
+      creators: [{
+        username: 'demo.creator',
+        nickname: 'Demo Creator',
+        avatar: { url: 'https://example.test/avatar.webp' },
+        creator_open_id: 'creator-open-id',
+      }],
+    });
+  });
+});
+
+test('search Marketplace creators requires seller creator marketplace scope', async (t) => {
+  configure(t);
+  await assert.rejects(
+    searchMarketplaceCreators({
+      authorization: sellerAuthorization(),
+      shopCipher: 'cipher-1',
+      keyword: 'demo.creator',
+    }),
+    /seller\.creator_marketplace\.read/,
+  );
+});
+
 test('get Seller creator content details uses product filters and Seller token', async (t) => {
   configure(t);
   await getSellerCreatorContentDetails({
@@ -309,4 +350,36 @@ test('seller affiliate API fails before network access when the read scope is mi
     searchOpenCollaborations({ authorization: { ...sellerAuthorization(), granted_scopes: [] }, shopCipher: 'cipher-1' }),
     /seller\.affiliate_collaboration\.read/,
   );
+});
+
+test('Compass creator export uses the production task parameters', async (t) => {
+  configure(t);
+  await createCompassExportTask({
+    authorization: sellerAuthorization(),
+    shopCipher: 'cipher-1',
+    windowType: 'PAST_7_DAYS',
+    endDay: 20260715,
+    planType: 'ALL',
+  }, async (url, options) => {
+    assert.equal(url.pathname, '/affiliate_seller/202603/compass/offline_task');
+    assert.deepEqual(JSON.parse(options.body), {
+      module_type: 'CREATOR',
+      window_type: 'PAST_7_DAYS',
+      end_day: 20260715,
+      plan_type: 'ALL',
+    });
+    return successResponse({ task: { id: 'task-1' } });
+  });
+});
+
+test('Compass task list includes the required production doc_type', async (t) => {
+  configure(t);
+  await listCompassExportTasks({
+    authorization: sellerAuthorization(), shopCipher: 'cipher-1', pageSize: 10,
+  }, async (url) => {
+    assert.equal(url.pathname, '/affiliate_seller/202603/compass/offline_tasks');
+    assert.equal(url.searchParams.get('doc_type'), 'CREATOR');
+    assert.equal(url.searchParams.get('page_size'), '10');
+    return successResponse({ tasks: [] });
+  });
 });

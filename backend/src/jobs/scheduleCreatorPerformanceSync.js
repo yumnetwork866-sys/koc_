@@ -1,0 +1,32 @@
+const cron = require('node-cron');
+const { TikTokShop, TikTokShopAuthorization } = require('../models');
+const {
+  createCreatorPerformanceExport,
+  processCreatorPerformanceExport,
+  yesterdayEndDay,
+} = require('../services/tiktokCreatorPerformanceService');
+
+const startCreatorPerformanceScheduler = () => {
+  const schedule = process.env.TIKTOK_CREATOR_PERFORMANCE_SCHEDULE || '30 3 * * *';
+  const timezone = process.env.TIKTOK_CREATOR_PERFORMANCE_TIMEZONE || 'Asia/Kuala_Lumpur';
+  if (!cron.validate(schedule)) throw new Error(`Invalid TIKTOK_CREATOR_PERFORMANCE_SCHEDULE: ${schedule}`);
+  const task = cron.schedule(schedule, async () => {
+    const shops = await TikTokShop.findAll({ include: [{ model: TikTokShopAuthorization, as: 'authorization' }] });
+    for (const shop of shops) {
+      try {
+        const exportRecord = await createCreatorPerformanceExport(shop, {
+          windowType: 'PAST_7_DAYS',
+          endDay: yesterdayEndDay(shop.region),
+          planType: 'ALL',
+        });
+        if (exportRecord.status === 'PROCESSING') await processCreatorPerformanceExport(shop, exportRecord);
+      } catch (error) {
+        console.error('[Creator Performance Scheduler] Shop failed', { shopId: shop.id, message: error.message });
+      }
+    }
+  }, { name: 'creator-performance-daily-sync', timezone, noOverlap: true });
+  console.info('[Creator Performance Scheduler] Started', { schedule, timezone });
+  return task;
+};
+
+module.exports = { startCreatorPerformanceScheduler };

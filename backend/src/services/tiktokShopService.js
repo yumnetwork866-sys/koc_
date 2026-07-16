@@ -6,12 +6,16 @@ const TOKEN_SKEW_MS = 5 * 60 * 1000;
 const AUTHORIZED_SHOPS_PATH = '/authorization/202309/shops';
 const SHOP_PERFORMANCE_PATH = '/analytics/202509/shop/performance';
 const SELLER_AFFILIATE_SCOPE = 'seller.affiliate_collaboration.read';
+const SELLER_CREATOR_MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
 const OPEN_COLLABORATIONS_PATH = '/affiliate_seller/202412/open_collaborations/search';
 const TARGET_COLLABORATIONS_PATH = '/affiliate_seller/202409/target_collaborations/search';
 const AFFILIATE_ORDERS_PATH = '/affiliate_seller/202410/orders/search';
 const OPEN_COLLABORATION_SETTINGS_PATH = '/affiliate_seller/202409/open_collaboration_settings';
 const SAMPLE_APPLICATIONS_PATH = '/affiliate_seller/202508/sample_applications/search';
 const CREATOR_CONTENT_DETAILS_PATH = '/affiliate_seller/202508/open_collaborations/creator_content_details';
+const MARKETPLACE_CREATORS_PATH = '/affiliate_seller/202508/marketplace_creators/search';
+const COMPASS_CREATE_TASK_PATH = '/affiliate_seller/202603/compass/offline_task';
+const COMPASS_TASK_LIST_PATH = '/affiliate_seller/202603/compass/offline_tasks';
 
 const getConfig = () => ({
   appKey: String(process.env.TIKTOK_PARTNER_APP_KEY || '').trim(),
@@ -108,7 +112,9 @@ const signature = ({ path, query, body = '' }) => {
   return crypto.createHmac('sha256', config.appSecret).update(input).digest('hex');
 };
 
-const requestShopApi = async ({ path, accessToken, method = 'GET', query = {}, body, fetchImpl = fetch }) => {
+const requestShopApi = async ({
+  path, accessToken, method = 'GET', query = {}, body, contentType = 'application/json', fetchImpl = fetch,
+}) => {
   const config = getConfig();
   assertConfigured(config);
   const signed = { ...query, app_key: config.appKey, timestamp: Math.floor(Date.now() / 1000) };
@@ -118,7 +124,7 @@ const requestShopApi = async ({ path, accessToken, method = 'GET', query = {}, b
   Object.entries(signed).forEach(([key, value]) => { if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value)); });
   const response = await fetchImpl(url, {
     method,
-    headers: { 'content-type': 'application/json', 'x-tts-access-token': accessToken },
+    headers: { 'content-type': contentType, 'x-tts-access-token': accessToken },
     ...(bodyString ? { body: bodyString } : {}),
     ...(typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? { signal: AbortSignal.timeout(config.requestTimeoutMs) } : {}),
   });
@@ -192,11 +198,19 @@ const normalizeShopPerformance = (performance) => {
   };
 };
 
-const sellerAffiliateRequest = async ({ authorization, shopCipher, path, method = 'POST', query = {}, body }, fetchImpl) => {
+const sellerAffiliateRequest = async ({
+  authorization,
+  shopCipher,
+  path,
+  method = 'POST',
+  query = {},
+  body,
+  requiredScope = SELLER_AFFILIATE_SCOPE,
+}, fetchImpl) => {
   if (!authorization) throw new Error('TikTok Seller is not connected.');
   const scopes = Array.isArray(authorization.granted_scopes) ? authorization.granted_scopes : [];
-  if (!scopes.includes(SELLER_AFFILIATE_SCOPE)) {
-    throw new Error(`Reconnect TikTok Shop and grant ${SELLER_AFFILIATE_SCOPE}.`);
+  if (!scopes.includes(requiredScope)) {
+    throw new Error(`Reconnect TikTok Shop and grant ${requiredScope}.`);
   }
   const accessToken = await getUsableShopToken(authorization, fetchImpl || fetch);
   return requestShopApi({
@@ -275,6 +289,27 @@ const searchSellerSampleApplications = ({
   }, fetchImpl);
 };
 
+const searchMarketplaceCreators = ({
+  authorization, shopCipher, pageToken, pageSize = 20, keyword, searchKey,
+} = {}, fetchImpl) => {
+  const normalizedKeyword = String(keyword || '').trim();
+  if (!normalizedKeyword) throw new Error('Marketplace creator keyword is required.');
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: MARKETPLACE_CREATORS_PATH,
+    requiredScope: SELLER_CREATOR_MARKETPLACE_SCOPE,
+    query: {
+      page_size: [12, 20].includes(Number(pageSize)) ? Number(pageSize) : 20,
+      ...(pageToken ? { page_token: pageToken } : {}),
+    },
+    body: {
+      keyword: normalizedKeyword,
+      ...(searchKey ? { search_key: searchKey } : {}),
+    },
+  }, fetchImpl);
+};
+
 const getSellerCreatorContentDetails = ({
   authorization, shopCipher, productId, pageToken, pageSize = 50,
 } = {}, fetchImpl) => {
@@ -291,6 +326,45 @@ const getSellerCreatorContentDetails = ({
       ...(pageToken ? { page_token: pageToken } : {}),
     },
   }, fetchImpl);
+};
+
+const createCompassExportTask = ({
+  authorization, shopCipher, windowType = 'PAST_7_DAYS', endDay, planType = 'ALL',
+} = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: COMPASS_CREATE_TASK_PATH,
+  body: {
+    module_type: 'CREATOR',
+    window_type: windowType,
+    end_day: Number(endDay),
+    plan_type: planType,
+  },
+}, fetchImpl);
+
+const listCompassExportTasks = ({ authorization, shopCipher, pageSize = 50, pageToken } = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: COMPASS_TASK_LIST_PATH,
+  method: 'GET',
+  query: {
+    doc_type: 'CREATOR',
+    page_size: Math.min(100, Math.max(1, Number(pageSize) || 50)),
+    ...(pageToken ? { page_token: pageToken } : {}),
+  },
+}, fetchImpl);
+
+const downloadCompassExportFile = async ({ authorization, shopCipher, taskId } = {}, fetchImpl) => {
+  const normalizedTaskId = String(taskId || '').trim();
+  if (!normalizedTaskId) throw new Error('Compass task_id is required.');
+  const accessToken = await getUsableShopToken(authorization, fetchImpl || fetch);
+  return requestShopApi({
+    path: `${COMPASS_TASK_LIST_PATH}/${encodeURIComponent(normalizedTaskId)}/file`,
+    accessToken,
+    fetchImpl: fetchImpl || fetch,
+    query: { shop_cipher: shopCipher },
+    contentType: 'multipart/form-data',
+  });
 };
 
 const getUsableShopToken = async (authorization, fetchImpl = fetch) => {
@@ -326,11 +400,15 @@ module.exports = {
   AUTHORIZED_SHOPS_PATH,
   SHOP_PERFORMANCE_PATH,
   SELLER_AFFILIATE_SCOPE,
+  SELLER_CREATOR_MARKETPLACE_SCOPE,
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
   AFFILIATE_ORDERS_PATH,
   SAMPLE_APPLICATIONS_PATH,
   CREATOR_CONTENT_DETAILS_PATH,
+  MARKETPLACE_CREATORS_PATH,
+  COMPASS_CREATE_TASK_PATH,
+  COMPASS_TASK_LIST_PATH,
   buildShopAuthorizationUrl,
   parseShopAuthorizationState,
   exchangeShopAuthorizationCode,
@@ -344,5 +422,9 @@ module.exports = {
   searchAffiliateOrders,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
+  searchMarketplaceCreators,
   getSellerCreatorContentDetails,
+  createCompassExportTask,
+  listCompassExportTasks,
+  downloadCompassExportFile,
 };

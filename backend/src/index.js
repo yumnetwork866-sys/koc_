@@ -25,6 +25,7 @@ const { sequelize, TikTokChannel, User } = require('./models');
 const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
 const { requireAdmin } = require('./lib/session');
 const { getAdminAccount } = require('./lib/adminAccount');
+const { startCreatorPerformanceScheduler } = require('./jobs/scheduleCreatorPerformanceSync');
 
 const httpLogFormat = process.env.HTTP_LOG_FORMAT || ':method :url :status :response-time ms';
 
@@ -110,6 +111,7 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
+    startCreatorPerformanceScheduler();
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

@@ -137,6 +137,28 @@ export const fetchTikTokSellerAffiliateCreators = (shopId, filters) => fetchTikT
 export const fetchTikTokSellerCreatorContentDetails = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'creator-content-details', filters);
 export const fetchTikTokSellerOpenCollaborationSettings = (shopId, signal) => fetchTikTokSellerAffiliate(shopId, 'open-collaboration-settings', { signal });
 
+export function fetchTikTokCreatorPerformance(shopId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.windowType) params.set('window_type', filters.windowType);
+  if (filters.endDay) params.set('end_day', filters.endDay.replaceAll('-', ''));
+  if (filters.planType) params.set('plan_type', filters.planType);
+  if (filters.keyword) params.set('keyword', filters.keyword);
+  if (filters.page) params.set('page', filters.page);
+  if (filters.pageSize) params.set('page_size', filters.pageSize);
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/creator-performance?${params.toString()}`, { signal: filters.signal });
+}
+
+export function syncTikTokCreatorPerformance(shopId, payload) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/creator-performance/sync`, {
+    method: 'POST',
+    body: {
+      window_type: payload.windowType,
+      end_day: payload.endDay.replaceAll('-', ''),
+      plan_type: payload.planType || 'ALL',
+    },
+  });
+}
+
 export function disconnectTikTokShopAuthorization(authorizationId) {
   return apiRequest(`/tiktok-shop/connections/${encodeURIComponent(authorizationId)}`, { method: 'DELETE' });
 }

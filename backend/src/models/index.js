@@ -194,6 +194,67 @@ const TikTokShopAnalyticsSnapshot = sequelize.define('TikTokShopAnalyticsSnapsho
   indexes: [{ unique: true, fields: ['shop_id', 'start_date', 'end_date', 'currency'] }],
 });
 
+const TikTokCreatorPerformanceExport = sequelize.define('TikTokCreatorPerformanceExport', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  task_id: { type: DataTypes.STRING, allowNull: false },
+  module_type: { type: DataTypes.STRING, allowNull: false, defaultValue: 'CREATOR' },
+  window_type: { type: DataTypes.STRING, allowNull: false },
+  plan_type: { type: DataTypes.STRING, allowNull: false, defaultValue: 'ALL' },
+  start_date: { type: DataTypes.DATEONLY, allowNull: false },
+  end_date: { type: DataTypes.DATEONLY, allowNull: false },
+  status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'PROCESSING' },
+  request_id: DataTypes.STRING,
+  row_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  error: DataTypes.TEXT,
+  created_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  completed_at: DataTypes.DATE,
+}, { tableName: 'tiktok_creator_performance_exports', timestamps: false });
+
+const TikTokCreatorPerformanceSnapshot = sequelize.define('TikTokCreatorPerformanceSnapshot', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  export_id: { type: DataTypes.INTEGER, allowNull: false },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  username: { type: DataTypes.STRING, allowNull: false },
+  nickname: DataTypes.STRING,
+  avatar_url: DataTypes.TEXT,
+  creator_open_id: DataTypes.STRING,
+  start_date: { type: DataTypes.DATEONLY, allowNull: false },
+  end_date: { type: DataTypes.DATEONLY, allowNull: false },
+  window_type: { type: DataTypes.STRING, allowNull: false },
+  plan_type: { type: DataTypes.STRING, allowNull: false, defaultValue: 'ALL' },
+  currency: { type: DataTypes.STRING, allowNull: false },
+  affiliate_gmv: DataTypes.DECIMAL(20, 4),
+  live_gmv: DataTypes.DECIMAL(20, 4),
+  video_gmv: DataTypes.DECIMAL(20, 4),
+  product_card_gmv: DataTypes.DECIMAL(20, 4),
+  affiliate_products_sold: DataTypes.INTEGER,
+  items_sold: DataTypes.INTEGER,
+  estimated_commission: DataTypes.DECIMAL(20, 4),
+  estimated_flat_fee: DataTypes.DECIMAL(20, 4),
+  average_order_value: DataTypes.DECIMAL(20, 4),
+  product_showcase_count: DataTypes.INTEGER,
+  affiliate_orders: DataTypes.INTEGER,
+  ctr: DataTypes.DECIMAL(12, 8),
+  product_impressions: DataTypes.BIGINT,
+  average_affiliate_customers: DataTypes.DECIMAL(20, 4),
+  live_streams: DataTypes.INTEGER,
+  shoppable_videos: DataTypes.INTEGER,
+  target_gmv: DataTypes.DECIMAL(20, 4),
+  target_estimated_commission: DataTypes.DECIMAL(20, 4),
+  open_gmv: DataTypes.DECIMAL(20, 4),
+  open_estimated_commission: DataTypes.DECIMAL(20, 4),
+  refunded_gmv: DataTypes.DECIMAL(20, 4),
+  items_refunded: DataTypes.INTEGER,
+  followers: DataTypes.BIGINT,
+  raw_metrics: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+  synced_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_creator_performance_snapshots',
+  timestamps: false,
+  indexes: [{ unique: true, fields: ['shop_id', 'username', 'start_date', 'end_date', 'plan_type'] }],
+});
+
 const TikTokChannel = sequelize.define('TikTokChannel', {
   id: {
     type: DataTypes.INTEGER,
@@ -762,6 +823,12 @@ TikTokShopAuthorization.hasMany(TikTokShop, { foreignKey: 'authorization_id', as
 TikTokShop.belongsTo(TikTokShopAuthorization, { foreignKey: 'authorization_id', as: 'authorization' });
 TikTokShop.hasMany(TikTokShopAnalyticsSnapshot, { foreignKey: 'shop_id', as: 'analytics_snapshots' });
 TikTokShopAnalyticsSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(TikTokCreatorPerformanceExport, { foreignKey: 'shop_id', as: 'creator_performance_exports' });
+TikTokCreatorPerformanceExport.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(TikTokCreatorPerformanceSnapshot, { foreignKey: 'shop_id', as: 'creator_performance_snapshots' });
+TikTokCreatorPerformanceSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokCreatorPerformanceExport.hasMany(TikTokCreatorPerformanceSnapshot, { foreignKey: 'export_id', as: 'creators' });
+TikTokCreatorPerformanceSnapshot.belongsTo(TikTokCreatorPerformanceExport, { foreignKey: 'export_id', as: 'export' });
 
 TikTokChannel.hasMany(Video, { foreignKey: 'channel_id', as: 'videos' });
 Video.belongsTo(TikTokChannel, { foreignKey: 'channel_id', as: 'channel' });
@@ -802,6 +869,8 @@ module.exports = {
   TikTokShopAuthorization,
   TikTokShop,
   TikTokShopAnalyticsSnapshot,
+  TikTokCreatorPerformanceExport,
+  TikTokCreatorPerformanceSnapshot,
   TikTokChannel,
   Video,
   VideoAssignment,
