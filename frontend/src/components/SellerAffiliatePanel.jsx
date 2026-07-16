@@ -8,6 +8,7 @@ import {
   startTikTokShopOauth,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import ShopDropdown from './ShopDropdown';
 
 const REQUIRED_SCOPE = 'seller.affiliate_collaboration.read';
 const PAGE_SIZE = 20;
@@ -96,7 +97,7 @@ const SellerAffiliatePanel = () => {
           <div><h2 className="section-card__title">{t('sellerAffiliate.title')}</h2><p className="section-card__meta">{t('sellerAffiliate.meta')}</p></div>
         </div>
         <div className="seller-affiliate__filter-grid">
-          <div className="field"><label htmlFor="affiliate-shop">{t('sellerAffiliate.shop')}</label><select id="affiliate-shop" value={shopId} onChange={(event) => { setShopId(event.target.value); setPageTokens([]); }}><option value="">{t('sellerAffiliate.selectShop')}</option>{shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}{shop.region ? ` · ${shop.region}` : ''}</option>)}</select></div>
+          <div className="field"><label htmlFor="affiliate-shop">{t('sellerAffiliate.shop')}</label><ShopDropdown id="affiliate-shop" shops={shops} value={shopId} onChange={(nextShopId) => { setShopId(nextShopId); setPageTokens([]); }} disabled={loading || !shops.length} placeholder={t('sellerAffiliate.selectShop')} unknownLabel={t('common.unknown')} /></div>
           <form className="seller-affiliate__search" onSubmit={submitSearch}><div className="field"><label htmlFor="affiliate-search">{t(section === 'orders' ? 'sellerAffiliate.programId' : 'common.search')}</label><input id="affiliate-search" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t(`sellerAffiliate.${section}Search`)} /></div><button className="button button--ghost" type="submit">{t('common.search')}</button></form>
           {section === 'target' ? <div className="field"><label htmlFor="affiliate-status">{t('sellerAffiliate.status')}</label><select id="affiliate-status" value={status} onChange={(event) => { setStatus(event.target.value); setPageTokens([]); }}><option value="">{t('sellerAffiliate.allStatuses')}</option>{['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'].map((value) => <option value={value} key={value}>{value}</option>)}</select></div> : null}
         </div>

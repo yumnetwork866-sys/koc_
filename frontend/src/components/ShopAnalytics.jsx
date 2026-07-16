@@ -14,8 +14,10 @@ import {
   fetchTikTokShopConnections,
   fetchTikTokShops,
   startTikTokShopOauth,
+  syncTikTokShopAnalytics,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import ShopDropdown from './ShopDropdown';
 
 const REQUIRED_SCOPE = 'data.shop_analytics.public.read';
 const SOURCE_COLORS = [
@@ -135,6 +137,7 @@ const ShopAnalytics = () => {
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [disconnectingId, setDisconnectingId] = useState(null);
   const [error, setError] = useState('');
@@ -318,6 +321,32 @@ const ShopAnalytics = () => {
     return translationKeys[type] ? t(translationKeys[type]) : type;
   };
 
+  const syncAnalytics = async () => {
+    if (!selectedShopId || invalidRange || missingAnalyticsScope || tokenExpired || syncing) return;
+    try {
+      setSyncing(true);
+      setError('');
+      const payload = await syncTikTokShopAnalytics(selectedShopId, {
+        start_date: startDate,
+        end_date: endDate,
+        currency,
+      });
+      setSnapshot(payload?.snapshot || null);
+      if (payload?.shop) {
+        setShops((current) => current.map((shop) => (
+          String(shop.id) === String(payload.shop.id)
+            ? { ...shop, ...payload.shop, authorization: shop.authorization }
+            : shop
+        )));
+      }
+      setToast({ type: 'success', message: t('shopAnalytics.syncSuccess') });
+    } catch (requestError) {
+      setToast({ type: 'error', message: requestError.message || t('shopAnalytics.syncError') });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const startConnect = async () => {
     if (disconnectingId !== null) return;
     try {
@@ -356,8 +385,7 @@ const ShopAnalytics = () => {
     setter(nextValue);
   };
 
-  const changeSelectedShop = (event) => {
-    const nextShopId = event.target.value;
+  const changeSelectedShop = (nextShopId) => {
     if (nextShopId === selectedShopId) return;
     setSnapshot(null);
     setSelectedShopId(nextShopId);
@@ -551,23 +579,28 @@ const ShopAnalytics = () => {
                   {t('shopAnalytics.filtersTitle')}
                 </h2>
               </div>
+              <button
+                className="button shop-analytics__sync-button"
+                type="button"
+                onClick={syncAnalytics}
+                disabled={!selectedShopId || invalidRange || missingAnalyticsScope || tokenExpired || syncing}
+              >
+                <AnalyticsIcon name="sync" />
+                {syncing ? t('shopAnalytics.syncing') : t('shopAnalytics.syncNow')}
+              </button>
             </div>
             <div className="shop-analytics__filter-grid">
               <div className="field">
                 <label htmlFor="analytics-shop">{t('shopAnalytics.shop')}</label>
-                <select
+                <ShopDropdown
                   id="analytics-shop"
                   value={selectedShopId}
+                  shops={shops}
                   disabled={loading || !shops.length}
                   onChange={changeSelectedShop}
-                >
-                  <option value="">{loading ? t('common.loading') : t('shopAnalytics.selectShop')}</option>
-                  {shops.map((shop) => (
-                    <option value={shop.id} key={shop.id}>
-                      {shop.name} · {shop.region || t('common.unknown')}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={loading ? t('common.loading') : t('shopAnalytics.selectShop')}
+                  unknownLabel={t('common.unknown')}
+                />
               </div>
               <div className="field">
                 <label htmlFor="analytics-start-date">{t('shopAnalytics.startDate')}</label>

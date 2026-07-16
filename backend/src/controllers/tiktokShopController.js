@@ -14,6 +14,13 @@ const {
   searchAffiliateOrders,
   getOpenCollaborationSettings,
 } = require('../services/tiktokShopService');
+const { createTtlPromiseCache } = require('../lib/ttlPromiseCache');
+
+const affiliateCacheTtlValue = Number(process.env.TIKTOK_SELLER_AFFILIATE_CACHE_TTL_MS ?? 120000);
+const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
+  ? 0
+  : Math.min(300000, Math.max(60000, affiliateCacheTtlValue || 120000));
+const sellerAffiliateCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs, maxEntries: 1000 });
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3005';
 const redirectUrl = (status, message, returnPath = '/manage/shop-analytics') => {
@@ -92,6 +99,7 @@ const handleShopOauthCallback = async (req, res) => {
         transaction,
       });
     });
+    sellerAffiliateCache.clear();
     const requestedAffiliate = oauthState.returnPath === '/manage/koc-performance';
     const requiredScope = requestedAffiliate ? 'seller.affiliate_collaboration.read' : 'data.shop_analytics.public.read';
     const hasRequiredScope = normalizedScopes.includes(requiredScope);
@@ -203,11 +211,24 @@ const loadAffiliateShop = async (req, res) => {
   return shop;
 };
 
-const affiliateResponse = (operation) => async (req, res) => {
+const affiliateCacheKey = (namespace, shop, req) => {
+  const normalizedQuery = Object.entries(req.query || {})
+    .sort(([left], [right]) => left.localeCompare(right));
+  const authorizationVersion = shop.authorization?.updated_at
+    ? new Date(shop.authorization.updated_at).getTime()
+    : 0;
+  return JSON.stringify([namespace, shop.id, shop.authorization_id, authorizationVersion, normalizedQuery]);
+};
+
+const affiliateResponse = (namespace, operation) => async (req, res) => {
   try {
     const shop = await loadAffiliateShop(req, res);
     if (!shop) return;
-    const payload = await operation(shop, req);
+    const { value: payload, hit } = await sellerAffiliateCache.getOrLoad(
+      affiliateCacheKey(namespace, shop, req),
+      () => operation(shop, req),
+    );
+    res.set('X-Seller-Affiliate-Cache', hit ? 'HIT' : 'MISS');
     res.json({ ...payload.data, request_id: payload.request_id || null });
   } catch (error) {
     const permissionError = /grant seller\.affiliate_collaboration\.read/i.test(error.message);
@@ -215,7 +236,7 @@ const affiliateResponse = (operation) => async (req, res) => {
   }
 };
 
-const listOpenCollaborations = affiliateResponse((shop, req) => searchOpenCollaborations({
+const listOpenCollaborations = affiliateResponse('open-collaborations', (shop, req) => searchOpenCollaborations({
   authorization: shop.authorization,
   shopCipher: shop.cipher,
   pageToken: req.query.page_token,
@@ -223,7 +244,7 @@ const listOpenCollaborations = affiliateResponse((shop, req) => searchOpenCollab
   keyword: req.query.keyword,
 }));
 
-const listTargetCollaborations = affiliateResponse((shop, req) => searchTargetCollaborations({
+const listTargetCollaborations = affiliateResponse('target-collaborations', (shop, req) => searchTargetCollaborations({
   authorization: shop.authorization,
   shopCipher: shop.cipher,
   pageToken: req.query.page_token,
@@ -232,7 +253,7 @@ const listTargetCollaborations = affiliateResponse((shop, req) => searchTargetCo
   status: ['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'].includes(req.query.status) ? req.query.status : null,
 }));
 
-const listAffiliateOrders = affiliateResponse((shop, req) => searchAffiliateOrders({
+const listAffiliateOrders = affiliateResponse('orders', (shop, req) => searchAffiliateOrders({
   authorization: shop.authorization,
   shopCipher: shop.cipher,
   pageToken: req.query.page_token,
@@ -242,7 +263,7 @@ const listAffiliateOrders = affiliateResponse((shop, req) => searchAffiliateOrde
   programId: req.query.program_id,
 }));
 
-const showOpenCollaborationSettings = affiliateResponse((shop) => getOpenCollaborationSettings({
+const showOpenCollaborationSettings = affiliateResponse('open-collaboration-settings', (shop) => getOpenCollaborationSettings({
   authorization: shop.authorization,
   shopCipher: shop.cipher,
 }));
@@ -251,6 +272,7 @@ const disconnectShopAuthorization = async (req, res) => {
   try {
     const deleted = await TikTokShopAuthorization.destroy({ where: { id: { [Op.eq]: Number(req.params.authorizationId) || -1 } } });
     if (!deleted) return res.status(404).json({ message: 'TikTok Shop authorization not found.' });
+    sellerAffiliateCache.clear();
     res.json({ message: 'TikTok Shop authorization removed.' });
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
