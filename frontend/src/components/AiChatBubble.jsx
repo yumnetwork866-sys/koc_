@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Bot, MessageCircle, Minus, RotateCcw, Send, WifiOff, X } from 'lucide-react';
 import { streamAssistant } from '../lib/api';
 import { useI18n } from '../lib/language';
 
@@ -7,6 +8,7 @@ const createMessage = (role, text, extra = {}) => ({
   id: `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
   role,
   text,
+  createdAt: Date.now(),
   ...extra,
 });
 
@@ -173,13 +175,14 @@ const renderMarkdownContent = (value) => {
 };
 
 const AiChatBubble = () => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState(() => [
     {
       id: 'welcome',
       role: 'assistant',
       text: t('ai.greeting'),
+      createdAt: Date.now(),
     },
   ]);
   const [input, setInput] = useState('');
@@ -188,9 +191,16 @@ const AiChatBubble = () => {
   const [mounted, setMounted] = useState(false);
   const [showCallout, setShowCallout] = useState(true);
   const [typedCalloutText, setTypedCalloutText] = useState('');
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [unreadCount, setUnreadCount] = useState(0);
   const panelRef = useRef(null);
   const inputRef = useRef(null);
   const listRef = useRef(null);
+  const launcherRef = useRef(null);
+  const openRef = useRef(open);
+  const shouldAutoScrollRef = useRef(true);
+
+  openRef.current = open;
 
   useEffect(() => {
     setMounted(true);
@@ -207,28 +217,44 @@ const AiChatBubble = () => {
   }, [t]);
 
   useEffect(() => {
+    const updateOnlineStatus = () => setOnline(navigator.onLine);
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    return () => {
+      window.removeEventListener('online', updateOnlineStatus);
+      window.removeEventListener('offline', updateOnlineStatus);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!showCallout || open) {
       setTypedCalloutText('');
       return undefined;
     }
 
+    const greeting = t('ai.greeting');
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setTypedCalloutText(greeting);
+      return undefined;
+    }
+
     setTypedCalloutText('');
     let index = 0;
-    const calloutText = t('ai.greeting');
     const interval = window.setInterval(() => {
       index += 1;
-      setTypedCalloutText(calloutText.slice(0, index));
-      if (index >= calloutText.length) {
-        window.clearInterval(interval);
-      }
+      setTypedCalloutText(greeting.slice(0, index));
+      if (index >= greeting.length) window.clearInterval(interval);
     }, 28);
 
     return () => window.clearInterval(interval);
   }, [open, showCallout, t]);
 
   useEffect(() => {
-    if (!open) return;
-    inputRef.current?.focus();
+    if (!open) return undefined;
+    setUnreadCount(0);
+    shouldAutoScrollRef.current = true;
+    const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 180);
+    return () => window.clearTimeout(focusTimer);
   }, [open]);
 
   useEffect(() => {
@@ -236,15 +262,34 @@ const AiChatBubble = () => {
 
     const onKeyDown = (event) => {
       if (event.key === 'Escape') {
-        setOpen(false);
+        event.preventDefault();
+        closeChat();
+        return;
+      }
+
+      if (event.key === 'Tab' && window.matchMedia('(max-width: 640px)').matches) {
+        const focusable = Array.from(panelRef.current?.querySelectorAll(
+          'button:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+        ) || []);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
 
     const onPointerDown = (event) => {
+      if (window.matchMedia('(max-width: 640px)').matches) return;
       if (panelRef.current && !panelRef.current.contains(event.target)) {
         const target = event.target;
         if (!target.closest?.('[data-ai-launcher="true"]')) {
-          setOpen(false);
+          closeChat();
         }
       }
     };
@@ -258,23 +303,48 @@ const AiChatBubble = () => {
     };
   }, [open]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = listRef.current;
-    if (!el) return;
+    if (!el || !open || !shouldAutoScrollRef.current) return;
     el.scrollTop = el.scrollHeight;
   }, [messages, loading, open]);
 
+  useLayoutEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+  }, [input]);
+
   const quickPrompts = useMemo(() => t('ai.quickPrompts'), [t]);
+  const isWelcome = messages.length === 1 && messages[0]?.id === 'welcome' && !loading;
+  const timeFormatter = useMemo(() => new Intl.DateTimeFormat(language, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }), [language]);
+
+  const closeChat = () => {
+    setOpen(false);
+    window.requestAnimationFrame(() => launcherRef.current?.focus());
+  };
+
+  const openChat = () => {
+    setOpen(true);
+    setShowCallout(false);
+    setUnreadCount(0);
+  };
 
   const appendAssistantMessage = (text, extra = {}) => {
     setMessages((prev) => [...prev, createMessage('assistant', text, extra)]);
+    if (!openRef.current) setUnreadCount((count) => count + 1);
   };
 
   const submitPrompt = async (prompt) => {
     const text = String(prompt || '').trim();
-    if (!text || loading) return;
+    if (!text || loading || !online) return;
 
-    setOpen(true);
+    openChat();
+    shouldAutoScrollRef.current = true;
     setMessages((prev) => [...prev, createMessage('user', text)]);
     setInput('');
     setLoading(true);
@@ -282,15 +352,25 @@ const AiChatBubble = () => {
 
     const assistantMessageId = `assistant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     let receivedText = false;
+    let unreadRaised = false;
     try {
       await streamAssistant(text, {
         onDelta: (delta) => {
           receivedText = true;
           setStreaming(true);
+          if (!openRef.current && !unreadRaised) {
+            unreadRaised = true;
+            setUnreadCount((count) => count + 1);
+          }
           setMessages((current) => {
             const existingIndex = current.findIndex((message) => message.id === assistantMessageId);
             if (existingIndex === -1) {
-              return [...current, { id: assistantMessageId, role: 'assistant', text: delta }];
+              return [...current, {
+                id: assistantMessageId,
+                role: 'assistant',
+                text: delta,
+                createdAt: Date.now(),
+              }];
             }
             return current.map((message) => (
               message.id === assistantMessageId
@@ -302,7 +382,12 @@ const AiChatBubble = () => {
       });
       if (!receivedText) appendAssistantMessage(t('ai.fallbackAnswer'));
     } catch (error) {
-      if (!receivedText) appendAssistantMessage(error.message || t('ai.fallbackError'));
+      if (!receivedText) {
+        appendAssistantMessage(error.message || t('ai.fallbackError'), {
+          error: true,
+          retryPrompt: text,
+        });
+      }
     } finally {
       setLoading(false);
       setStreaming(false);
@@ -314,15 +399,30 @@ const AiChatBubble = () => {
     await submitPrompt(input);
   };
 
+  const handleInputKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  };
+
+  const handleMessageScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    shouldAutoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 56;
+  };
+
   if (!mounted) return null;
 
   return createPortal(
     <div className={`ai-chat-bubble${open ? ' ai-chat-bubble--open' : ''}`}>
       {showCallout && !open ? (
-        <div className="ai-chat-callout" role="status" aria-live="polite">
-          <span className="ai-chat-callout__text">
+        <div className="ai-chat-callout" role="status" aria-label={t('ai.greeting')}>
+          <span className="ai-chat-callout__text" aria-hidden="true">
             {typedCalloutText}
-            {typedCalloutText.length < t('ai.greeting').length ? <span className="ai-chat-callout__cursor">|</span> : null}
+            {typedCalloutText.length < t('ai.greeting').length ? (
+              <span className="ai-chat-callout__cursor">|</span>
+            ) : null}
           </span>
           <button
             type="button"
@@ -330,65 +430,125 @@ const AiChatBubble = () => {
             aria-label={t('ai.closeHint')}
             onClick={() => setShowCallout(false)}
           >
-            ×
+            <X size={15} aria-hidden="true" />
           </button>
           <span className="ai-chat-callout__tail" aria-hidden="true" />
         </div>
       ) : null}
 
-      {open ? (
-        <section ref={panelRef} className="ai-chat-panel" aria-label={t('ai.assistant')}>
+      <section
+        ref={panelRef}
+        className={`ai-chat-panel${open ? ' ai-chat-panel--open' : ''}`}
+        role="dialog"
+        aria-modal={open && typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 'true' : undefined}
+        aria-label={t('ai.assistant')}
+        aria-hidden={!open}
+        inert={!open}
+      >
           <header className="ai-chat-panel__header">
             <div className="ai-chat-panel__brand">
+              <span className="ai-chat-panel__avatar" aria-hidden="true">
+                <Bot size={19} strokeWidth={2.1} />
+                <i className={`ai-chat-status-dot${online ? '' : ' ai-chat-status-dot--offline'}`} />
+              </span>
               <div>
                 <strong>{t('ai.assistant')}</strong>
-                <span>{t('ai.status')}</span>
+                <span>{online ? t('ai.status') : t('ai.offlineStatus')}</span>
               </div>
             </div>
-            <button
-              type="button"
-              className="ai-chat-panel__close"
-              aria-label={t('ai.closeLabel')}
-              onClick={() => setOpen(false)}
-            >
-              ×
-            </button>
+            <div className="ai-chat-panel__actions">
+              <button
+                type="button"
+                className="ai-chat-panel__control"
+                aria-label={t('ai.minimizeLabel')}
+                onClick={closeChat}
+              >
+                <Minus size={18} />
+              </button>
+              <button
+                type="button"
+                className="ai-chat-panel__control"
+                aria-label={t('ai.closeLabel')}
+                onClick={closeChat}
+              >
+                <X size={18} />
+              </button>
+            </div>
           </header>
 
-          <div ref={listRef} className="ai-chat-panel__messages" aria-live="polite">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`ai-chat-message ai-chat-message--${message.role}`}
-              >
-                {message.role === 'assistant' ? (
-                  <div className="ai-markdown">
-                    {renderMarkdownContent(message.text)}
-                  </div>
-                ) : (
-                  <p className="ai-chat-message__plain">{message.text}</p>
-                )}
+          <div
+            ref={listRef}
+            className={`ai-chat-panel__messages${isWelcome ? ' ai-chat-panel__messages--welcome' : ''}`}
+            aria-live="polite"
+            aria-busy={loading}
+            onScroll={handleMessageScroll}
+          >
+            {isWelcome ? (
+              <div className="ai-chat-welcome">
+                <span className="ai-chat-welcome__icon" aria-hidden="true"><Bot size={22} /></span>
+                <div>
+                  <strong>{t('ai.greeting')}</strong>
+                  <p>{t('ai.welcomeDescription')}</p>
+                </div>
               </div>
+            ) : messages.map((message) => (
+              <article
+                key={message.id}
+                className={`ai-chat-message-group ai-chat-message-group--${message.role}`}
+              >
+                <div className={`ai-chat-message ai-chat-message--${message.role}${message.error ? ' ai-chat-message--error' : ''}`}>
+                  {message.role === 'assistant' ? (
+                    <div className="ai-markdown">
+                      {renderMarkdownContent(message.text)}
+                    </div>
+                  ) : (
+                    <p className="ai-chat-message__plain">{message.text}</p>
+                  )}
+                  {message.error && message.retryPrompt ? (
+                    <button
+                      type="button"
+                      className="ai-chat-message__retry"
+                      onClick={() => submitPrompt(message.retryPrompt)}
+                      disabled={loading || !online}
+                    >
+                      <RotateCcw size={14} />
+                      {t('ai.retry')}
+                    </button>
+                  ) : null}
+                </div>
+                <time dateTime={new Date(message.createdAt).toISOString()}>
+                  {timeFormatter.format(new Date(message.createdAt))}
+                </time>
+              </article>
             ))}
             {loading && !streaming ? (
-              <div className="ai-chat-message ai-chat-message--assistant ai-chat-message--loading">
-                <div className="ai-chat-loading" aria-label={t('ai.loading')} role="status">
-                  <span />
-                  <span />
-                  <span />
+              <div className="ai-chat-message-group ai-chat-message-group--assistant">
+                <div className="ai-chat-message ai-chat-message--assistant ai-chat-message--loading">
+                  <div className="ai-chat-loading" aria-label={t('ai.loading')} role="status">
+                    <span />
+                    <span />
+                    <span />
+                    <small>{t('ai.typing')}</small>
+                  </div>
                 </div>
+              </div>
+            ) : null}
+            {!online ? (
+              <div className="ai-chat-unavailable" role="status">
+                <WifiOff size={17} aria-hidden="true" />
+                <span>{t('ai.offlineMessage')}</span>
               </div>
             ) : null}
           </div>
 
-          <div className="ai-chat-panel__chips ai-chat-panel__chips--composer" aria-label={t('ai.assistant')}>
-            {quickPrompts.map((prompt) => (
+          <div className="ai-chat-panel__quick-actions" aria-label={t('ai.suggestionsLabel')}>
+            {quickPrompts.slice(0, 2).map((prompt) => (
               <button
                 key={prompt}
                 type="button"
-                className="ai-chat-chip"
+                className="ai-chat-chip ai-chat-chip--persistent"
                 onClick={() => submitPrompt(prompt)}
-                disabled={loading}
+                disabled={loading || !online}
               >
                 {prompt}
               </button>
@@ -396,59 +556,45 @@ const AiChatBubble = () => {
           </div>
 
           <form className="ai-chat-panel__composer" onSubmit={handleSubmit}>
-            <input
+            <label className="sr-only" htmlFor="ai-chat-input">{t('ai.inputLabel')}</label>
+            <textarea
+              id="ai-chat-input"
               ref={inputRef}
-              type="text"
+              rows="1"
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              placeholder={t('ai.placeholder')}
+              onKeyDown={handleInputKeyDown}
+              placeholder={online ? t('ai.placeholder') : t('ai.offlinePlaceholder')}
               aria-label={t('ai.inputLabel')}
+              disabled={!online}
             />
             <button
               type="submit"
-              className="button button--primary ai-chat-panel__send"
-              disabled={loading || !input.trim()}
+              className="ai-chat-panel__send"
+              disabled={loading || !online || !input.trim()}
               aria-label={t('ai.send')}
             >
-              <svg viewBox="0 0 24 24" className="ai-chat-panel__send-icon" aria-hidden="true" focusable="false">
-                <path
-                  d="M5 12.5 19 5l-3.5 14-3.4-5-7.1-1.5Z"
-                  fill="currentColor"
-                  stroke="currentColor"
-                  strokeLinejoin="round"
-                  strokeWidth="1.2"
-                />
-              </svg>
+              <Send size={18} aria-hidden="true" />
             </button>
           </form>
         </section>
-      ) : null}
 
       <button
+        ref={launcherRef}
         type="button"
         className="ai-chat-launcher"
         data-ai-launcher="true"
         aria-label={t('ai.openLabel')}
         aria-expanded={open}
-        onClick={() => {
-          setOpen((value) => !value);
-          setShowCallout(false);
-        }}
+        onClick={() => (open ? closeChat() : openChat())}
       >
-        <svg
-          viewBox="0 0 24 24"
-          className="ai-chat-launcher__shape"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path
-            d="M6.2 6.3h11.6A2.8 2.8 0 0 1 20.6 9v4.4a2.8 2.8 0 0 1-2.8 2.8H11.8L9 18.8c-.4.3-.9-.1-.8-.6l.6-1.9H6.2A2.8 2.8 0 0 1 3.4 13V9a2.8 2.8 0 0 1 2.8-2.7Z"
-            fill="currentColor"
-          />
-          <circle cx="8.4" cy="11" r="0.95" fill="#ffffff" />
-          <circle cx="12" cy="11" r="0.95" fill="#ffffff" opacity="0.92" />
-          <circle cx="15.6" cy="11" r="0.95" fill="#ffffff" opacity="0.84" />
-        </svg>
+        <MessageCircle className="ai-chat-launcher__shape" size={25} strokeWidth={2.2} aria-hidden="true" />
+        <span className={`ai-chat-launcher__status${online ? '' : ' ai-chat-launcher__status--offline'}`} aria-hidden="true" />
+        {unreadCount > 0 ? (
+          <span className="ai-chat-launcher__unread" aria-label={t('ai.unreadCount', { count: unreadCount })}>
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        ) : null}
       </button>
     </div>,
     document.body,

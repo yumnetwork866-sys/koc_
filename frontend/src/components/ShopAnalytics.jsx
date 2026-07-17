@@ -9,7 +9,7 @@ import {
   YAxis,
 } from 'recharts';
 import {
-  disconnectTikTokShopAuthorization,
+  disconnectTikTokShop,
   fetchTikTokShopAnalytics,
   fetchTikTokShopConnections,
   fetchTikTokShops,
@@ -141,11 +141,10 @@ const totalsFor = (rows) => {
 const percentage = (value, total) => (total > 0 ? value / total * 100 : 0);
 const boundedPercentage = (value) => Math.min(100, Math.max(0, value));
 
-const ShopAnalytics = () => {
+const ShopAnalytics = ({ managementOnly = false }) => {
   const { t, language } = useI18n();
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
   const initialRange = useMemo(() => rangeForDays(30), []);
-  const [activeTab, setActiveTab] = useState('analytics');
   const [shops, setShops] = useState([]);
   const [connections, setConnections] = useState([]);
   const [selectedShopId, setSelectedShopId] = useState('');
@@ -232,6 +231,11 @@ const ShopAnalytics = () => {
   const invalidRange = !startDate || !endDate || startDate >= endDate;
 
   useEffect(() => {
+    if (managementOnly) {
+      setSnapshot(null);
+      setAnalyticsLoading(false);
+      return undefined;
+    }
     if (!selectedShopId || invalidRange) {
       setSnapshot(null);
       setAnalyticsLoading(false);
@@ -260,7 +264,7 @@ const ShopAnalytics = () => {
       if (!controller.signal.aborted) setAnalyticsLoading(false);
     });
     return () => controller.abort();
-  }, [currency, endDate, invalidRange, selectedShopId, startDate, t]);
+  }, [currency, endDate, invalidRange, managementOnly, selectedShopId, startDate, t]);
 
   const selectedShop = useMemo(
     () => shops.find((shop) => String(shop.id) === String(selectedShopId)) || null,
@@ -275,6 +279,13 @@ const ShopAnalytics = () => {
     selectedAuthorization?.refresh_token_expires_at
       && new Date(selectedAuthorization.refresh_token_expires_at).getTime() <= Date.now(),
   );
+  const attentionCount = useMemo(() => connections.filter((authorization) => {
+    const expired = Boolean(
+      authorization.refresh_token_expires_at
+        && new Date(authorization.refresh_token_expires_at).getTime() <= Date.now(),
+    );
+    return expired || !scopesOf(authorization).includes(REQUIRED_SCOPE);
+  }).length, [connections]);
 
   const intervals = useMemo(() => (
     Array.isArray(snapshot?.metrics?.intervals) ? snapshot.metrics.intervals : []
@@ -372,7 +383,9 @@ const ShopAnalytics = () => {
     try {
       setConnecting(true);
       setError('');
-      const { authorizeUrl } = await startTikTokShopOauth();
+      const { authorizeUrl } = await startTikTokShopOauth(
+        managementOnly ? '/manage/shops' : '/manage/shop-analytics',
+      );
       if (!authorizeUrl) throw new Error(t('shopAnalytics.oauthError'));
       window.location.assign(authorizeUrl);
     } catch (requestError) {
@@ -381,18 +394,18 @@ const ShopAnalytics = () => {
     }
   };
 
-  const disconnect = async (authorization) => {
-    if (!window.confirm(t('shopAnalytics.disconnectConfirm'))) return;
+  const disconnectShop = async (shop) => {
+    if (!window.confirm(t('shopAnalytics.disconnectShopConfirm', { name: shop.name || t('common.unknown') }))) return;
     try {
-      setDisconnectingId(authorization.id);
-      await disconnectTikTokShopAuthorization(authorization.id);
-      if (String(selectedShop?.authorization?.id) === String(authorization.id)) {
+      setDisconnectingId(shop.id);
+      await disconnectTikTokShop(shop.id);
+      if (String(selectedShop?.id) === String(shop.id)) {
         setSnapshot(null);
       }
       await loadInventory();
-      setToast({ type: 'success', message: t('shopAnalytics.disconnectSuccess') });
+      setToast({ type: 'success', message: t('shopAnalytics.disconnectShopSuccess', { name: shop.name || t('common.unknown') }) });
     } catch (requestError) {
-      setToast({ type: 'error', message: requestError.message || t('shopAnalytics.disconnectError') });
+      setToast({ type: 'error', message: requestError.message || t('shopAnalytics.disconnectShopError') });
     } finally {
       setDisconnectingId(null);
     }
@@ -480,11 +493,13 @@ const ShopAnalytics = () => {
   };
 
   return (
-    <div className="page shop-analytics">
+    <div className={`page shop-analytics${managementOnly ? ' shop-analytics--management' : ''}`}>
       <section className="page__hero shop-analytics__hero">
         <div className="shop-analytics__hero-row">
           <div className="shop-analytics__hero-copy">
-            <h1 className="page__title">{t('shopAnalytics.heroTitle')}</h1>
+            <h1 className="page__title">
+              {t(managementOnly ? 'shopAnalytics.manageHeroTitle' : 'shopAnalytics.heroTitle')}
+            </h1>
           </div>
         </div>
 
@@ -507,58 +522,42 @@ const ShopAnalytics = () => {
       ) : null}
       {error ? <section className="section-card shop-analytics__error" role="alert">{error}</section> : null}
 
-      <div
-        className="shop-analytics__tabs"
-        role="tablist"
-        aria-label={t('shopAnalytics.tabsLabel')}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-            event.preventDefault();
-            const tabs = [...event.currentTarget.querySelectorAll('[role="tab"]')];
-            const currentIndex = tabs.indexOf(document.activeElement);
-            const direction = event.key === 'ArrowRight' ? 1 : -1;
-            const nextIndex = (Math.max(currentIndex, 0) + direction + tabs.length) % tabs.length;
-            tabs[nextIndex]?.focus();
-            setActiveTab(tabs[nextIndex]?.id === 'shop-connections-tab' ? 'connections' : 'analytics');
-          }
-        }}
-      >
-        <button
-          id="shop-analytics-tab"
-          className={activeTab === 'analytics' ? 'is-active' : ''}
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'analytics'}
-          aria-controls="shop-analytics-panel"
-          tabIndex={activeTab === 'analytics' ? 0 : -1}
-          onClick={() => setActiveTab('analytics')}
-        >
-          <AnalyticsIcon name="analytics" />
-          {t('shopAnalytics.analyticsTab')}
-          <span>{shops.length}</span>
-        </button>
-        <button
-          id="shop-connections-tab"
-          className={activeTab === 'connections' ? 'is-active' : ''}
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'connections'}
-          aria-controls="shop-connections-panel"
-          tabIndex={activeTab === 'connections' ? 0 : -1}
-          onClick={() => setActiveTab('connections')}
-        >
-          <AnalyticsIcon name="connections" />
-          {t('shopAnalytics.connectionsTab')}
-          <span>{connections.length}</span>
-        </button>
-      </div>
+      {managementOnly ? (
+        <section className="shop-management__stats" aria-label={t('shopAnalytics.manageSummary')}>
+          <article className="shop-management__stat">
+            <span className="shop-management__stat-icon" aria-hidden="true">
+              <AnalyticsIcon name="connections" />
+            </span>
+            <div>
+              <span>{t('shopAnalytics.sellerAccounts')}</span>
+              <strong>{loading ? '—' : formatNumber(connections.length)}</strong>
+            </div>
+          </article>
+          <article className="shop-management__stat">
+            <span className="shop-management__stat-icon" aria-hidden="true">
+              <AnalyticsIcon name="shop" />
+            </span>
+            <div>
+              <span>{t('shopAnalytics.connectedShops')}</span>
+              <strong>{loading ? '—' : formatNumber(shops.length)}</strong>
+            </div>
+          </article>
+          <article className={`shop-management__stat${attentionCount ? ' is-warning' : ''}`}>
+            <span className="shop-management__stat-icon" aria-hidden="true">
+              <AnalyticsIcon name="sync" />
+            </span>
+            <div>
+              <span>{t('shopAnalytics.needsAttention')}</span>
+              <strong>{loading ? '—' : formatNumber(attentionCount)}</strong>
+            </div>
+          </article>
+        </section>
+      ) : null}
 
-      {activeTab === 'analytics' ? (
+      {!managementOnly ? (
         <div
           id="shop-analytics-panel"
           className="shop-analytics__tab-panel"
-          role="tabpanel"
-          aria-labelledby="shop-analytics-tab"
         >
           <section className="section-card shop-analytics__filters" aria-labelledby="shop-analytics-filters-title">
             <div className="shop-analytics__filter-heading">
@@ -951,14 +950,11 @@ const ShopAnalytics = () => {
         <div
           id="shop-connections-panel"
           className="shop-analytics__tab-panel"
-          role="tabpanel"
-          aria-labelledby="shop-connections-tab"
         >
           <section className="section-card shop-analytics__connections-card" aria-labelledby="shop-connections-title">
             <div className="section-card__header">
               <div>
                 <h2 className="section-card__title" id="shop-connections-title">{t('shopAnalytics.connections')}</h2>
-                <p className="section-card__meta">{t('shopAnalytics.connectionsMeta')}</p>
               </div>
             </div>
             {loading ? (
@@ -996,31 +992,51 @@ const ShopAnalytics = () => {
                               : t('shopAnalytics.connected')}
                         </span>
                       </div>
-                      <div className="shop-analytics__connection-summary">
-                        <div>
-                          <span>{t('shopAnalytics.connectedShops')}</span>
-                          <strong>{formatNumber(authorizationShops.length)}</strong>
-                        </div>
-                        <div>
-                          <span>{t('shopAnalytics.permissions')}</span>
-                          <strong>{formatNumber(scopes.length)}</strong>
+                      <div className="shop-management__permissions-block">
+                        <span className="shop-management__permissions-label">{t('shopAnalytics.permissions')}</span>
+                        <div className="shop-management__permissions">
+                          {scopes.length ? scopes.map((scope) => (
+                            <span className={`chip ${scope === REQUIRED_SCOPE ? 'chip--positive' : ''}`} key={scope}>
+                              {scope}
+                            </span>
+                          )) : <span className="shop-management__permissions-empty">{t('shopAnalytics.noPermissions')}</span>}
                         </div>
                       </div>
-                      <div className="shop-analytics__scope-list">
-                        {scopes.map((scope) => (
-                          <span className={`chip ${scope === REQUIRED_SCOPE ? 'chip--positive' : ''}`} key={scope}>
-                            {scope}
-                          </span>
-                        ))}
-                        {missingScope ? (
+                      {authorizationShops.length ? (
+                        <div className="shop-management__shop-list" aria-label={t('shopAnalytics.shopInventory')}>
+                          {authorizationShops.map((shop) => (
+                            <div className="shop-management__shop-row" key={shop.id || shop.platform_shop_id || shop.name}>
+                              <span className="shop-management__shop-avatar" aria-hidden="true">
+                                <AnalyticsIcon name="shop" />
+                              </span>
+                              <div>
+                                <strong>{shop.name || t('common.unknown')}</strong>
+                                <span>{[shop.code, shop.region].filter(Boolean).join(' · ') || t('shopAnalytics.connected')}</span>
+                              </div>
+                              <button
+                                className="button button--small button--danger shop-management__disconnect"
+                                type="button"
+                                disabled={connecting || disconnectingId !== null}
+                                onClick={() => disconnectShop(shop)}
+                              >
+                                {String(disconnectingId) === String(shop.id)
+                                  ? t('common.loading')
+                                  : t('shopAnalytics.disconnect')}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {missingScope ? (
+                        <div className="shop-analytics__scope-list">
                           <span className="chip chip--amber">{t('shopAnalytics.missing')}: {REQUIRED_SCOPE}</span>
-                        ) : null}
-                      </div>
+                        </div>
+                      ) : null}
                       {authorization.last_sync_error ? (
                         <p className="shop-analytics__connection-error">{authorization.last_sync_error}</p>
                       ) : null}
-                      <div className="shop-analytics__connection-actions">
-                        {expired || missingScope ? (
+                      {expired || missingScope ? (
+                        <div className="shop-analytics__connection-actions">
                           <button
                             className="button button--small button--ghost"
                             type="button"
@@ -1029,18 +1045,8 @@ const ShopAnalytics = () => {
                           >
                             {t('shopAnalytics.reconnect')}
                           </button>
-                        ) : null}
-                        <button
-                          className="button button--small button--danger"
-                          type="button"
-                          disabled={connecting || disconnectingId !== null}
-                          onClick={() => disconnect(authorization)}
-                        >
-                          {String(disconnectingId) === String(authorization.id)
-                            ? t('common.loading')
-                            : t('shopAnalytics.disconnect')}
-                        </button>
-                      </div>
+                        </div>
+                      ) : null}
                     </article>
                   );
                 })}

@@ -175,6 +175,10 @@ export function disconnectTikTokShopAuthorization(authorizationId) {
   return apiRequest(`/tiktok-shop/connections/${encodeURIComponent(authorizationId)}`, { method: 'DELETE' });
 }
 
+export function disconnectTikTokShop(shopId) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}`, { method: 'DELETE' });
+}
+
 export function disconnectTikTokPartner(creatorId) {
   return apiRequest(`/bookings/tiktok-partner/${encodeURIComponent(creatorId)}`, { method: 'DELETE' });
 }

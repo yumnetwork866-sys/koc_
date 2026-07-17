@@ -5,6 +5,7 @@ const adminRouter = express.Router();
 adminRouter.get('/oauth/start', controller.startShopOauth);
 adminRouter.get('/connections', controller.listShopConnections);
 adminRouter.get('/shops', controller.listShops);
+adminRouter.delete('/shops/:shopId', controller.disconnectShop);
 adminRouter.get('/shops/:shopId/analytics', controller.getShopAnalytics);
 adminRouter.post('/shops/:shopId/analytics/sync', controller.syncShopAnalytics);
 adminRouter.get('/shops/:shopId/affiliate/open-collaborations', controller.listOpenCollaborations);

@@ -36,6 +36,7 @@ export const sidebarSections = [
     title: 'Admin',
     items: [
       { to: '/manage/users', labelKey: 'navigation.users', adminOnly: true },
+      { to: '/manage/shops', labelKey: 'navigation.manageShops', adminOnly: true },
       { to: '/manage/schedules', labelKey: 'navigation.schedule', adminOnly: true },
       { to: '/chatbot/chat-setting', labelKey: 'navigation.chatSettings', adminOnly: true },
     ],
@@ -68,6 +69,12 @@ export const protectedRouteCards = [
       heroTitle: 'Schedule management',
       heroSubtitle: 'Manage automated data synchronization jobs.',
     },
+  },
+  {
+    path: '/manage/shops',
+    component: 'ShopAnalytics',
+    adminOnly: true,
+    props: { managementOnly: true },
   },
   {
     path: '/manage/affiliate',

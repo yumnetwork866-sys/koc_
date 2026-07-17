@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link2 } from 'lucide-react';
 import AppLogo from './AppLogo';
 import {
   getFacebookOauthUrl,
@@ -108,7 +109,7 @@ const Header = () => {
     .join('')
     .toUpperCase() || 'A';
   const avatarSeed = String(session?.user?.id || session?.user?.email || userName);
-  const fallbackAvatarUrl = `https://api.dicebear.com/10.x/lorelei-neutral/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=e6f7f5`;
+  const fallbackAvatarUrl = `https://api.dicebear.com/10.x/fun-emoji/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=e6f7f5`;
   const avatarUrl = session?.user?.avatar_url || fallbackAvatarUrl;
 
   useEffect(() => {
@@ -166,7 +167,6 @@ const Header = () => {
   const connectionOptions = [
     { id: 'tiktok', group: 'tiktok', label: t('header.connectTikTok'), meta: t('header.connectTikTokMeta') },
     { id: 'creator', group: 'tiktok', label: t('header.connectTikTokCreator'), meta: t('header.connectTikTokCreatorMeta') },
-    { id: 'shop', group: 'tiktok', label: t('header.connectTikTokShop'), meta: t('header.connectTikTokShopMeta') },
     { id: 'facebook', group: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta') },
   ];
   const connectionGroups = [
@@ -175,7 +175,10 @@ const Header = () => {
   ];
   const isTopNavActive = (to) => {
     if (to === '/manage/users') {
-      return location.pathname.startsWith('/manage/users') || location.pathname.startsWith('/chatbot/chat-setting');
+      return location.pathname.startsWith('/manage/users')
+        || location.pathname.startsWith('/manage/shops')
+        || location.pathname.startsWith('/manage/schedules')
+        || location.pathname.startsWith('/chatbot/chat-setting');
     }
     if (to === '/chatbot') {
       return location.pathname.startsWith('/chatbot') && !location.pathname.startsWith('/chatbot/chat-setting');
@@ -357,6 +360,7 @@ const Header = () => {
                   }}
                   onKeyDown={handleConnectTriggerKeyDown}
                 >
+                  <Link2 className="topbar__connect-trigger-icon" size={16} strokeWidth={2.25} aria-hidden="true" />
                   <span>{t('header.connect')}</span>
                 </button>
                 {activeMenu === 'connect' ? (

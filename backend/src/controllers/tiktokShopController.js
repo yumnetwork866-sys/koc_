@@ -37,7 +37,7 @@ const creatorProfileRefreshKey = (shopId, exportId) => `${shopId}:${exportId}`;
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3005';
 const redirectUrl = (status, message, returnPath = '/manage/shop-analytics') => {
-  const safeReturnPath = ['/manage/shop-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
+  const safeReturnPath = ['/manage/shops', '/manage/shop-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
   const url = new URL(safeReturnPath, FRONTEND_URL());
   url.searchParams.set('shop_oauth_status', status);
   if (message) url.searchParams.set('shop_oauth_message', message);
@@ -338,6 +338,37 @@ const disconnectShopAuthorization = async (req, res) => {
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
+const disconnectShop = async (req, res) => {
+  try {
+    const shopId = idValue(req.params.shopId);
+    if (!shopId) return res.status(400).json({ message: 'TikTok Shop ID is invalid.' });
+    const shop = await TikTokShop.findByPk(shopId, { attributes: ['id', 'authorization_id', 'name'] });
+    if (!shop) return res.status(404).json({ message: 'TikTok Shop not found.' });
+
+    let authorizationRemoved = false;
+    await sequelize.transaction(async (transaction) => {
+      await shop.destroy({ transaction });
+      const remainingShops = await TikTokShop.count({
+        where: { authorization_id: shop.authorization_id },
+        transaction,
+      });
+      if (remainingShops === 0) {
+        await TikTokShopAuthorization.destroy({
+          where: { id: shop.authorization_id },
+          transaction,
+        });
+        authorizationRemoved = true;
+      }
+    });
+    sellerAffiliateCache.clear();
+    res.json({
+      message: 'TikTok Shop removed.',
+      shopId,
+      authorizationRemoved,
+    });
+  } catch (error) { res.status(500).json({ message: error.message }); }
+};
+
 const creatorPerformanceOptions = (shop, input = {}) => ({
   windowType: ['PAST_24H', 'PAST_7_DAYS', 'PAST_30_DAYS'].includes(input.window_type)
     ? input.window_type : 'PAST_7_DAYS',
@@ -484,7 +515,7 @@ const syncCreatorPerformance = async (req, res) => {
 
 module.exports = {
   startShopOauth, handleShopOauthCallback, listShopConnections, listShops,
-  getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization,
+  getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization, disconnectShop,
   listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
   listAffiliateCreators,
   listCreatorContentDetails,

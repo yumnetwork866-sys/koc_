@@ -75,12 +75,19 @@ const sidebarIcons = {
     'M8 13h8',
     'M8 17h5',
   ],
+  shop: [
+    'M4 9h16',
+    'M5 9l1-5h12l1 5',
+    'M6 9v11h12V9',
+    'M9 20v-6h6v6',
+  ],
 };
 
 const routeIconMap = {
   '/dashboard': 'dashboard',
   '/manage/affiliate': 'analytics',
   '/manage/users': 'users',
+  '/manage/shops': 'shop',
   '/manage/schedules': 'schedule',
   '/manage/koc-performance': 'koc',
   '/manage/shop-analytics': 'analytics',
@@ -134,7 +141,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
   const { t } = useI18n();
   const location = useLocation();
   const session = useSession();
-  const isAdminArea = location.pathname.startsWith('/manage/users') || location.pathname.startsWith('/manage/schedules') || location.pathname.startsWith('/chatbot/chat-setting');
+  const isAdminArea = location.pathname.startsWith('/manage/users')
+    || location.pathname.startsWith('/manage/shops')
+    || location.pathname.startsWith('/manage/schedules')
+    || location.pathname.startsWith('/chatbot/chat-setting');
   const isFacebookArea = location.pathname.startsWith('/chatbot');
   const isTikTokShopArea = [
     '/manage/affiliate',
