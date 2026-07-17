@@ -354,30 +354,38 @@ const getSellerCreatorContentDetails = ({
 };
 
 const createCompassExportTask = ({
-  authorization, shopCipher, windowType = 'PAST_7_DAYS', endDay, planType = 'ALL',
-} = {}, fetchImpl) => sellerAffiliateRequest({
-  authorization,
-  shopCipher,
-  path: COMPASS_CREATE_TASK_PATH,
-  body: {
-    module_type: 'CREATOR',
-    window_type: windowType,
-    end_day: Number(endDay),
-    plan_type: planType,
-  },
-}, fetchImpl);
+  authorization, shopCipher, moduleType = 'CREATOR', windowType = 'PAST_7_DAYS', endDay, planType = 'ALL',
+} = {}, fetchImpl) => {
+  const normalizedModuleType = String(moduleType || 'CREATOR').toUpperCase();
+  if (!['CREATOR', 'BASE'].includes(normalizedModuleType)) throw new Error('module_type must be CREATOR or BASE.');
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: COMPASS_CREATE_TASK_PATH,
+    body: {
+      module_type: normalizedModuleType,
+      window_type: windowType,
+      end_day: Number(endDay),
+      ...(normalizedModuleType === 'CREATOR' ? { plan_type: planType } : {}),
+    },
+  }, fetchImpl);
+};
 
-const listCompassExportTasks = ({ authorization, shopCipher, pageSize = 50, pageToken } = {}, fetchImpl) => sellerAffiliateRequest({
-  authorization,
-  shopCipher,
-  path: COMPASS_TASK_LIST_PATH,
-  method: 'GET',
-  query: {
-    doc_type: 'CREATOR',
-    page_size: Math.min(100, Math.max(1, Number(pageSize) || 50)),
-    ...(pageToken ? { page_token: pageToken } : {}),
-  },
-}, fetchImpl);
+const listCompassExportTasks = ({ authorization, shopCipher, docType = 'CREATOR', pageSize = 50, pageToken } = {}, fetchImpl) => {
+  const normalizedDocType = String(docType || 'CREATOR').toUpperCase();
+  if (!['CREATOR', 'BASE'].includes(normalizedDocType)) throw new Error('doc_type must be CREATOR or BASE.');
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: COMPASS_TASK_LIST_PATH,
+    method: 'GET',
+    query: {
+      doc_type: normalizedDocType,
+      page_size: Math.min(100, Math.max(1, Number(pageSize) || 50)),
+      ...(pageToken ? { page_token: pageToken } : {}),
+    },
+  }, fetchImpl);
+};
 
 const downloadCompassExportFile = async ({ authorization, shopCipher, taskId } = {}, fetchImpl) => {
   const normalizedTaskId = String(taskId || '').trim();

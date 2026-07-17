@@ -4,6 +4,7 @@ const {
   sequelize,
   TikTokCreatorPerformanceExport,
   TikTokCreatorPerformanceSnapshot,
+  TikTokBasePerformanceSnapshot,
 } = require('../models');
 const {
   createCompassExportTask,
@@ -24,6 +25,8 @@ const SUCCESS_STATUSES = new Set(['SUCCEEDED', 'SUCCESS', 'COMPLETED']);
 const FAILED_STATUSES = new Set(['FAILED', 'FAILURE', 'CANCELLED', 'EXPIRED']);
 const REGION_CURRENCY = { MY: 'MYR', VN: 'VND', SG: 'SGD', TH: 'THB', PH: 'PHP', ID: 'IDR', US: 'USD', GB: 'GBP' };
 const REGION_TIMEZONE = { MY: 'Asia/Kuala_Lumpur', VN: 'Asia/Ho_Chi_Minh', SG: 'Asia/Singapore', TH: 'Asia/Bangkok', PH: 'Asia/Manila', ID: 'Asia/Jakarta' };
+const marketplaceProfileCooldowns = new Map();
+const marketplaceShopCooldowns = new Map();
 
 const isoFromEndDay = (endDay) => {
   const value = String(endDay || '');
@@ -126,6 +129,37 @@ const parseCreatorPerformanceWorkbook = (buffer, {
   }));
 };
 
+const parseBasePerformanceWorkbook = (buffer, {
+  exportId, shopId, startDate, endDate, windowType, currency,
+}) => {
+  const workbook = XLSX.read(buffer, { type: 'buffer', raw: false });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  if (!sheet) throw new Error('TikTok Compass BASE workbook does not contain a worksheet.');
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+  const moneyPattern = /^\s*(?:[A-Z]{2,3}|RM|[$€£¥₫])?\s*-?[\d,.]+\s*$/u;
+  const row = rows.find((item) => moneyPattern.test(String(item['Creator-attributed GMV'] || '')));
+  if (!row) throw new Error('TikTok Compass BASE workbook does not contain a metrics row.');
+  return {
+    export_id: exportId,
+    shop_id: shopId,
+    start_date: startDate,
+    end_date: endDate,
+    window_type: windowType,
+    currency,
+    creator_attributed_gmv: numeric(row['Creator-attributed GMV']),
+    creator_attributed_items_sold: integer(row['Creator-attributed items sold']),
+    refunds: numeric(row.Refunds),
+    estimated_commission: numeric(row['Est. commission']),
+    videos: integer(row.Videos),
+    live_streams: integer(row['LIVE streams']),
+    samples_shipped: integer(row['Samples shipped']),
+    items_refunded: integer(row['Items refunded']),
+    average_order_value: numeric(row.AOV),
+    raw_metrics: row,
+    synced_at: new Date(),
+  };
+};
+
 const taskRows = (payload) => payload?.data?.tasks
   || payload?.data?.offline_tasks
   || payload?.data?.task_list
@@ -172,6 +206,10 @@ const loadMarketplaceCreatorProfiles = async (
     concurrency = Number(process.env.TIKTOK_CREATOR_PROFILE_CONCURRENCY || 1),
     minIntervalMs = Number(process.env.TIKTOK_CREATOR_PROFILE_MIN_INTERVAL_MS || 2500),
     retryCount = Number(process.env.TIKTOK_CREATOR_PROFILE_RETRY_COUNT || 3),
+    rateLimitCooldownMs = Number(process.env.TIKTOK_CREATOR_PROFILE_RATE_LIMIT_COOLDOWN_MS || 30 * 60 * 1000),
+    cooldowns = marketplaceProfileCooldowns,
+    shopCooldowns = marketplaceShopCooldowns,
+    now = () => Date.now(),
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   } = {},
 ) => {
@@ -182,8 +220,40 @@ const loadMarketplaceCreatorProfiles = async (
   const workerCount = Math.min(queue.length, Math.max(1, Math.min(10, Number(concurrency) || 1)));
   const requestInterval = Math.max(0, Number(minIntervalMs) || 0);
   const retries = Math.max(0, Math.min(8, Number(retryCount) || 0));
+  const cooldownMs = Math.max(0, Number(rateLimitCooldownMs) || 0);
   let nextIndex = 0;
   let nextRequestAt = 0;
+  let stopAllRequests = false;
+  const cooldownKey = (username) => `${shop.id}:${username}`;
+  const shopCooldownKey = String(shop.id);
+  const isCoolingDown = (username) => {
+    const key = cooldownKey(username);
+    const expiresAt = Number(cooldowns.get(key) || 0);
+    if (!expiresAt) return false;
+    if (expiresAt <= now()) {
+      cooldowns.delete(key);
+      return false;
+    }
+    return true;
+  };
+  const isShopCoolingDown = () => {
+    const expiresAt = Number(shopCooldowns.get(shopCooldownKey) || 0);
+    if (!expiresAt) return false;
+    if (expiresAt <= now()) {
+      shopCooldowns.delete(shopCooldownKey);
+      return false;
+    }
+    return true;
+  };
+  const setCooldown = (username) => {
+    if (!cooldownMs) return;
+    cooldowns.set(cooldownKey(username), now() + cooldownMs);
+  };
+  const setShopCooldown = () => {
+    if (!cooldownMs) return;
+    shopCooldowns.set(shopCooldownKey, now() + cooldownMs);
+  };
+  if (isShopCoolingDown()) return new Map();
   const waitForRequestSlot = async () => {
     const now = Date.now();
     const scheduledAt = Math.max(now, nextRequestAt);
@@ -191,12 +261,15 @@ const loadMarketplaceCreatorProfiles = async (
     if (scheduledAt > now) await sleep(scheduledAt - now);
   };
   const worker = async () => {
-    while (nextIndex < queue.length) {
+    while (nextIndex < queue.length && !stopAllRequests) {
       const username = queue[nextIndex];
       nextIndex += 1;
+      if (stopAllRequests || isShopCoolingDown() || isCoolingDown(username)) continue;
       for (let attempt = 0; attempt <= retries; attempt += 1) {
         try {
+          if (stopAllRequests || isShopCoolingDown()) break;
           await waitForRequestSlot();
+          if (stopAllRequests || isShopCoolingDown()) break;
           const payload = await searchMarketplace({
             authorization: shop.authorization,
             shopCipher: shop.cipher,
@@ -209,7 +282,20 @@ const loadMarketplaceCreatorProfiles = async (
           break;
         } catch (error) {
           const rateLimited = [36009002, 36009037].includes(Number(error.tiktokCode));
-          if (rateLimited && attempt < retries) {
+          if (rateLimited) {
+            setCooldown(username);
+            setShopCooldown();
+            stopAllRequests = true;
+            console.warn('[Creator Performance] Marketplace profile lookup rate-limited', {
+              shopId: shop.id,
+              username,
+              attempt: attempt + 1,
+              cooldownMs,
+              message: error.message,
+            });
+            break;
+          }
+          if (attempt < retries) {
             await sleep(Math.min(60000, 5000 * (2 ** attempt)));
             continue;
           }
@@ -236,6 +322,10 @@ const applyCreatorProfile = (row, profile) => {
   if (!row.followers) row.followers = Number(profile.follower_count) || 0;
 };
 
+const creatorProfileNeedsRefresh = (row) => !row.avatar_url
+  || avatarUrlExpired(row.avatar_url)
+  || Number(row.followers) <= 0;
+
 const enrichCreatorRows = async (shop, rows, {
   searchSamples = searchSellerSampleApplications,
   searchMarketplace = searchMarketplaceCreators,
@@ -245,7 +335,8 @@ const enrichCreatorRows = async (shop, rows, {
   const sampleProfiles = await loadCreatorProfiles(shop, searchSamples).catch(() => new Map());
   for (const row of rows) applyCreatorProfile(row, sampleProfiles.get(normalizeUsername(row.username)));
   const missingUsernames = rows
-    .filter((row) => !row.avatar_url || (refreshMarketplace && avatarUrlExpired(row.avatar_url)))
+    .filter((row) => creatorProfileNeedsRefresh(row)
+      && (!row.avatar_url || Number(row.followers) <= 0 || refreshMarketplace))
     .map((row) => row.username);
   const marketplaceProfiles = await loadMarketplaceCreatorProfiles(
     shop,
@@ -294,7 +385,7 @@ const refreshCreatorPerformanceProfiles = async (shop, exportRecord, dependencie
   }
   await persistRows(sampleRows);
 
-  const candidates = rows.filter((row) => !row.avatar_url || avatarUrlExpired(row.avatar_url));
+  const candidates = rows.filter(creatorProfileNeedsRefresh);
   const batchSize = Math.max(1, Math.min(50, Number(process.env.TIKTOK_CREATOR_PROFILE_BATCH_SIZE || 20)));
   for (let index = 0; index < candidates.length; index += batchSize) {
     const batch = candidates.slice(index, index + batchSize);
@@ -327,6 +418,7 @@ const createCreatorPerformanceExport = async (shop, {
   const existing = await TikTokCreatorPerformanceExport.findOne({
     where: {
       shop_id: shop.id,
+      module_type: 'CREATOR',
       window_type: normalizedWindow,
       plan_type: normalizedPlan,
       start_date: startDate,
@@ -358,6 +450,45 @@ const createCreatorPerformanceExport = async (shop, {
   });
 };
 
+const createBasePerformanceExport = async (shop, {
+  windowType = 'PAST_7_DAYS', endDay = yesterdayEndDay(shop.region),
+} = {}, dependencies = {}) => {
+  const normalizedWindow = String(windowType).toUpperCase();
+  const { startDate, endDate } = exportDateRange(normalizedWindow, endDay);
+  const existing = await TikTokCreatorPerformanceExport.findOne({
+    where: {
+      shop_id: shop.id,
+      module_type: 'BASE',
+      window_type: normalizedWindow,
+      start_date: startDate,
+      end_date: endDate,
+      status: { [Op.in]: ['PROCESSING', 'SUCCEEDED'] },
+    },
+    order: [['created_at', 'DESC']],
+  });
+  if (existing) return existing;
+  const payload = await (dependencies.createTask || createCompassExportTask)({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    moduleType: 'BASE',
+    windowType: normalizedWindow,
+    endDay,
+  });
+  const taskId = payload.data?.task?.id || payload.data?.task_id;
+  if (!taskId) throw new Error('TikTok Compass did not return a BASE task id.');
+  return TikTokCreatorPerformanceExport.create({
+    shop_id: shop.id,
+    task_id: String(taskId),
+    module_type: 'BASE',
+    window_type: normalizedWindow,
+    plan_type: 'ALL',
+    start_date: startDate,
+    end_date: endDate,
+    status: 'PROCESSING',
+    request_id: payload.request_id || null,
+  });
+};
+
 const createCreatorPerformanceExportWithFallback = async (shop, options = {}, {
   maxFallbackDays = 7,
   createExport = createCreatorPerformanceExport,
@@ -375,6 +506,13 @@ const createCreatorPerformanceExportWithFallback = async (shop, options = {}, {
   }
   throw new Error('TikTok Compass export date is not available.');
 };
+
+const createBasePerformanceExportWithFallback = (shop, options = {}, dependencies = {}) => (
+  createCreatorPerformanceExportWithFallback(shop, options, {
+    ...dependencies,
+    createExport: dependencies.createExport || createBasePerformanceExport,
+  })
+);
 
 const processCreatorPerformanceExport = async (shop, exportRecord, {
   pollIntervalMs = 5000, timeoutMs = 15 * 60 * 1000, listTasks = listCompassExportTasks,
@@ -431,15 +569,71 @@ const processCreatorPerformanceExport = async (shop, exportRecord, {
   }
 };
 
+const processBasePerformanceExport = async (shop, exportRecord, {
+  pollIntervalMs = 5000,
+  timeoutMs = 15 * 60 * 1000,
+  listTasks = listCompassExportTasks,
+  downloadFile = downloadCompassExportFile,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) => {
+  const startedAt = Date.now();
+  try {
+    while (Date.now() - startedAt < timeoutMs) {
+      const payload = await listTasks({
+        authorization: shop.authorization,
+        shopCipher: shop.cipher,
+        docType: 'BASE',
+        pageSize: 100,
+      });
+      const task = findTask(payload, exportRecord.task_id);
+      const status = String(task?.status || task?.task_status || '').toUpperCase();
+      if (FAILED_STATUSES.has(status)) throw new Error(task?.fail_reason || task?.error_message || `TikTok Compass BASE task ${status}.`);
+      if (SUCCESS_STATUSES.has(status)) {
+        const filePayload = await downloadFile({
+          authorization: shop.authorization,
+          shopCipher: shop.cipher,
+          taskId: exportRecord.task_id,
+        });
+        const base64 = filePayload.data?.file?.base64 || filePayload.data?.base64;
+        if (!base64) throw new Error('TikTok Compass did not return the BASE XLSX file.');
+        const snapshot = parseBasePerformanceWorkbook(Buffer.from(base64, 'base64'), {
+          exportId: exportRecord.id,
+          shopId: shop.id,
+          startDate: exportRecord.start_date,
+          endDate: exportRecord.end_date,
+          windowType: exportRecord.window_type,
+          currency: REGION_CURRENCY[String(shop.region || '').toUpperCase()] || 'USD',
+        });
+        await sequelize.transaction(async (transaction) => {
+          await TikTokBasePerformanceSnapshot.upsert(snapshot, { transaction });
+          await exportRecord.update({
+            status: 'SUCCEEDED', row_count: 1, completed_at: new Date(), error: null,
+          }, { transaction });
+        });
+        return exportRecord.reload();
+      }
+      await sleep(pollIntervalMs);
+    }
+    throw new Error('TikTok Compass BASE report timed out after 15 minutes.');
+  } catch (error) {
+    await exportRecord.update({ status: 'FAILED', error: String(error.message).slice(0, 2000), completed_at: new Date() });
+    throw error;
+  }
+};
+
 module.exports = {
   WINDOW_DAYS,
   exportDateRange,
   yesterdayEndDay,
   shiftEndDay,
   parseCreatorPerformanceWorkbook,
+  parseBasePerformanceWorkbook,
   createCreatorPerformanceExport,
+  createBasePerformanceExport,
   createCreatorPerformanceExportWithFallback,
+  createBasePerformanceExportWithFallback,
   processCreatorPerformanceExport,
+  processBasePerformanceExport,
   loadCreatorProfiles,
   loadMarketplaceCreatorProfiles,
   enrichCreatorRows,

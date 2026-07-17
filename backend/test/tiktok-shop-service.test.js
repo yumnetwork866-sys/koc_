@@ -405,6 +405,25 @@ test('Compass creator export uses the production task parameters', async (t) => 
   });
 });
 
+test('Compass base export uses the BASE module type', async (t) => {
+  configure(t);
+  await createCompassExportTask({
+    authorization: sellerAuthorization(),
+    shopCipher: 'cipher-1',
+    moduleType: 'BASE',
+    windowType: 'PAST_7_DAYS',
+    endDay: 20260715,
+    planType: 'ALL',
+  }, async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), {
+      module_type: 'BASE',
+      window_type: 'PAST_7_DAYS',
+      end_day: 20260715,
+    });
+    return successResponse({ task: { id: 'base-task-1' } });
+  });
+});
+
 test('Compass task list includes the required production doc_type', async (t) => {
   configure(t);
   await listCompassExportTasks({

@@ -2,7 +2,9 @@ const cron = require('node-cron');
 const { TikTokShop, TikTokShopAuthorization } = require('../models');
 const {
   createCreatorPerformanceExportWithFallback,
+  createBasePerformanceExportWithFallback,
   processCreatorPerformanceExport,
+  processBasePerformanceExport,
   yesterdayEndDay,
 } = require('../services/tiktokCreatorPerformanceService');
 
@@ -27,6 +29,11 @@ const startCreatorPerformanceScheduler = () => {
           });
         }
         if (exportRecord.status === 'PROCESSING') await processCreatorPerformanceExport(shop, exportRecord);
+        const { exportRecord: baseExportRecord } = await createBasePerformanceExportWithFallback(shop, {
+          windowType: 'PAST_7_DAYS',
+          endDay,
+        });
+        if (baseExportRecord.status === 'PROCESSING') await processBasePerformanceExport(shop, baseExportRecord);
       } catch (error) {
         console.error('[Creator Performance Scheduler] Shop failed', { shopId: shop.id, message: error.message });
       }

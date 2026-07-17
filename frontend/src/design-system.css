@@ -89,6 +89,22 @@ body {
   color: #fff;
 }
 
+.seller-affiliate__performance-tabs {
+  margin-bottom: 16px;
+}
+
+.seller-affiliate__generate-report {
+  align-self: end;
+  min-height: 42px;
+}
+
+.seller-affiliate__base-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  padding: 4px;
+}
+
 .seller-affiliate__permission {
   display: flex;
   justify-content: space-between;

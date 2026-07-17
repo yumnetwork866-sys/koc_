@@ -275,6 +275,31 @@ const TikTokCreatorProfile = sequelize.define('TikTokCreatorProfile', {
   ],
 });
 
+const TikTokBasePerformanceSnapshot = sequelize.define('TikTokBasePerformanceSnapshot', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  export_id: { type: DataTypes.INTEGER, allowNull: false },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  start_date: { type: DataTypes.DATEONLY, allowNull: false },
+  end_date: { type: DataTypes.DATEONLY, allowNull: false },
+  window_type: { type: DataTypes.STRING, allowNull: false },
+  currency: { type: DataTypes.STRING, allowNull: false },
+  creator_attributed_gmv: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  creator_attributed_items_sold: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  refunds: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  estimated_commission: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  videos: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  live_streams: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  samples_shipped: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  items_refunded: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  average_order_value: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  raw_metrics: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+  synced_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_base_performance_snapshots',
+  timestamps: false,
+  indexes: [{ unique: true, fields: ['shop_id', 'start_date', 'end_date', 'window_type'] }],
+});
+
 const ScheduledJob = sequelize.define('ScheduledJob', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   job_key: { type: DataTypes.STRING(100), allowNull: false, unique: true },
@@ -879,6 +904,10 @@ TikTokCreatorPerformanceExport.hasMany(TikTokCreatorPerformanceSnapshot, { forei
 TikTokCreatorPerformanceSnapshot.belongsTo(TikTokCreatorPerformanceExport, { foreignKey: 'export_id', as: 'export' });
 TikTokShop.hasMany(TikTokCreatorProfile, { foreignKey: 'shop_id', as: 'creator_profiles' });
 TikTokCreatorProfile.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(TikTokBasePerformanceSnapshot, { foreignKey: 'shop_id', as: 'base_performance_snapshots' });
+TikTokBasePerformanceSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokCreatorPerformanceExport.hasOne(TikTokBasePerformanceSnapshot, { foreignKey: 'export_id', as: 'base_snapshot' });
+TikTokBasePerformanceSnapshot.belongsTo(TikTokCreatorPerformanceExport, { foreignKey: 'export_id', as: 'export' });
 ScheduledJob.hasMany(ScheduledJobRun, { foreignKey: 'scheduled_job_id', as: 'runs' });
 ScheduledJobRun.belongsTo(ScheduledJob, { foreignKey: 'scheduled_job_id', as: 'job' });
 
@@ -924,6 +953,7 @@ module.exports = {
   TikTokCreatorPerformanceExport,
   TikTokCreatorPerformanceSnapshot,
   TikTokCreatorProfile,
+  TikTokBasePerformanceSnapshot,
   ScheduledJob,
   ScheduledJobRun,
   TikTokChannel,

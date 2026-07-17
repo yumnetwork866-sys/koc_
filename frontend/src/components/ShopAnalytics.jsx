@@ -304,11 +304,17 @@ const ShopAnalytics = ({ managementOnly = false }) => {
 
   const formatMoney = (value) => {
     try {
-      return new Intl.NumberFormat(locale, {
+      const formatter = new Intl.NumberFormat(locale, {
         style: 'currency',
         currency: displayCurrency,
         maximumFractionDigits: displayCurrency === 'VND' ? 0 : 2,
-      }).format(numericValue(value));
+      });
+      if (displayCurrency === 'MYR') {
+        return formatter.formatToParts(numericValue(value))
+          .map((part) => part.type === 'currency' ? 'RM' : part.value)
+          .join('');
+      }
+      return formatter.format(numericValue(value));
     } catch {
       return `${formatNumber(value)} ${displayCurrency}`;
     }

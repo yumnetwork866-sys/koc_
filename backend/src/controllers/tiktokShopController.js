@@ -2,6 +2,7 @@ const { Op } = require('sequelize');
 const {
   sequelize, TikTokShopAuthorization, TikTokShop, TikTokShopAnalyticsSnapshot,
   TikTokCreatorPerformanceExport, TikTokCreatorPerformanceSnapshot,
+  TikTokBasePerformanceSnapshot,
 } = require('../models');
 const {
   buildShopAuthorizationUrl,
@@ -21,7 +22,9 @@ const {
 } = require('../services/tiktokShopService');
 const {
   createCreatorPerformanceExportWithFallback,
+  createBasePerformanceExportWithFallback,
   processCreatorPerformanceExport,
+  processBasePerformanceExport,
   refreshCreatorPerformanceProfiles,
   yesterdayEndDay,
 } = require('../services/tiktokCreatorPerformanceService');
@@ -468,6 +471,7 @@ const listCreatorPerformance = async (req, res) => {
     const exportRecord = await TikTokCreatorPerformanceExport.findOne({
       where: {
         shop_id: shop.id,
+        module_type: 'CREATOR',
         window_type: options.windowType,
         plan_type: options.planType,
         end_date: requestedEndDate,
@@ -479,12 +483,42 @@ const listCreatorPerformance = async (req, res) => {
       : await TikTokCreatorPerformanceExport.findOne({
         where: {
           shop_id: shop.id,
+          module_type: 'CREATOR',
           window_type: options.windowType,
           plan_type: options.planType,
           status: 'SUCCEEDED',
         },
         order: [['end_date', 'DESC'], ['created_at', 'DESC']],
       });
+    const baseExport = await TikTokCreatorPerformanceExport.findOne({
+      where: {
+        shop_id: shop.id,
+        module_type: 'BASE',
+        window_type: options.windowType,
+        end_date: requestedEndDate,
+      },
+      order: [['created_at', 'DESC']],
+    });
+    const baseSnapshotExport = baseExport?.status === 'SUCCEEDED'
+      ? baseExport
+      : await TikTokCreatorPerformanceExport.findOne({
+        where: {
+          shop_id: shop.id,
+          module_type: 'BASE',
+          window_type: options.windowType,
+          status: 'SUCCEEDED',
+        },
+        order: [['end_date', 'DESC'], ['created_at', 'DESC']],
+      });
+    const baseSnapshot = baseSnapshotExport
+      ? await TikTokBasePerformanceSnapshot.findOne({ where: { export_id: baseSnapshotExport.id } })
+      : null;
+    const basePayload = {
+      base_export: baseExport,
+      base_snapshot_export: baseSnapshotExport,
+      base_is_fallback: Boolean(baseSnapshotExport && (!baseExport || String(baseExport.id) !== String(baseSnapshotExport.id))),
+      base_snapshot: baseSnapshot,
+    };
     if (!snapshotExport) {
       return res.json({
         export: exportRecord,
@@ -494,6 +528,7 @@ const listCreatorPerformance = async (req, res) => {
         creators: [],
         total_count: 0,
         totals: null,
+        ...basePayload,
       });
     }
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -530,7 +565,7 @@ const listCreatorPerformance = async (req, res) => {
       shop.id,
       rows.map((row) => row.toJSON()),
     );
-    if (sharedCreatorRows.some((row) => !row.avatar_url)) {
+    if (sharedCreatorRows.some((row) => !row.avatar_url || Number(row.followers) <= 0)) {
       startCreatorProfileRefresh(shop, snapshotExport);
     }
     res.json({
@@ -544,6 +579,7 @@ const listCreatorPerformance = async (req, res) => {
       page,
       page_size: pageSize,
       profile_refresh: creatorProfileRefreshJobs.get(creatorProfileRefreshKey(shop.id, snapshotExport.id)) || null,
+      ...basePayload,
     });
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
@@ -558,9 +594,22 @@ const syncCreatorPerformance = async (req, res) => {
       endDay,
       fallbackDays,
     } = await createCreatorPerformanceExportWithFallback(shop, creatorPerformanceOptions(shop, req.body || {}));
+    const {
+      exportRecord: baseExportRecord,
+      endDay: baseEndDay,
+      fallbackDays: baseFallbackDays,
+    } = await createBasePerformanceExportWithFallback(shop, {
+      ...creatorPerformanceOptions(shop, req.body || {}),
+      endDay,
+    });
     if (exportRecord.status === 'PROCESSING') {
       setImmediate(() => processCreatorPerformanceExport(shop, exportRecord).catch((error) => {
         console.error('[Creator Performance] Export failed', { shopId: shop.id, taskId: exportRecord.task_id, message: error.message });
+      }));
+    }
+    if (baseExportRecord.status === 'PROCESSING') {
+      setImmediate(() => processBasePerformanceExport(shop, baseExportRecord).catch((error) => {
+        console.error('[Base Performance] Export failed', { shopId: shop.id, taskId: baseExportRecord.task_id, message: error.message });
       }));
     }
     const profile_refresh_started = exportRecord.status === 'SUCCEEDED';
@@ -569,10 +618,13 @@ const syncCreatorPerformance = async (req, res) => {
     }
     res.status(202).json({
       export: exportRecord,
+      base_export: baseExportRecord,
       profile_refresh_started,
       requested_end_day: requestedEndDay,
       effective_end_day: endDay,
       fallback_days: fallbackDays,
+      base_effective_end_day: baseEndDay,
+      base_fallback_days: baseFallbackDays,
     });
   } catch (error) { res.status(424).json({ message: error.message }); }
 };

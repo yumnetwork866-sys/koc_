@@ -8,6 +8,7 @@ const {
   exportDateRange,
   shiftEndDay,
   parseCreatorPerformanceWorkbook,
+  parseBasePerformanceWorkbook,
   enrichCreatorRows,
   loadMarketplaceCreatorProfiles,
   createCreatorPerformanceExportWithFallback,
@@ -103,6 +104,32 @@ test('Compass production workbook variant with MYR formatting is parsed', () => 
   assert.equal(row.average_order_value, 399.44);
 });
 
+test('Compass BASE workbook skips the description row and maps core metrics', () => {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ['Creator-attributed GMV', 'Creator-attributed items sold', 'Refunds', 'Est. commission', 'Videos', 'LIVE streams', 'Samples shipped', 'Items refunded', 'AOV'],
+    ['Metric description', 'Metric description', 'Metric description', 'Metric description', 'Metric description', 'Metric description', 'Metric description', 'Metric description', 'Metric description'],
+    ['RM18,139.74', '80', 'RM0.00', 'RM699.03', '30', '1', '9', '23', 'RM232.56'],
+  ]);
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Sheet 1');
+  const row = parseBasePerformanceWorkbook(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }), {
+    exportId: 2,
+    shopId: 1,
+    startDate: '2026-07-09',
+    endDate: '2026-07-15',
+    windowType: 'PAST_7_DAYS',
+    currency: 'MYR',
+  });
+  assert.equal(row.creator_attributed_gmv, 18139.74);
+  assert.equal(row.creator_attributed_items_sold, 80);
+  assert.equal(row.estimated_commission, 699.03);
+  assert.equal(row.videos, 30);
+  assert.equal(row.live_streams, 1);
+  assert.equal(row.samples_shipped, 9);
+  assert.equal(row.items_refunded, 23);
+  assert.equal(row.average_order_value, 232.56);
+});
+
 test('creator rows use Sample Applications first and Marketplace as avatar fallback', async () => {
   const rows = [
     { username: 'sample.creator', nickname: null, avatar_url: null, creator_open_id: null, followers: 0 },
@@ -183,7 +210,75 @@ test('creator Marketplace fallback is skipped when OAuth scope is not granted', 
   assert.equal(rows[0].avatar_url, null);
 });
 
-test('Marketplace creator lookup retries TikTok downstream rate limits', async () => {
+test('creator Marketplace refresh fills followers when an avatar already exists', async () => {
+  const rows = [{
+    username: 'avatar.only',
+    nickname: 'Avatar Only',
+    avatar_url: 'https://example.test/existing.webp',
+    creator_open_id: null,
+    followers: 0,
+  }];
+  const marketplaceKeywords = [];
+  await enrichCreatorRows({
+    id: 1,
+    cipher: 'shop-cipher',
+    authorization: { granted_scopes: ['seller.creator_marketplace.read'] },
+  }, rows, {
+    searchSamples: async () => ({ data: { sample_applications: [] } }),
+    searchMarketplace: async ({ keyword }) => {
+      marketplaceKeywords.push(keyword);
+      return {
+        data: {
+          creators: [{
+            username: keyword,
+            nickname: 'Avatar Only',
+            avatar: { url: 'https://example.test/current.webp' },
+            follower_count: 9876,
+            creator_open_id: 'avatar-only-open-id',
+          }],
+        },
+      };
+    },
+    marketplaceOptions: { minIntervalMs: 0 },
+  });
+
+  assert.deepEqual(marketplaceKeywords, ['avatar.only']);
+  assert.equal(rows[0].followers, 9876);
+  assert.equal(rows[0].creator_open_id, 'avatar-only-open-id');
+});
+
+test('Marketplace creator lookup cools down downstream rate limits', async () => {
+  let calls = 0;
+  const cooldowns = new Map();
+  const shopCooldowns = new Map();
+  const now = () => 1000;
+  const profiles = await loadMarketplaceCreatorProfiles({
+    id: 1,
+    cipher: 'shop-cipher',
+    authorization: { granted_scopes: ['seller.creator_marketplace.read'] },
+  }, ['retry.creator'], async () => {
+    calls += 1;
+    const error = new Error('Too many requests for downstream.');
+    error.tiktokCode = 36009002;
+    throw error;
+  }, {
+    concurrency: 1,
+    minIntervalMs: 0,
+    retryCount: 2,
+    rateLimitCooldownMs: 60000,
+    cooldowns,
+    shopCooldowns,
+    now,
+    sleep: async () => {},
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(profiles.size, 0);
+  assert.equal(cooldowns.get('1:retry.creator'), 61000);
+  assert.equal(shopCooldowns.get('1'), 61000);
+});
+
+test('Marketplace creator lookup still retries transient transport failures', async () => {
   let calls = 0;
   const profiles = await loadMarketplaceCreatorProfiles({
     id: 1,
@@ -192,9 +287,7 @@ test('Marketplace creator lookup retries TikTok downstream rate limits', async (
   }, ['retry.creator'], async () => {
     calls += 1;
     if (calls === 1) {
-      const error = new Error('Too many requests for downstream.');
-      error.tiktokCode = 36009002;
-      throw error;
+      throw new Error('socket timeout');
     }
     return {
       data: {
@@ -215,4 +308,28 @@ test('Marketplace creator lookup retries TikTok downstream rate limits', async (
 
   assert.equal(calls, 2);
   assert.equal(profiles.get('retry.creator').avatar_url, 'https://example.test/retry.webp');
+});
+
+test('Marketplace creator lookup skips the whole shop during cooldown', async () => {
+  let calls = 0;
+  const cooldowns = new Map();
+  const shopCooldowns = new Map([['1', 2000]]);
+  const profiles = await loadMarketplaceCreatorProfiles({
+    id: 1,
+    cipher: 'shop-cipher',
+    authorization: { granted_scopes: ['seller.creator_marketplace.read'] },
+  }, ['one.creator', 'two.creator'], async () => {
+    calls += 1;
+    return { data: { creators: [] } };
+  }, {
+    concurrency: 1,
+    minIntervalMs: 0,
+    cooldowns,
+    shopCooldowns,
+    now: () => 1000,
+    sleep: async () => {},
+  });
+
+  assert.equal(calls, 0);
+  assert.equal(profiles.size, 0);
 });
