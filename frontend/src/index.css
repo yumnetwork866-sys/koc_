@@ -50,6 +50,12 @@
   --sidebar-width: 248px;
   --control-height: 40px;
   --transition-fast: 160ms ease;
+  --motion-duration-fast: 160ms;
+  --motion-duration-base: 240ms;
+  --motion-duration-slow: 360ms;
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   font-family:
     var(--font-sans);

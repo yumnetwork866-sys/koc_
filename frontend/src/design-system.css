@@ -924,16 +924,6 @@ body {
   padding: 24px;
 }
 
-.page__hero::before {
-  content: '';
-  position: absolute;
-  top: -1px;
-  left: 24px;
-  width: 56px;
-  height: 2px;
-  background: linear-gradient(90deg, var(--color-social-cyan), var(--color-social-magenta));
-}
-
 .app-shell__content .page__hero {
   padding: 24px;
 }
@@ -1303,11 +1293,6 @@ body {
     radial-gradient(circle at 6% 0%, rgba(0, 242, 234, 0.16), transparent 19rem),
     radial-gradient(circle at 100% 100%, rgba(255, 0, 80, 0.08), transparent 22rem),
     var(--color-surface);
-}
-
-.home-page__hero::before {
-  left: clamp(32px, 4vw, 52px);
-  width: 76px;
 }
 
 .home-page__hero .page__title {
@@ -2115,6 +2100,279 @@ body {
   }
 }
 
+/* Motion system — purposeful feedback, spatial continuity, and calm hierarchy. */
+.app-shell__layout {
+  transition: grid-template-columns var(--motion-duration-slow) var(--motion-ease-out);
+}
+
+.sidebar {
+  transition:
+    width var(--motion-duration-slow) var(--motion-ease-out),
+    padding var(--motion-duration-slow) var(--motion-ease-out),
+    box-shadow var(--motion-duration-base) ease,
+    border-color var(--motion-duration-base) ease;
+}
+
+.sidebar__header-label,
+.sidebar__link-label {
+  transform-origin: left center;
+  transition:
+    opacity var(--motion-duration-fast) ease,
+    transform var(--motion-duration-base) var(--motion-ease-out);
+}
+
+.sidebar__toggle-icon,
+.topbar__connect-chevron,
+.chatbot-page-picker__chevron {
+  transition: transform var(--motion-duration-base) var(--motion-spring);
+}
+
+.sidebar__toggle:active .sidebar__toggle-icon {
+  transform: scale(0.84);
+}
+
+.route-transition {
+  min-width: 0;
+  animation: route-enter var(--motion-duration-slow) var(--motion-ease-out) both;
+}
+
+.route-transition .page__hero,
+.route-transition .dashboard-hero {
+  animation: surface-enter var(--motion-duration-slow) var(--motion-ease-out) 40ms both;
+}
+
+.route-transition :is(.page__stats, .dashboard-hero__mini-grid, .shop-analytics__stats) > * {
+  animation: item-enter var(--motion-duration-slow) var(--motion-ease-out) both;
+}
+
+.route-transition :is(.page__stats, .dashboard-hero__mini-grid, .shop-analytics__stats) > *:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.route-transition :is(.page__stats, .dashboard-hero__mini-grid, .shop-analytics__stats) > *:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.route-transition :is(.page__stats, .dashboard-hero__mini-grid, .shop-analytics__stats) > *:nth-child(4) {
+  animation-delay: 135ms;
+}
+
+.section-card,
+.stat-card,
+.platform-card,
+.mini-card,
+.metric-item,
+.top-video-card,
+.dashboard-ranking-item,
+.shop-analytics__stat {
+  transition:
+    transform var(--motion-duration-base) var(--motion-ease-out),
+    border-color var(--motion-duration-base) ease,
+    box-shadow var(--motion-duration-base) var(--motion-ease-out),
+    background-color var(--motion-duration-base) ease;
+}
+
+:is(.platform-card, .mini-card, .top-video-card, .dashboard-ranking-item, .shop-analytics__stat):hover {
+  transform: translateY(-3px);
+  border-color: rgba(0, 127, 123, 0.28);
+  box-shadow: 0 14px 30px -18px rgba(15, 23, 42, 0.34);
+}
+
+:is(.platform-card, .mini-card, .top-video-card, .dashboard-ranking-item, .shop-analytics__stat):active {
+  transform: translateY(-1px) scale(0.992);
+  transition-duration: var(--motion-duration-fast);
+}
+
+.button,
+.sidebar__toggle,
+.topbar__nav-link,
+.topbar__nav-button,
+.topbar__connect-trigger,
+.topbar__avatar-button,
+.action-menu__item,
+.channel-picker__option,
+.booking-video-channel-picker__option,
+.chatbot-page-picker__option,
+.filter-chip,
+.chip {
+  transition:
+    transform var(--motion-duration-fast) var(--motion-ease-out),
+    color var(--motion-duration-fast) ease,
+    background-color var(--motion-duration-fast) ease,
+    border-color var(--motion-duration-fast) ease,
+    box-shadow var(--motion-duration-base) var(--motion-ease-out);
+}
+
+:is(.button, .sidebar__toggle, .topbar__nav-link, .topbar__nav-button, .topbar__connect-trigger, .topbar__avatar-button, .action-menu__item, .channel-picker__option, .booking-video-channel-picker__option, .chatbot-page-picker__option, .filter-chip):not(:disabled):active {
+  transform: scale(0.97);
+  transition-duration: 90ms;
+}
+
+.sidebar__link {
+  transition:
+    transform var(--motion-duration-base) var(--motion-ease-out),
+    border-color var(--motion-duration-fast) ease,
+    background-color var(--motion-duration-fast) ease,
+    color var(--motion-duration-fast) ease;
+}
+
+.sidebar__link:hover {
+  transform: translateX(2px);
+}
+
+.sidebar__link:active {
+  transform: translateX(1px) scale(0.985);
+}
+
+.sidebar__link-icon {
+  transition:
+    transform var(--motion-duration-base) var(--motion-spring),
+    background-color var(--motion-duration-fast) ease,
+    color var(--motion-duration-fast) ease;
+}
+
+.sidebar__link:hover .sidebar__link-icon {
+  transform: scale(1.06);
+}
+
+.sidebar__link--active .sidebar__link-icon {
+  transform: scale(1.03);
+}
+
+.data-table tbody tr {
+  transition:
+    background-color var(--motion-duration-fast) ease,
+    box-shadow var(--motion-duration-fast) ease;
+}
+
+.data-table tbody tr:not(.table-state-row):hover {
+  box-shadow: inset 3px 0 0 rgba(0, 127, 123, 0.45);
+}
+
+.progress__bar,
+[class$='__progress-bar'] {
+  transform-origin: left center;
+  transition: transform var(--motion-duration-slow) var(--motion-ease-out);
+}
+
+.topbar__connect-menu,
+.topbar__account-menu,
+.action-menu__panel,
+.channel-picker__menu,
+.booking-video-channel-picker__menu,
+.chatbot-page-picker__menu {
+  transform-origin: top right;
+  animation: menu-enter var(--motion-duration-base) var(--motion-ease-out) both;
+}
+
+.modal-backdrop,
+.employee-table__role-backdrop,
+.koc-drawer-backdrop {
+  animation: backdrop-enter var(--motion-duration-base) ease-out both;
+}
+
+.modal-card,
+.employee-table__modal,
+.booking-video-picker {
+  transform-origin: center top;
+  animation: dialog-enter var(--motion-duration-slow) var(--motion-ease-out) both;
+}
+
+.koc-drawer {
+  animation: drawer-enter var(--motion-duration-slow) var(--motion-ease-out) both;
+}
+
+.toast,
+.koc-toast {
+  animation: toast-enter var(--motion-duration-slow) var(--motion-spring) both;
+}
+
+.loading-dot {
+  animation-timing-function: linear;
+}
+
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes surface-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes item-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.975);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes drawer-enter {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (max-width: 1023px) {
   .topbar__inner,
   .app-shell__layout,
@@ -2358,10 +2616,6 @@ body {
     padding: 16px;
   }
 
-  .page__hero::before {
-    left: 16px;
-  }
-
   .page__title,
   .app-shell__content .page__hero > .page__title,
   .app-shell__content .page__hero-row .page__title {
@@ -2395,10 +2649,6 @@ body {
   .home-page__hero {
     gap: 24px;
     padding: 28px 20px;
-  }
-
-  .home-page__hero::before {
-    left: 20px;
   }
 
   .home-page__hero .page__title {

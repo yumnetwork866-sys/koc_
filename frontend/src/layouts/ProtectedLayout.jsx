@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import AiChatBubble from '../components/AiChatBubble';
 import Sidebar from '../components/Sidebar';
 import { RequireSession } from '../routes/guards';
 
 const ProtectedLayout = () => {
+  const location = useLocation();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     return window.localStorage.getItem('sidebar-collapsed') === 'true';
   });
@@ -23,7 +24,9 @@ const ProtectedLayout = () => {
         <Sidebar isCollapsed={isSidebarCollapsed} onToggle={toggleSidebar} />
         <main className="app-shell__content">
           <div className="app-shell__content-frame">
-            <Outlet />
+            <div className="route-transition" key={location.pathname}>
+              <Outlet />
+            </div>
           </div>
         </main>
         <AiChatBubble />
