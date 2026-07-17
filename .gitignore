@@ -9,6 +9,7 @@ build/
 **/build/
 coverage/
 
+.codex
 # Environment files
 .env
 .env.*
