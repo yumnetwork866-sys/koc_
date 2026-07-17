@@ -403,6 +403,8 @@
     "performanceMeta": "Hiệu suất Creator từ TikTok Affiliate Compass theo đúng khoảng báo cáo.",
     "missingMarketplaceScope": "Shop chưa cấp quyền đọc Creator Marketplace",
     "missingMarketplaceScopeMeta": "Thêm scope seller.creator_marketplace.read trong Partner Center, sau đó OAuth lại Shop. Token cũ sẽ không tự nhận scope mới.",
+    "refreshingProfiles": "Đang làm mới avatar và hồ sơ creator trong nền. Dữ liệu sẽ tự cập nhật.",
+    "staleSnapshot": "Dữ liệu mới chưa sẵn sàng. Đang hiển thị snapshot gần nhất từ {{start}} đến {{end}}.",
     "creatorsTitle": "Sample Applications",
     "creatorsMeta": "Creator đã gửi yêu cầu sample cho Shop.",
     "ordersTitle": "Đơn hàng affiliate",
@@ -530,6 +532,7 @@
     "metric": "Chỉ số",
     "loadingAnalytics": "Đang tải Shop Analytics",
     "noData": "Chưa có dữ liệu cho phạm vi này.",
+    "staleSnapshot": "Dữ liệu cho kỳ đã chọn chưa sẵn sàng. Đang hiển thị snapshot gần nhất từ {{start}} đến {{end}}.",
     "gmvBreakdown": "GMV theo nguồn",
     "gmvBreakdownMeta": "Phân bổ GMV từ LIVE, VIDEO và PRODUCT_CARD.",
     "noBreakdown": "Chưa có dữ liệu phân bổ GMV.",
@@ -613,5 +616,47 @@
     "confirmDisconnect": "Disconnect channel \"{{name}}\"? Kênh sẽ ngắt liên kết với TikTok nhưng dữ liệu local vẫn giữ nguyên.",
     "noProfile": "-",
     "noData": "Chưa có dữ liệu kênh."
+  },
+  "schedule": {
+    "title": "Quản lý lịch chạy",
+    "subtitle": "Cấu hình các tác vụ tự động đồng bộ dữ liệu trong hệ thống.",
+    "loading": "Đang tải cấu hình lịch chạy",
+    "enabled": "Đang bật",
+    "disabled": "Đã tắt",
+    "timezone": "Múi giờ",
+    "runsPerDay": "Số lần chạy mỗi ngày",
+    "runTimes": "Thời gian chạy",
+    "runNumber": "Lần {{number}}",
+    "save": "Lưu lịch chạy",
+    "runNow": "Chạy ngay",
+    "running": "Đang chạy",
+    "latestRun": "Lần chạy gần nhất",
+    "status": "Trạng thái",
+    "result": "Kết quả",
+    "succeeded": "thành công",
+    "never": "Chưa chạy",
+    "history": "Lịch sử 10 lần gần nhất",
+    "startedAt": "Bắt đầu",
+    "trigger": "Nguồn chạy",
+    "duration": "Thời lượng",
+    "saved": "Đã lưu lịch chạy.",
+    "started": "Đã bắt đầu chạy tác vụ trong nền.",
+    "loadError": "Không tải được lịch chạy.",
+    "saveError": "Không lưu được lịch chạy.",
+    "runError": "Không thể bắt đầu tác vụ.",
+    "jobs": {
+      "tiktok_creator_performance": {
+        "name": "TikTok Creator Performance",
+        "description": "Tạo Compass Offline Export, đồng bộ hiệu suất và hồ sơ creator cho tất cả Shop."
+      },
+      "tiktok_shop_analytics": {
+        "name": "TikTok Shop Analytics",
+        "description": "Đồng bộ GMV, đơn hàng, người mua, traffic và hoàn tiền cho tất cả Shop."
+      },
+      "tiktok_channel_metrics": {
+        "name": "TikTok Channel Metrics",
+        "description": "Đồng bộ hồ sơ, video và chỉ số video hằng ngày cho tất cả TikTok Channel."
+      }
+    }
   }
 }

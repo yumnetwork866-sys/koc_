@@ -31,6 +31,7 @@ const migrations = [
   require('./021_create_tiktok_creator_performance'),
   require('./022_add_creator_performance_profile'),
   require('./023_add_creator_performance_open_id'),
+  require('./024_create_scheduled_jobs'),
 ];
 
 const createMigrationRunner = ({

@@ -49,6 +49,13 @@ const yesterdayEndDay = (region = 'MY', now = new Date()) => {
   return Number(local.toISOString().slice(0, 10).replaceAll('-', ''));
 };
 
+const shiftEndDay = (endDay, days) => {
+  const iso = isoFromEndDay(endDay);
+  const date = new Date(`${iso}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return Number(date.toISOString().slice(0, 10).replaceAll('-', ''));
+};
+
 const numeric = (value) => {
   if (value === null || value === undefined || value === '' || value === '--') return 0;
   const normalized = String(value).replaceAll(',', '').replace(/[^\d.-]/g, '').trim();
@@ -59,6 +66,14 @@ const numeric = (value) => {
 const nullableNumeric = (value) => (value === '--' || value === '' || value === null || value === undefined ? null : numeric(value));
 const integer = (value) => Math.round(numeric(value));
 const normalizeUsername = (value) => String(value || '').trim().replace(/^@/, '').toLowerCase();
+const avatarUrlExpired = (value, now = Date.now()) => {
+  try {
+    const expiresAt = Number(new URL(String(value || '')).searchParams.get('x-expires'));
+    return Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt * 1000 <= now;
+  } catch {
+    return false;
+  }
+};
 
 const parseCreatorPerformanceWorkbook = (buffer, {
   exportId, shopId, startDate, endDate, windowType, planType, currency,
@@ -149,34 +164,59 @@ const loadMarketplaceCreatorProfiles = async (
   shop,
   usernames,
   searchMarketplace = searchMarketplaceCreators,
-  concurrency = Number(process.env.TIKTOK_CREATOR_PROFILE_CONCURRENCY || 5),
+  {
+    concurrency = Number(process.env.TIKTOK_CREATOR_PROFILE_CONCURRENCY || 1),
+    minIntervalMs = Number(process.env.TIKTOK_CREATOR_PROFILE_MIN_INTERVAL_MS || 2500),
+    retryCount = Number(process.env.TIKTOK_CREATOR_PROFILE_RETRY_COUNT || 3),
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  } = {},
 ) => {
   const scopes = Array.isArray(shop.authorization?.granted_scopes) ? shop.authorization.granted_scopes : [];
   if (!scopes.includes(SELLER_CREATOR_MARKETPLACE_SCOPE)) return new Map();
   const queue = [...new Set(usernames.map(normalizeUsername).filter(Boolean))];
   const profiles = new Map();
-  const workerCount = Math.min(queue.length, Math.max(1, Math.min(10, Number(concurrency) || 5)));
+  const workerCount = Math.min(queue.length, Math.max(1, Math.min(10, Number(concurrency) || 1)));
+  const requestInterval = Math.max(0, Number(minIntervalMs) || 0);
+  const retries = Math.max(0, Math.min(8, Number(retryCount) || 0));
   let nextIndex = 0;
+  let nextRequestAt = 0;
+  const waitForRequestSlot = async () => {
+    const now = Date.now();
+    const scheduledAt = Math.max(now, nextRequestAt);
+    nextRequestAt = scheduledAt + requestInterval;
+    if (scheduledAt > now) await sleep(scheduledAt - now);
+  };
   const worker = async () => {
     while (nextIndex < queue.length) {
       const username = queue[nextIndex];
       nextIndex += 1;
-      try {
-        const payload = await searchMarketplace({
-          authorization: shop.authorization,
-          shopCipher: shop.cipher,
-          pageSize: 20,
-          keyword: username,
-        });
-        const creators = payload.data?.creators || [];
-        const exactMatch = creators.find((creator) => normalizeUsername(creator.username) === username);
-        if (exactMatch) profiles.set(username, normalizeCreatorProfile(exactMatch));
-      } catch (error) {
-        console.warn('[Creator Performance] Marketplace profile lookup failed', {
-          shopId: shop.id,
-          username,
-          message: error.message,
-        });
+      for (let attempt = 0; attempt <= retries; attempt += 1) {
+        try {
+          await waitForRequestSlot();
+          const payload = await searchMarketplace({
+            authorization: shop.authorization,
+            shopCipher: shop.cipher,
+            pageSize: 20,
+            keyword: username,
+          });
+          const creators = payload.data?.creators || [];
+          const exactMatch = creators.find((creator) => normalizeUsername(creator.username) === username);
+          if (exactMatch) profiles.set(username, normalizeCreatorProfile(exactMatch));
+          break;
+        } catch (error) {
+          const rateLimited = [36009002, 36009037].includes(Number(error.tiktokCode));
+          if (rateLimited && attempt < retries) {
+            await sleep(Math.min(60000, 5000 * (2 ** attempt)));
+            continue;
+          }
+          console.warn('[Creator Performance] Marketplace profile lookup failed', {
+            shopId: shop.id,
+            username,
+            attempt: attempt + 1,
+            message: error.message,
+          });
+          break;
+        }
       }
     }
   };
@@ -196,18 +236,29 @@ const enrichCreatorRows = async (shop, rows, {
   searchSamples = searchSellerSampleApplications,
   searchMarketplace = searchMarketplaceCreators,
   refreshMarketplace = false,
+  marketplaceOptions,
 } = {}) => {
   const sampleProfiles = await loadCreatorProfiles(shop, searchSamples).catch(() => new Map());
   for (const row of rows) applyCreatorProfile(row, sampleProfiles.get(normalizeUsername(row.username)));
   const missingUsernames = rows
-    .filter((row) => refreshMarketplace || !row.avatar_url || !row.creator_open_id)
+    .filter((row) => !row.avatar_url || (refreshMarketplace && avatarUrlExpired(row.avatar_url)))
     .map((row) => row.username);
-  const marketplaceProfiles = await loadMarketplaceCreatorProfiles(shop, missingUsernames, searchMarketplace);
+  const marketplaceProfiles = await loadMarketplaceCreatorProfiles(
+    shop,
+    missingUsernames,
+    searchMarketplace,
+    marketplaceOptions,
+  );
   for (const row of rows) applyCreatorProfile(row, marketplaceProfiles.get(normalizeUsername(row.username)));
   return rows;
 };
 
 const refreshCreatorPerformanceProfiles = async (shop, exportRecord, dependencies = {}) => {
+  const {
+    searchSamples = searchSellerSampleApplications,
+    searchMarketplace = searchMarketplaceCreators,
+    marketplaceOptions,
+  } = dependencies;
   const snapshots = await TikTokCreatorPerformanceSnapshot.findAll({
     where: {
       shop_id: shop.id,
@@ -218,14 +269,46 @@ const refreshCreatorPerformanceProfiles = async (shop, exportRecord, dependencie
   });
   if (!snapshots.length) return 0;
   const rows = snapshots.map((snapshot) => snapshot.toJSON());
-  await enrichCreatorRows(shop, rows, { ...dependencies, refreshMarketplace: true });
-  const enrichedRows = rows.filter((row) => row.avatar_url || row.nickname || row.creator_open_id);
-  if (!enrichedRows.length) return 0;
-  await TikTokCreatorPerformanceSnapshot.bulkCreate(enrichedRows, {
-    conflictAttributes: ['shop_id', 'username', 'start_date', 'end_date', 'plan_type'],
-    updateOnDuplicate: ['nickname', 'avatar_url', 'creator_open_id', 'followers'],
-  });
-  return enrichedRows.length;
+  const persistRows = async (profileRows) => {
+    if (!profileRows.length) return;
+    await TikTokCreatorPerformanceSnapshot.bulkCreate(profileRows, {
+      conflictAttributes: ['shop_id', 'username', 'start_date', 'end_date', 'plan_type'],
+      updateOnDuplicate: ['nickname', 'avatar_url', 'creator_open_id', 'followers'],
+    });
+  };
+  const refreshed = new Set();
+  const sampleProfiles = await loadCreatorProfiles(shop, searchSamples).catch(() => new Map());
+  const sampleRows = [];
+  for (const row of rows) {
+    const profile = sampleProfiles.get(normalizeUsername(row.username));
+    if (!profile) continue;
+    applyCreatorProfile(row, profile);
+    sampleRows.push(row);
+    refreshed.add(normalizeUsername(row.username));
+  }
+  await persistRows(sampleRows);
+
+  const candidates = rows.filter((row) => !row.avatar_url || avatarUrlExpired(row.avatar_url));
+  const batchSize = Math.max(1, Math.min(50, Number(process.env.TIKTOK_CREATOR_PROFILE_BATCH_SIZE || 20)));
+  for (let index = 0; index < candidates.length; index += batchSize) {
+    const batch = candidates.slice(index, index + batchSize);
+    const profiles = await loadMarketplaceCreatorProfiles(
+      shop,
+      batch.map((row) => row.username),
+      searchMarketplace,
+      marketplaceOptions,
+    );
+    const enrichedRows = [];
+    for (const row of batch) {
+      const profile = profiles.get(normalizeUsername(row.username));
+      if (!profile) continue;
+      applyCreatorProfile(row, profile);
+      enrichedRows.push(row);
+      refreshed.add(normalizeUsername(row.username));
+    }
+    await persistRows(enrichedRows);
+  }
+  return refreshed.size;
 };
 
 const createCreatorPerformanceExport = async (shop, {
@@ -267,6 +350,24 @@ const createCreatorPerformanceExport = async (shop, {
     status: 'PROCESSING',
     request_id: payload.request_id || null,
   });
+};
+
+const createCreatorPerformanceExportWithFallback = async (shop, options = {}, {
+  maxFallbackDays = 2,
+  createExport = createCreatorPerformanceExport,
+} = {}) => {
+  const requestedEndDay = Number(options.endDay || yesterdayEndDay(shop.region));
+  let endDay = requestedEndDay;
+  for (let fallbackDays = 0; fallbackDays <= maxFallbackDays; fallbackDays += 1) {
+    try {
+      const exportRecord = await createExport(shop, { ...options, endDay });
+      return { exportRecord, requestedEndDay, endDay, fallbackDays };
+    } catch (error) {
+      if (Number(error.tiktokCode) !== 13017003 || fallbackDays === maxFallbackDays) throw error;
+      endDay = shiftEndDay(endDay, -1);
+    }
+  }
+  throw new Error('TikTok Compass export date is not available.');
 };
 
 const processCreatorPerformanceExport = async (shop, exportRecord, {
@@ -325,8 +426,10 @@ module.exports = {
   WINDOW_DAYS,
   exportDateRange,
   yesterdayEndDay,
+  shiftEndDay,
   parseCreatorPerformanceWorkbook,
   createCreatorPerformanceExport,
+  createCreatorPerformanceExportWithFallback,
   processCreatorPerformanceExport,
   loadCreatorProfiles,
   loadMarketplaceCreatorProfiles,

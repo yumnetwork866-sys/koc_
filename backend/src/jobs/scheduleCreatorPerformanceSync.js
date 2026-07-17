@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const { TikTokShop, TikTokShopAuthorization } = require('../models');
 const {
-  createCreatorPerformanceExport,
+  createCreatorPerformanceExportWithFallback,
   processCreatorPerformanceExport,
   yesterdayEndDay,
 } = require('../services/tiktokCreatorPerformanceService');
@@ -14,11 +14,18 @@ const startCreatorPerformanceScheduler = () => {
     const shops = await TikTokShop.findAll({ include: [{ model: TikTokShopAuthorization, as: 'authorization' }] });
     for (const shop of shops) {
       try {
-        const exportRecord = await createCreatorPerformanceExport(shop, {
+        const { exportRecord, requestedEndDay, endDay } = await createCreatorPerformanceExportWithFallback(shop, {
           windowType: 'PAST_7_DAYS',
           endDay: yesterdayEndDay(shop.region),
           planType: 'ALL',
         });
+        if (endDay !== requestedEndDay) {
+          console.warn('[Creator Performance Scheduler] Latest day unavailable; using fallback', {
+            shopId: shop.id,
+            requestedEndDay,
+            effectiveEndDay: endDay,
+          });
+        }
         if (exportRecord.status === 'PROCESSING') await processCreatorPerformanceExport(shop, exportRecord);
       } catch (error) {
         console.error('[Creator Performance Scheduler] Shop failed', { shopId: shop.id, message: error.message });

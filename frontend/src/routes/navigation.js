@@ -29,6 +29,7 @@ export const sidebarSections = [
     title: 'Admin',
     items: [
       { to: '/manage/users', label: 'Users', adminOnly: true },
+      { to: '/manage/schedules', label: 'Schedule', adminOnly: true },
       { to: '/chatbot/chat-setting', label: 'Chat setting', adminOnly: true },
     ],
   },
@@ -50,6 +51,15 @@ export const protectedRouteCards = [
     props: {
       heroTitle: 'User management',
       heroSubtitle: '',
+    },
+  },
+  {
+    path: '/manage/schedules',
+    component: 'ScheduleManagement',
+    adminOnly: true,
+    props: {
+      heroTitle: 'Schedule management',
+      heroSubtitle: 'Manage automated data synchronization jobs.',
     },
   },
   {

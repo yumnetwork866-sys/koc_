@@ -21,11 +21,12 @@ const assistantRoutes = require('./routes/assistantRoutes');
 const chatbotRoutes = require('./routes/chatbotRoutes');
 const tiktokPartnerPublicRoutes = require('./routes/tiktokPartnerPublicRoutes');
 const tiktokShopRoutes = require('./routes/tiktokShopRoutes');
+const scheduleRoutes = require('./routes/scheduleRoutes');
 const { sequelize, TikTokChannel, User } = require('./models');
 const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
 const { requireAdmin } = require('./lib/session');
 const { getAdminAccount } = require('./lib/adminAccount');
-const { startCreatorPerformanceScheduler } = require('./jobs/scheduleCreatorPerformanceSync');
+const { startDatabaseScheduler } = require('./services/scheduledJobService');
 
 const httpLogFormat = process.env.HTTP_LOG_FORMAT || ':method :url :status :response-time ms';
 
@@ -59,6 +60,7 @@ const createApp = () => {
   app.use('/api/assistant', assistantRoutes);
   app.use('/api/chatbot', requireAdmin, chatbotRoutes.adminRouter);
   app.use('/api/tiktok-shop', requireAdmin, tiktokShopRoutes.adminRouter);
+  app.use('/api/schedules', requireAdmin, scheduleRoutes);
 
   return app;
 };
@@ -111,7 +113,7 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
-    startCreatorPerformanceScheduler();
+    startDatabaseScheduler();
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

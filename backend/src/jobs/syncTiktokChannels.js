@@ -26,6 +26,7 @@ const runWithConcurrency = async (items, limit, task) => {
 const run = async ({ closeConnection = true } = {}) => {
   let lockAcquired = false;
   let failed = 0;
+  let finalSummary = { channels: 0, succeeded: 0, failed: 0, skipped: false };
 
   try {
     await sequelize.transaction(async (transaction) => {
@@ -41,6 +42,7 @@ const run = async ({ closeConnection = true } = {}) => {
 
       if (!lockAcquired) {
         console.info('[TikTok Sync Job] Another sync job is already running; exiting.');
+        finalSummary = { channels: 0, succeeded: 0, failed: 0, skipped: true };
         return;
       }
 
@@ -66,6 +68,7 @@ const run = async ({ closeConnection = true } = {}) => {
 
       const succeeded = results.filter((result) => result.status === 'success').length;
       failed = results.length - succeeded;
+      finalSummary = { channels: channels.length, succeeded, failed, skipped: false, results };
       console.info('[TikTok Sync Job] Completed', {
         channels: channels.length,
         succeeded,
@@ -81,6 +84,7 @@ const run = async ({ closeConnection = true } = {}) => {
   if (closeConnection && lockAcquired && failed > 0) {
     process.exitCode = 1;
   }
+  return finalSummary;
 };
 
 if (require.main === module) {

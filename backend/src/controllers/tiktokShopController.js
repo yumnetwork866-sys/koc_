@@ -19,7 +19,7 @@ const {
   normalizeShopPerformance,
 } = require('../services/tiktokShopService');
 const {
-  createCreatorPerformanceExport,
+  createCreatorPerformanceExportWithFallback,
   processCreatorPerformanceExport,
   refreshCreatorPerformanceProfiles,
   yesterdayEndDay,
@@ -32,6 +32,8 @@ const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
   ? 0
   : Math.min(300000, Math.max(60000, affiliateCacheTtlValue || 120000));
 const sellerAffiliateCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs, maxEntries: 1000 });
+const creatorProfileRefreshJobs = new Map();
+const creatorProfileRefreshKey = (shopId, exportId) => `${shopId}:${exportId}`;
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3005';
 const redirectUrl = (status, message, returnPath = '/manage/shop-analytics') => {
@@ -161,9 +163,22 @@ const getShopAnalytics = async (req, res) => {
     if (startDate) where.start_date = startDate;
     if (endDate) where.end_date = endDate;
     if (['LOCAL', 'USD'].includes(req.query.currency)) where.currency = req.query.currency;
-    const snapshots = await TikTokShopAnalyticsSnapshot.findAll({ where, order: [['synced_at', 'DESC']], limit: 30 });
+    let snapshots = await TikTokShopAnalyticsSnapshot.findAll({ where, order: [['synced_at', 'DESC']], limit: 30 });
+    let isFallback = false;
+    if (!snapshots.length && (startDate || endDate)) {
+      const fallbackWhere = { shop_id: shop.id };
+      if (['LOCAL', 'USD'].includes(req.query.currency)) fallbackWhere.currency = req.query.currency;
+      snapshots = await TikTokShopAnalyticsSnapshot.findAll({
+        where: fallbackWhere,
+        order: [['end_date', 'DESC'], ['synced_at', 'DESC']],
+        limit: 1,
+      });
+      isFallback = snapshots.length > 0;
+    }
     res.json({
       shop,
+      is_fallback: isFallback,
+      requested_range: { start_date: startDate, end_date: endDate },
       snapshots: snapshots.map((snapshot) => {
         const value = snapshot.toJSON();
         return { ...value, metrics: normalizeShopPerformance(value.metrics) };
@@ -335,26 +350,46 @@ const listCreatorPerformance = async (req, res) => {
     const shop = await loadAffiliateShop(req, res);
     if (!shop) return;
     const options = creatorPerformanceOptions(shop, req.query);
+    const requestedEndDate = `${String(options.endDay).slice(0, 4)}-${String(options.endDay).slice(4, 6)}-${String(options.endDay).slice(6, 8)}`;
     const exportRecord = await TikTokCreatorPerformanceExport.findOne({
       where: {
         shop_id: shop.id,
         window_type: options.windowType,
         plan_type: options.planType,
-        end_date: `${String(options.endDay).slice(0, 4)}-${String(options.endDay).slice(4, 6)}-${String(options.endDay).slice(6, 8)}`,
+        end_date: requestedEndDate,
       },
       order: [['created_at', 'DESC']],
     });
-    if (!exportRecord || exportRecord.status !== 'SUCCEEDED') {
-      return res.json({ export: exportRecord, creators: [], total_count: 0, totals: null });
+    const snapshotExport = exportRecord?.status === 'SUCCEEDED'
+      ? exportRecord
+      : await TikTokCreatorPerformanceExport.findOne({
+        where: {
+          shop_id: shop.id,
+          window_type: options.windowType,
+          plan_type: options.planType,
+          status: 'SUCCEEDED',
+        },
+        order: [['end_date', 'DESC'], ['created_at', 'DESC']],
+      });
+    if (!snapshotExport) {
+      return res.json({
+        export: exportRecord,
+        snapshot_export: null,
+        is_fallback: false,
+        requested_end_date: requestedEndDate,
+        creators: [],
+        total_count: 0,
+        totals: null,
+      });
     }
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
     const keyword = String(req.query.keyword || '').trim();
     const where = {
       shop_id: shop.id,
-      start_date: exportRecord.start_date,
-      end_date: exportRecord.end_date,
-      plan_type: exportRecord.plan_type,
+      start_date: snapshotExport.start_date,
+      end_date: snapshotExport.end_date,
+      plan_type: snapshotExport.plan_type,
       ...(keyword ? { username: { [Op.iLike]: `%${keyword}%` } } : {}),
     };
     const { count, rows } = await TikTokCreatorPerformanceSnapshot.findAndCountAll({
@@ -374,10 +409,21 @@ const listCreatorPerformance = async (req, res) => {
       WHERE shop_id = :shopId AND start_date = :startDate AND end_date = :endDate AND plan_type = :planType
     `, {
       replacements: {
-        shopId: shop.id, startDate: exportRecord.start_date, endDate: exportRecord.end_date, planType: exportRecord.plan_type,
+        shopId: shop.id, startDate: snapshotExport.start_date, endDate: snapshotExport.end_date, planType: snapshotExport.plan_type,
       },
     });
-    res.json({ export: exportRecord, creators: rows, total_count: count, totals: totals[0], page, page_size: pageSize });
+    res.json({
+      export: exportRecord,
+      snapshot_export: snapshotExport,
+      is_fallback: !exportRecord || String(exportRecord.id) !== String(snapshotExport.id),
+      requested_end_date: requestedEndDate,
+      creators: rows,
+      total_count: count,
+      totals: totals[0],
+      page,
+      page_size: pageSize,
+      profile_refresh: creatorProfileRefreshJobs.get(creatorProfileRefreshKey(shop.id, snapshotExport.id)) || null,
+    });
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
@@ -385,16 +431,54 @@ const syncCreatorPerformance = async (req, res) => {
   try {
     const shop = await loadAffiliateShop(req, res);
     if (!shop) return;
-    const exportRecord = await createCreatorPerformanceExport(shop, creatorPerformanceOptions(shop, req.body || {}));
+    const {
+      exportRecord,
+      requestedEndDay,
+      endDay,
+      fallbackDays,
+    } = await createCreatorPerformanceExportWithFallback(shop, creatorPerformanceOptions(shop, req.body || {}));
     if (exportRecord.status === 'PROCESSING') {
       setImmediate(() => processCreatorPerformanceExport(shop, exportRecord).catch((error) => {
         console.error('[Creator Performance] Export failed', { shopId: shop.id, taskId: exportRecord.task_id, message: error.message });
       }));
     }
-    const refreshed_profiles = exportRecord.status === 'SUCCEEDED'
-      ? await refreshCreatorPerformanceProfiles(shop, exportRecord)
-      : 0;
-    res.status(202).json({ export: exportRecord, refreshed_profiles });
+    const profile_refresh_started = exportRecord.status === 'SUCCEEDED';
+    if (profile_refresh_started) {
+      const refreshKey = creatorProfileRefreshKey(shop.id, exportRecord.id);
+      if (creatorProfileRefreshJobs.get(refreshKey)?.status !== 'PROCESSING') {
+        creatorProfileRefreshJobs.set(refreshKey, { status: 'PROCESSING', started_at: new Date() });
+        setImmediate(() => refreshCreatorPerformanceProfiles(shop, exportRecord).then((count) => {
+          creatorProfileRefreshJobs.set(refreshKey, {
+            status: 'SUCCEEDED',
+            count,
+            completed_at: new Date(),
+          });
+          console.log('[Creator Performance] Profiles refreshed', {
+            shopId: shop.id,
+            taskId: exportRecord.task_id,
+            count,
+          });
+        }).catch((error) => {
+          creatorProfileRefreshJobs.set(refreshKey, {
+            status: 'FAILED',
+            error: error.message,
+            completed_at: new Date(),
+          });
+          console.error('[Creator Performance] Profile refresh failed', {
+            shopId: shop.id,
+            taskId: exportRecord.task_id,
+            message: error.message,
+          });
+        }));
+      }
+    }
+    res.status(202).json({
+      export: exportRecord,
+      profile_refresh_started,
+      requested_end_day: requestedEndDay,
+      effective_end_day: endDay,
+      fallback_days: fallbackDays,
+    });
   } catch (error) { res.status(424).json({ message: error.message }); }
 };
 

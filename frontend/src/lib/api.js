@@ -116,6 +116,18 @@ export function syncTikTokShopAnalytics(shopId, payload) {
   return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/analytics/sync`, { method: 'POST', body: payload });
 }
 
+export function fetchSchedules(signal) {
+  return apiRequest('/schedules', { signal });
+}
+
+export function updateSchedule(jobKey, payload) {
+  return apiRequest(`/schedules/${encodeURIComponent(jobKey)}`, { method: 'PUT', body: payload });
+}
+
+export function runScheduleNow(jobKey) {
+  return apiRequest(`/schedules/${encodeURIComponent(jobKey)}/run`, { method: 'POST' });
+}
+
 function fetchTikTokSellerAffiliate(shopId, resource, filters = {}) {
   const params = new URLSearchParams();
   if (filters.pageToken) params.set('page_token', filters.pageToken);

@@ -49,18 +49,18 @@ If TikTok shows `non_sandbox_target`, the current TikTok app is still using a sa
 
 Also verify that the Login Kit redirect URI in the TikTok app exactly matches `TIKTOK_REDIRECT_URI`, including protocol, domain, path, and trailing slash. For the current local tunnel, that value should be the ngrok HTTPS callback URL exposed by the backend, not `localhost`.
 
-## Daily TikTok sync
+## Automated data schedules
 
-The scheduler worker uses `TIKTOK_SYNC_SCHEDULE` (a five-field cron expression) and `TIKTOK_SYNC_TIMEZONE` from `backend/.env`. It refreshes OAuth access tokens as needed, processes up to `TIKTOK_SYNC_CONCURRENCY` channels in parallel, and uses a PostgreSQL advisory lock so overlapping job runs do not sync the same channel concurrently.
+Schedules are managed from **Admin → Schedule** and stored in PostgreSQL. The page controls whether each job is enabled, its timezone, its run times (up to six per day), manual runs, and recent run history. The backend server starts the database-driven scheduler automatically.
+
+The optional dedicated worker uses the same database configuration, so it does not create a second independent cron definition:
 
 ```bash
 cd backend
-TIKTOK_SYNC_SCHEDULE="0 2 * * *"
-TIKTOK_SYNC_TIMEZONE=Asia/Ho_Chi_Minh
 pnpm run sync:tiktok:scheduler
 ```
 
-Run this as exactly one dedicated worker process (for example through systemd, PM2, or a container worker). To run a sync once without the scheduler:
+Scheduled run records have a unique key, preventing the same job/time from running twice if both the API server and a dedicated worker are active. To run TikTok Channel sync once without the scheduler:
 
 ```bash
 pnpm run sync:tiktok

@@ -239,7 +239,6 @@ const ShopAnalytics = () => {
     }
     const controller = new AbortController();
     setAnalyticsLoading(true);
-    setSnapshot(null);
     setError('');
     fetchTikTokShopAnalytics(selectedShopId, {
       signal: controller.signal,
@@ -247,7 +246,12 @@ const ShopAnalytics = () => {
       endDate,
       currency,
     }).then((payload) => {
-      setSnapshot(payload?.snapshots?.[0] || null);
+      const nextSnapshot = payload?.snapshots?.[0];
+      setSnapshot(nextSnapshot ? {
+        ...nextSnapshot,
+        is_fallback: Boolean(payload.is_fallback),
+        requested_range: payload.requested_range || null,
+      } : null);
     }).catch((requestError) => {
       if (requestError.name !== 'AbortError') {
         setError(requestError.message || t('shopAnalytics.loadError'));
@@ -397,7 +401,6 @@ const ShopAnalytics = () => {
   const changeCustomDate = (setter, currentValue) => (event) => {
     const nextValue = event.target.value;
     if (nextValue === currentValue) return;
-    setSnapshot(null);
     setter(nextValue);
   };
 
@@ -414,7 +417,6 @@ const ShopAnalytics = () => {
     const days = Number(nextPreset.replace(/d$/, ''));
     if (!Number.isFinite(days) || days <= 0) return;
     const nextRange = rangeForDays(days);
-    setSnapshot(null);
     setStartDate(nextRange.startDate);
     setEndDate(nextRange.endDate);
   };
@@ -667,7 +669,7 @@ const ShopAnalytics = () => {
                       </span>
                     </div>
                     <p className="stat-card__value">
-                      {analyticsLoading ? <span className="shop-analytics__value-skeleton" /> : hasData ? kpi.value : '—'}
+                      {analyticsLoading && !hasData ? <span className="shop-analytics__value-skeleton" /> : hasData ? kpi.value : '—'}
                     </p>
                     {renderDelta(kpi)}
                   </article>
@@ -694,7 +696,7 @@ const ShopAnalytics = () => {
                       ))}
                     </div>
                   </div>
-                  {analyticsLoading ? (
+                  {analyticsLoading && !hasData ? (
                     <div className="empty-state">
                       <span className="loading-dot" />
                       {t('shopAnalytics.loadingAnalytics')}
@@ -763,7 +765,7 @@ const ShopAnalytics = () => {
                         <p className="section-card__meta">{t('shopAnalytics.gmvBreakdownMeta')}</p>
                       </div>
                     </div>
-                    {analyticsLoading ? (
+                    {analyticsLoading && !hasData ? (
                       <div className="empty-state empty-state--compact">
                         <span className="loading-dot" />
                         {t('shopAnalytics.loadingAnalytics')}
@@ -806,7 +808,7 @@ const ShopAnalytics = () => {
                         <p className="section-card__meta">{t('shopAnalytics.commerceFunnelMeta')}</p>
                       </div>
                     </div>
-                    {analyticsLoading ? (
+                    {analyticsLoading && !hasData ? (
                       <div className="empty-state empty-state--compact">
                         <span className="loading-dot" />
                         {t('shopAnalytics.loadingAnalytics')}
@@ -839,6 +841,14 @@ const ShopAnalytics = () => {
               </section>
 
               <section className="section-card shop-analytics__daily-card">
+                {snapshot?.is_fallback ? (
+                  <div className="empty-state empty-state--compact" role="status">
+                    {t('shopAnalytics.staleSnapshot', {
+                      start: formatDate(snapshot.start_date),
+                      end: formatDate(snapshot.end_date),
+                    })}
+                  </div>
+                ) : null}
                 <div className="section-card__header">
                   <div>
                     <h2 className="section-card__title">{t('shopAnalytics.dailyValues')}</h2>
@@ -870,7 +880,7 @@ const ShopAnalytics = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {analyticsLoading ? (
+                      {analyticsLoading && !intervals.length ? (
                         <tr>
                           <td colSpan={9}>
                             <div className="empty-state empty-state--compact table-empty-state">
@@ -906,7 +916,7 @@ const ShopAnalytics = () => {
                   </table>
                 </div>
                 <div className="shop-analytics__daily-cards">
-                  {analyticsLoading ? (
+                  {analyticsLoading && !intervals.length ? (
                     <div className="empty-state empty-state--compact">
                       <span className="loading-dot" />
                       {t('shopAnalytics.loadingAnalytics')}

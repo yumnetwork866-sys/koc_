@@ -60,6 +60,14 @@ const sidebarIcons = {
     'M5.6 18.4l1.4-1.4',
     'M18.4 18.4l-1.4-1.4',
   ],
+  schedule: [
+    'M7 3v3',
+    'M17 3v3',
+    'M5 7h14',
+    'M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z',
+    'M9 12h2v2H9z',
+    'M14 12h2v2h-2z',
+  ],
   orders: [
     'M6 3h12l1 18H5L6 3Z',
     'M9 7a3 3 0 0 0 6 0',
@@ -71,6 +79,7 @@ const sidebarIcons = {
 const routeIconMap = {
   '/dashboard': 'dashboard',
   '/manage/users': 'users',
+  '/manage/schedules': 'schedule',
   '/manage/koc-performance': 'koc',
   '/manage/shop-analytics': 'analytics',
   '/bookings': 'bookings',
@@ -122,7 +131,7 @@ const PlatformIcon = ({ type }) => (
 const Sidebar = ({ isCollapsed, onToggle }) => {
   const location = useLocation();
   const session = useSession();
-  const isAdminArea = location.pathname.startsWith('/manage/users') || location.pathname.startsWith('/chatbot/chat-setting');
+  const isAdminArea = location.pathname.startsWith('/manage/users') || location.pathname.startsWith('/manage/schedules') || location.pathname.startsWith('/chatbot/chat-setting');
   const isFacebookArea = location.pathname.startsWith('/chatbot');
   const adminVisible = isAdminSession(session);
   const activeSectionTitle = isAdminArea ? 'Admin' : isFacebookArea ? 'Facebook' : 'TikTok';

@@ -403,6 +403,8 @@
     "performanceMeta": "Creator metrics from TikTok Affiliate Compass for the selected report window.",
     "missingMarketplaceScope": "Creator Marketplace read permission is missing",
     "missingMarketplaceScopeMeta": "Add seller.creator_marketplace.read in Partner Center, then reauthorize the Shop. Existing tokens do not receive newly added scopes.",
+    "refreshingProfiles": "Refreshing creator avatars and profiles in the background. Data will update automatically.",
+    "staleSnapshot": "New data is not ready yet. Showing the latest snapshot from {{start}} to {{end}}.",
     "creatorsTitle": "Sample Applications",
     "creatorsMeta": "Creators who submitted sample applications to the Shop.",
     "ordersTitle": "Affiliate orders",
@@ -530,6 +532,7 @@
     "metric": "Metric",
     "loadingAnalytics": "Loading Shop Analytics",
     "noData": "No data has been synchronized for this range.",
+    "staleSnapshot": "Data for the selected range is not ready yet. Showing the latest snapshot from {{start}} to {{end}}.",
     "gmvBreakdown": "GMV by source",
     "gmvBreakdownMeta": "GMV split across LIVE, VIDEO, and PRODUCT_CARD.",
     "noBreakdown": "No GMV breakdown is available yet.",
@@ -613,5 +616,47 @@
     "confirmDisconnect": "Disconnect channel \"{{name}}\"? The channel will be unlinked from TikTok but local data will remain.",
     "noProfile": "-",
     "noData": "No channel data yet."
+  },
+  "schedule": {
+    "title": "Schedule management",
+    "subtitle": "Configure automated data synchronization jobs.",
+    "loading": "Loading schedules",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "timezone": "Timezone",
+    "runsPerDay": "Runs per day",
+    "runTimes": "Run times",
+    "runNumber": "Run {{number}}",
+    "save": "Save schedule",
+    "runNow": "Run now",
+    "running": "Running",
+    "latestRun": "Latest run",
+    "status": "Status",
+    "result": "Result",
+    "succeeded": "succeeded",
+    "never": "Never run",
+    "history": "Last 10 runs",
+    "startedAt": "Started",
+    "trigger": "Trigger",
+    "duration": "Duration",
+    "saved": "Schedule saved.",
+    "started": "Job started in the background.",
+    "loadError": "Unable to load schedules.",
+    "saveError": "Unable to save schedule.",
+    "runError": "Unable to start the job.",
+    "jobs": {
+      "tiktok_creator_performance": {
+        "name": "TikTok Creator Performance",
+        "description": "Create Compass Offline Export and sync creator performance and profiles for every Shop."
+      },
+      "tiktok_shop_analytics": {
+        "name": "TikTok Shop Analytics",
+        "description": "Sync GMV, orders, buyers, traffic and refunds for every Shop."
+      },
+      "tiktok_channel_metrics": {
+        "name": "TikTok Channel Metrics",
+        "description": "Sync profiles, videos and daily video metrics for every TikTok Channel."
+      }
+    }
   }
 }

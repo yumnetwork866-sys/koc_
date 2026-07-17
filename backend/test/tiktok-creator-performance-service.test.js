@@ -6,8 +6,11 @@ const XLSX = require('xlsx');
 
 const {
   exportDateRange,
+  shiftEndDay,
   parseCreatorPerformanceWorkbook,
   enrichCreatorRows,
+  loadMarketplaceCreatorProfiles,
+  createCreatorPerformanceExportWithFallback,
 } = require('../src/services/tiktokCreatorPerformanceService');
 
 test('Compass date ranges are inclusive and match TikTok report filenames', () => {
@@ -19,6 +22,30 @@ test('Compass date ranges are inclusive and match TikTok report filenames', () =
     startDate: '2026-06-16',
     endDate: '2026-07-15',
   });
+  assert.equal(shiftEndDay(20260716, -1), 20260715);
+});
+
+test('Compass export falls back when TikTok has not made the requested day available', async () => {
+  const attempts = [];
+  const result = await createCreatorPerformanceExportWithFallback({ region: 'MY' }, {
+    windowType: 'PAST_7_DAYS',
+    endDay: 20260716,
+    planType: 'ALL',
+  }, {
+    createExport: async (_shop, options) => {
+      attempts.push(options.endDay);
+      if (options.endDay === 20260716) {
+        const error = new Error('The day of the export is not available.');
+        error.tiktokCode = 13017003;
+        throw error;
+      }
+      return { id: 1, status: 'PROCESSING' };
+    },
+  });
+  assert.deepEqual(attempts, [20260716, 20260715]);
+  assert.equal(result.requestedEndDay, 20260716);
+  assert.equal(result.endDay, 20260715);
+  assert.equal(result.fallbackDays, 1);
 });
 
 test('provided Creator List workbook maps to Creator Performance fields', () => {
@@ -154,4 +181,38 @@ test('creator Marketplace fallback is skipped when OAuth scope is not granted', 
   });
   assert.equal(marketplaceCalls, 0);
   assert.equal(rows[0].avatar_url, null);
+});
+
+test('Marketplace creator lookup retries TikTok downstream rate limits', async () => {
+  let calls = 0;
+  const profiles = await loadMarketplaceCreatorProfiles({
+    id: 1,
+    cipher: 'shop-cipher',
+    authorization: { granted_scopes: ['seller.creator_marketplace.read'] },
+  }, ['retry.creator'], async () => {
+    calls += 1;
+    if (calls === 1) {
+      const error = new Error('Too many requests for downstream.');
+      error.tiktokCode = 36009002;
+      throw error;
+    }
+    return {
+      data: {
+        creators: [{
+          username: 'retry.creator',
+          nickname: 'Retry Creator',
+          avatar: { url: 'https://example.test/retry.webp' },
+          creator_open_id: 'retry-open-id',
+        }],
+      },
+    };
+  }, {
+    concurrency: 1,
+    minIntervalMs: 0,
+    retryCount: 2,
+    sleep: async () => {},
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(profiles.get('retry.creator').avatar_url, 'https://example.test/retry.webp');
 });
