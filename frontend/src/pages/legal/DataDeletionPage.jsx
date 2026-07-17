@@ -1,11 +1,13 @@
 import React from 'react';
 import LegalPage from '../../components/LegalPage';
-import { DataDeletionContent } from './legalContent';
+import { DataDeletionContent, DataDeletionContentVi } from './legalContent';
+import { useI18n } from '../../lib/language';
 
 const DataDeletionPage = () => {
+  const { t, isVietnamese } = useI18n();
   return (
-    <LegalPage title="Data Deletion" updatedAt="July 1, 2026">
-      <DataDeletionContent />
+    <LegalPage title={t('legal.deletionTitle')} updatedAt={t('legal.updatedAt')}>
+      {isVietnamese ? <DataDeletionContentVi /> : <DataDeletionContent />}
     </LegalPage>
   );
 };

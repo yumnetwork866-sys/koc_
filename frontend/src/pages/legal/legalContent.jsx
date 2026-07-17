@@ -123,3 +123,123 @@ export const DataDeletionContent = () => (
     </p>
   </>
 );
+
+export const TermsContentVi = () => (
+  <>
+    <p>
+      Các Điều khoản này điều chỉnh việc truy cập Yumnetwork, bao gồm trang web công khai và không gian báo cáo
+      được cấp quyền. Khi sử dụng dịch vụ, bạn đồng ý với các Điều khoản này, Chính sách quyền riêng tư và điều
+      khoản áp dụng của mọi nền tảng bên thứ ba mà bạn chọn kết nối.
+    </p>
+    <p>
+      Dịch vụ giúp người dùng được cấp quyền kết nối các nền tảng được hỗ trợ, tổ chức hoạt động nội dung và xem
+      dữ liệu về kênh, tin nhắn cùng hiệu quả. Khi bạn kết nối một nền tảng, nhà cung cấp đó sẽ hiển thị quy trình
+      chấp thuận riêng; bạn có thể từ chối hoặc thu hồi quyền truy cập bất cứ lúc nào.
+    </p>
+    <p>
+      Bạn chỉ được sử dụng dịch vụ cho mục đích kinh doanh hợp pháp, có thẩm quyền kết nối từng tài khoản, tuân thủ
+      pháp luật hiện hành và chính sách của từng nền tảng. Không gian làm việc riêng tư chỉ dành cho người dùng được
+      quản trị viên dịch vụ cấp quyền.
+    </p>
+    <p>Trách nhiệm của bạn:</p>
+    <ul>
+      <li>Bảo mật thông tin đăng nhập và chỉ sử dụng quyền truy cập được cấp cho mình.</li>
+      <li>Chỉ kết nối nền tảng và tài khoản mà bạn có quyền cấp phép truy cập.</li>
+      <li>Không vượt qua biện pháp bảo mật, quyền hạn hoặc giới hạn tần suất của nền tảng.</li>
+      <li>Không dùng dịch vụ để đăng nội dung có hại, lừa đảo hoặc chưa được cấp phép.</li>
+    </ul>
+    <p>
+      Bạn có thể ngắt kết nối nền tảng trong khu vực quản lý. Việc ngắt kết nối sẽ thu hồi quyền đã lưu; việc xóa
+      kết nối cũng có thể xóa các bản ghi cục bộ liên quan. Bạn cũng có thể gửi yêu cầu xóa tài khoản hoặc dữ liệu
+      tới <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>.
+    </p>
+    <p>
+      Trong phạm vi pháp luật cho phép, dịch vụ được cung cấp theo hiện trạng và khả năng sẵn có. Chúng tôi có thể
+      tạm ngừng hoặc chấm dứt quyền truy cập vì lý do bảo mật, chính sách hoặc vận hành, và có thể cập nhật các Điều
+      khoản này bằng cách đăng phiên bản sửa đổi trên trang này.
+    </p>
+    <p>
+      Mọi câu hỏi về Điều khoản có thể gửi tới <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>.
+    </p>
+  </>
+);
+
+export const PrivacyContentVi = () => (
+  <>
+    <p>
+      Chính sách quyền riêng tư này giải thích cách Yumnetwork thu thập, sử dụng, lưu giữ và xóa thông tin khi bạn
+      sử dụng trang web, không gian làm việc riêng tư và các kết nối nền tảng được hỗ trợ.
+    </p>
+    <h2>Thông tin chúng tôi thu thập</h2>
+    <p>
+      Chúng tôi thu thập thông tin cần thiết để vận hành dịch vụ: thông tin tài khoản trong không gian làm việc
+      (tên, email và vai trò), tin nhắn hỗ trợ và các bản ghi vận hành như phân công và báo cáo. Nếu bạn kết nối một
+      nền tảng, chúng tôi thu thập dữ liệu được bạn chấp thuận trong quy trình cấp quyền của nền tảng đó. Tùy nền
+      tảng và phạm vi quyền, dữ liệu có thể gồm mã tài khoản, thông tin hồ sơ, chỉ số công khai, tin nhắn và siêu dữ
+      liệu phương tiện.
+    </p>
+    <h2>Cách chúng tôi sử dụng dữ liệu nền tảng</h2>
+    <p>
+      Chúng tôi chỉ dùng dữ liệu để kết nối nền tảng được cấp quyền, đồng bộ dữ liệu nội dung hoặc tin nhắn đã được
+      chấp thuận, hiển thị bảng tổng quan, phân công trách nhiệm và tạo báo cáo nội bộ. Chúng tôi không bán thông tin
+      cá nhân, không dùng dữ liệu nền tảng cho quảng cáo hoặc xây dựng hồ sơ người dùng không liên quan.
+    </p>
+    <h2>Chia sẻ và bảo mật</h2>
+    <ul>
+      <li>Access token và refresh token được xử lý phía máy chủ, mã hóa khi lưu trữ và không hiển thị trong không gian làm việc.</li>
+      <li>Quyền truy cập chỉ dành cho người dùng được cấp quyền và nhà cung cấp dịch vụ lưu trữ hoặc bảo vệ hệ thống.</li>
+      <li>Chúng tôi không chia sẻ dữ liệu nền tảng với bên thứ ba, trừ khi cần để vận hành dịch vụ, tuân thủ pháp luật hoặc theo chỉ dẫn của bạn.</li>
+    </ul>
+    <p>
+      Chúng tôi áp dụng các biện pháp bảo vệ hành chính và kỹ thuật hợp lý. Không hệ thống nào có thể đảm bảo an toàn
+      tuyệt đối; bạn cần bảo vệ thông tin đăng nhập và báo ngay khi nghi ngờ có hành vi sử dụng sai mục đích.
+    </p>
+    <h2>Lưu giữ và xóa dữ liệu</h2>
+    <p>
+      Chúng tôi lưu dữ liệu kết nối nền tảng và dữ liệu báo cáo đã đồng bộ khi không gian làm việc được kết nối còn
+      hoạt động. Ngắt kết nối sẽ thu hồi quyền và xóa token đã lưu. Xóa kết nối có thể xóa bản ghi cục bộ về kênh,
+      tin nhắn, đơn hàng hoặc báo cáo tùy nền tảng. Nhật ký sao lưu và bảo mật giới hạn có thể được lưu tối đa 90
+      ngày, trừ khi pháp luật yêu cầu lâu hơn hoặc cần để xử lý sự cố bảo mật.
+    </p>
+    <h2>Lựa chọn và quyền của bạn</h2>
+    <p>
+      Tùy pháp luật áp dụng, bạn có thể yêu cầu truy cập, chỉnh sửa, xuất, hạn chế xử lý hoặc xóa thông tin cá nhân.
+      Bạn cũng có thể thu hồi quyền nền tảng trong phần cài đặt của nền tảng hoặc khu vực quản lý. Để gửi yêu cầu,
+      hãy dùng tài khoản liên quan gửi email tới <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>.
+      Chúng tôi có thể xác minh danh tính và phản hồi trong vòng 30 ngày theo pháp luật áp dụng.
+    </p>
+    <p>
+      Chính sách có thể thay đổi khi dịch vụ phát triển; phiên bản mới nhất được đăng tại đây. Với câu hỏi về quyền
+      riêng tư hoặc yêu cầu xóa dữ liệu, hãy liên hệ <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>.
+    </p>
+  </>
+);
+
+export const DataDeletionContentVi = () => (
+  <>
+    <p>
+      Trang này giải thích cách yêu cầu xóa dữ liệu cá nhân liên quan đến Yumnetwork và các tài khoản nền tảng đã kết nối.
+    </p>
+    <h2>Cách yêu cầu xóa dữ liệu</h2>
+    <p>
+      Gửi email từ tài khoản bạn muốn xem xét tới <a href={`mailto:${privacyContactEmail}`}>{privacyContactEmail}</a>.
+      Hãy nêu tên nền tảng, mã tài khoản nếu có và yêu cầu xóa dữ liệu rõ ràng.
+    </p>
+    <h2>Dữ liệu chúng tôi xóa</h2>
+    <p>
+      Khi nhận được yêu cầu hợp lệ, chúng tôi xem xét tài khoản và xóa hoặc ngắt kết nối dữ liệu cục bộ liên quan khi
+      phù hợp. Dữ liệu này có thể gồm access token đã lưu, bản ghi Trang đã kết nối, hội thoại, đơn hàng, tài liệu
+      trong kho kiến thức hoặc dữ liệu báo cáo liên kết với tài khoản.
+    </p>
+    <h2>Dữ liệu có thể được lưu lại</h2>
+    <p>
+      Chúng tôi có thể giữ một số bản ghi giới hạn vì mục đích bảo mật, kiểm toán, pháp lý hoặc vận hành, chẳng hạn
+      nhật ký sao lưu hoặc hồ sơ pháp luật yêu cầu. Khi hoàn tất xóa, tài khoản sẽ được ngắt khỏi dịch vụ.
+    </p>
+    <h2>Thời gian phản hồi</h2>
+    <p>
+      Chúng tôi cố gắng phản hồi trong vòng 30 ngày, tùy thuộc việc xác minh danh tính và pháp luật áp dụng. Nếu cần
+      trao đổi thêm, hãy sử dụng địa chỉ email nêu trên.
+    </p>
+  </>
+);

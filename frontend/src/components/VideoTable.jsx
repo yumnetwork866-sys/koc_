@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchChannels, fetchProducts, fetchVideos } from '../lib/api';
 import { getPlatformLabel } from '../lib/platforms';
+import { useI18n } from '../lib/language';
 
-const formatNumber = (value) => Number(value || 0).toLocaleString();
-
-const VideoTable = ({ heroTitle, heroSubtitle }) => {
+const VideoTable = ({ heroTitle }) => {
+  const { t, language } = useI18n();
+  const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
   const [videos, setVideos] = useState([]);
   const [channels, setChannels] = useState([]);
   const [products, setProducts] = useState([]);
@@ -35,7 +36,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
         await loadData(controller.signal);
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setError(err.message || 'Failed to load videos');
+          setError(err.message || t('videoLibrary.loadError'));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -47,7 +48,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
     load();
 
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -87,28 +88,28 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
   }, [channels, selectedChannelId]);
 
   const selectedChannelLabel = selectedChannel
-    ? selectedChannel.display_name || selectedChannel.username || 'Channel'
-    : 'All channels';
+    ? selectedChannel.display_name || selectedChannel.username || t('videoLibrary.channel')
+    : t('videoLibrary.allChannels');
 
   return (
     <div className="page">
       <section className="page__hero">
-        <h1 className="page__title">{heroTitle}</h1>
+        <h1 className="page__title">{t('videoLibrary.heroTitle') || heroTitle}</h1>
         <div className="page__stats page__stats--four">
           <article className="stat-card">
-            <p className="stat-card__label">Videos</p>
+            <p className="stat-card__label">{t('videoLibrary.videos')}</p>
             <p className="stat-card__value">{filteredVideos.length}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Views</p>
+            <p className="stat-card__label">{t('videoLibrary.views')}</p>
             <p className="stat-card__value">{formatNumber(filteredTotals.views)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Likes</p>
+            <p className="stat-card__label">{t('videoLibrary.likes')}</p>
             <p className="stat-card__value">{formatNumber(filteredTotals.likes)}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Shares</p>
+            <p className="stat-card__label">{t('videoLibrary.shares')}</p>
             <p className="stat-card__value">{formatNumber(filteredTotals.shares)}</p>
           </article>
         </div>
@@ -119,14 +120,14 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div className="chip-row">
-            <span className="chip chip--blue">Channels: {channels.length}</span>
-            <span className="chip chip--positive">Products: {products.length}</span>
+            <span className="chip chip--blue">{t('videoLibrary.channels', { count: channels.length })}</span>
+            <span className="chip chip--positive">{t('videoLibrary.products', { count: products.length })}</span>
           </div>
         </div>
 
         <div className="filter-panel filter-panel--compact">
           <div className="field">
-            <label htmlFor="channel-filter">Channel</label>
+            <label htmlFor="channel-filter">{t('videoLibrary.channel')}</label>
             <div className="channel-picker">
               <button
                 className="channel-picker__trigger"
@@ -165,9 +166,9 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                       setIsChannelDropdownOpen(false);
                     }}
                   >
-                    <span className="channel-picker__option-avatar channel-picker__option-avatar--empty" aria-hidden="true">All</span>
+                    <span className="channel-picker__option-avatar channel-picker__option-avatar--empty" aria-hidden="true">*</span>
                     <span className="channel-picker__option-meta">
-                      <span className="channel-picker__option-title">All channels</span>
+                      <span className="channel-picker__option-title">{t('videoLibrary.allChannels')}</span>
                     </span>
                   </button>
 
@@ -189,7 +190,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                           <img
                             className="channel-picker__option-avatar"
                             src={channel.avatar_url}
-                            alt={channel.display_name || channel.username || 'Channel avatar'}
+                            alt={channel.display_name || channel.username || t('videoLibrary.channelAvatar')}
                             loading="lazy"
                           />
                         ) : (
@@ -217,7 +218,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                 type="button"
                 onClick={() => setSelectedChannelId('all')}
               >
-                Clear filter
+                {t('videoLibrary.clearFilter')}
               </button>
             ) : null}
           </div>
@@ -227,14 +228,14 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Video</th>
-                <th>Platform</th>
-                <th>Channel</th>
-                <th>Products</th>
-                <th>Campaign</th>
-                <th className="cell-number">Views</th>
-                <th className="cell-number">Engagement</th>
-                <th className="cell-number">Assignments</th>
+                <th>{t('videoLibrary.videos')}</th>
+                <th>{t('videoLibrary.platform')}</th>
+                <th>{t('videoLibrary.channel')}</th>
+                <th>{t('videoLibrary.productsColumn')}</th>
+                <th>{t('videoLibrary.campaign')}</th>
+                <th className="cell-number">{t('videoLibrary.views')}</th>
+                <th className="cell-number">{t('videoLibrary.engagement')}</th>
+                <th className="cell-number">{t('videoLibrary.assignments')}</th>
               </tr>
             </thead>
             <tbody>
@@ -243,7 +244,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                   <td className="table-state-cell" colSpan={8}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
-                      <div>Đang tải video</div>
+                      <div>{t('videoLibrary.loading')}</div>
                     </div>
                   </td>
                 </tr>
@@ -259,7 +260,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                               href={video.video_url}
                               target="_blank"
                               rel="noreferrer"
-                              aria-label={`Open ${video.title}`}
+                              aria-label={t('videoLibrary.openVideo', { title: video.title })}
                             >
                               <img
                                 className="video-cell__thumb"
@@ -278,7 +279,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                           )
                         ) : (
                           <div className="video-cell__thumb video-cell__thumb--empty" aria-hidden="true">
-                            No thumb
+                            {t('videoLibrary.noThumbnail')}
                           </div>
                         )}
                         <div className="video-cell__meta">
@@ -294,7 +295,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                           <img
                             className="channel-cell__avatar"
                             src={video.channel.avatar_url}
-                            alt={video.channel?.display_name || video.channel?.username || 'Channel avatar'}
+                            alt={video.channel?.display_name || video.channel?.username || t('videoLibrary.channelAvatar')}
                             loading="lazy"
                           />
                         ) : (
@@ -319,7 +320,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                     </td>
                     <td>{video.campaign || '-'}</td>
                     <td className="cell-number">{formatNumber(video.views)}</td>
-                    <td className="cell-number">{formatNumber(video.likes)} likes | {formatNumber(video.comments)} comments | {formatNumber(video.shares)} shares</td>
+                    <td className="cell-number">{formatNumber(video.likes)} {t('videoLibrary.likes').toLowerCase()} | {formatNumber(video.comments)} {t('videoLibrary.comments')} | {formatNumber(video.shares)} {t('videoLibrary.shares').toLowerCase()}</td>
                     <td className="cell-number">{video.assignments?.length || 0}</td>
                   </tr>
                 ))
@@ -327,7 +328,7 @@ const VideoTable = ({ heroTitle, heroSubtitle }) => {
                 <tr className="table-state-row">
                   <td className="table-state-cell" colSpan={8}>
                     <div className="empty-state empty-state--compact table-empty-state">
-                      <div>Không có video khớp bộ lọc.</div>
+                      <div>{t('videoLibrary.noMatch')}</div>
                     </div>
                   </td>
                 </tr>

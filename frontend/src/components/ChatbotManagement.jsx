@@ -25,22 +25,23 @@ import {
   clearStoredFacebookChatbotToken,
   saveStoredFacebookChatbotToken,
 } from '../lib/session';
+import { useI18n } from '../lib/language';
 
-const formatTime = (value) => {
+const formatTime = (value, locale) => {
   if (!value) return '-';
-  return new Intl.DateTimeFormat('vi-VN', {
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(new Date(value));
 };
 
-const formatConversationTime = (value) => {
+const formatConversationTime = (value, locale) => {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   const today = new Date();
   const isToday = date.toDateString() === today.toDateString();
-  return new Intl.DateTimeFormat('vi-VN', isToday
+  return new Intl.DateTimeFormat(locale, isToday
     ? { hour: '2-digit', minute: '2-digit' }
     : { day: '2-digit', month: '2-digit' }).format(date);
 };
@@ -101,6 +102,8 @@ const mergeModelOptions = (baseModels, ollamaModels, currentSetting) => {
 };
 
 const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
+  const { t, language } = useI18n();
+  const locale = language === 'vi' ? 'vi-VN' : 'en-US';
   const location = useLocation();
   const navigate = useNavigate();
   const activeSection = location.pathname.split('/').filter(Boolean)[1] || 'dashboard';
@@ -420,7 +423,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         setError('');
         await loadOverview(controller.signal);
       } catch (err) {
-        if (err.name !== 'AbortError') setError(err.message || 'Không tải được dữ liệu chatbot');
+        if (err.name !== 'AbortError') setError(err.message || t('chatbot.loadError'));
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -428,7 +431,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
     load();
     return () => controller.abort();
-  }, [loadOverview]);
+  }, [loadOverview, t]);
 
   const refresh = useCallback(async () => {
     await loadOverview();
@@ -453,7 +456,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         try {
           await refresh();
         } catch (err) {
-          if (err.name !== 'AbortError') setError(err.message || 'Failed to sync Facebook status');
+          if (err.name !== 'AbortError') setError(err.message || t('chatbot.syncError'));
         }
       } else {
         clearStoredFacebookChatbotToken();
@@ -463,17 +466,17 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     };
 
     syncAfterOauth();
-  }, [location.hash, location.pathname, location.search, navigate, refresh]);
+  }, [location.hash, location.pathname, location.search, navigate, refresh, t]);
 
   useEffect(() => {
     const controller = new AbortController();
 
     loadMessages(selectedSenderId, selectedMessagePageId, controller.signal).catch((err) => {
-      if (err.name !== 'AbortError') setError(err.message || 'Không tải được hội thoại');
+      if (err.name !== 'AbortError') setError(err.message || t('chatbot.conversationError'));
     });
 
     return () => controller.abort();
-  }, [loadMessages, selectedMessagePageId, selectedSenderId]);
+  }, [loadMessages, selectedMessagePageId, selectedSenderId, t]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -486,7 +489,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   }, [toast]);
 
   const handleRevokeFacebookAccount = async (group) => {
-    if (!window.confirm(`Revoke Facebook account "${group.ownerName}" from the app? This will disconnect every connected Page for this user and remove the session.`)) return;
+    if (!window.confirm(t('chatbot.revokeConfirm', { name: group.ownerName }))) return;
     await revokeChatbotFacebookAccountByUser(group.ownerId);
     if (facebookMe.userId === group.ownerId) {
       clearStoredFacebookChatbotToken();
@@ -500,7 +503,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
   };
 
   const handleDisconnectPage = async (page) => {
-    if (!window.confirm(`Disconnect Page "${page.name}"? The bot will stop replying on this Page.`)) return;
+    if (!window.confirm(t('chatbot.disconnectConfirm', { name: page.name }))) return;
     await disconnectFacebookPage(page.id);
     await refresh();
   };
@@ -521,7 +524,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       setReplyText('');
       await Promise.all([loadMessages(selectedSenderId, selectedMessagePageId), loadOverview()]);
     } catch (err) {
-      setError(err.message || 'Không gửi được tin nhắn');
+      setError(err.message || t('chatbot.sendError'));
     } finally {
       setSendingReply(false);
     }
@@ -558,7 +561,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     setSettingsForm({
       modelKey: `${updated.provider}:${updated.model}`,
     });
-    setToast({ status: 'success', message: 'Đã lưu chat setting' });
+    setToast({ status: 'success', message: t('chatbot.settingsSaved') });
   };
 
   const renderSection = () => {
@@ -568,11 +571,11 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
             <div className="section-card__header chatbot-chat-card__header">
               <div className="chatbot-chat-card__heading">
                 <span className="chatbot-chat-card__eyebrow">Facebook Messenger</span>
-                <h1>Hộp thư hội thoại</h1>
+                <h1>{t('chatbot.inbox')}</h1>
               </div>
               <div className="chatbot-chat-card__tools">
                 <div className="chatbot-page-picker">
-                  <span className="chatbot-page-picker__label">Page</span>
+                  <span className="chatbot-page-picker__label">{t('chatbot.page')}</span>
                 <div className="chatbot-page-picker__menu-wrap">
                   <button
                     ref={pagePickerTriggerRef}
@@ -613,9 +616,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                         }}
                       >
                         <span className="mini-card__avatar chatbot-page-picker__avatar" aria-hidden="true">
-                          {getPageAvatarText('Tất cả Page')}
+                          {getPageAvatarText(t('chatbot.allPages'))}
                         </span>
-                        <span className="chatbot-page-picker__name">Tất cả Page</span>
+                        <span className="chatbot-page-picker__name">{t('chatbot.allPages')}</span>
                       </button>
                       {chatPageOptions.map((page) => (
                         <button
@@ -646,17 +649,17 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 </div>
               </div>
             </div>
-            <div className="chatbot-chat-card__summary" aria-label="Tổng quan hộp thư">
-              <span><strong>{filteredConversations.length || 0}</strong> hội thoại</span>
-              <span><strong>{stats.totalMessages || 0}</strong> tin nhắn</span>
-              <span className="chatbot-chat-card__summary-alert"><strong>{stats.newOrders || 0}</strong> đơn mới</span>
+            <div className="chatbot-chat-card__summary" aria-label={t('chatbot.inboxSummary')}>
+              <span>{t('chatbot.conversationCount', { count: filteredConversations.length || 0 })}</span>
+              <span>{t('chatbot.messageCount', { count: stats.totalMessages || 0 })}</span>
+              <span className="chatbot-chat-card__summary-alert">{t('chatbot.newOrderCount', { count: stats.newOrders || 0 })}</span>
             </div>
             {error ? <div className="chatbot-chat-card__error" role="alert">{error}</div> : null}
             <div className="chatbot-inbox__layout">
               <div className="chatbot-inbox__list">
                 <div className="chatbot-inbox__list-head">
                   <div>
-                    <strong>Hội thoại</strong>
+                    <strong>{t('chatbot.conversations')}</strong>
                     <span>{filteredConversations.length}</span>
                   </div>
                   <label className="chatbot-conversation-search">
@@ -664,12 +667,12 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                       <circle cx="8.5" cy="8.5" r="5.5" />
                       <path d="m13 13 4 4" />
                     </svg>
-                    <span className="sr-only">Tìm hội thoại</span>
+                    <span className="sr-only">{t('chatbot.search')}</span>
                     <input
                       type="search"
                       value={conversationQuery}
                       onChange={(event) => setConversationQuery(event.target.value)}
-                      placeholder="Tìm khách hàng, tin nhắn..."
+                      placeholder={t('chatbot.searchPlaceholder')}
                     />
                   </label>
                 </div>
@@ -694,17 +697,17 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     <span className="conversation-row__content">
                       <span className="conversation-row__title">
                         <strong>{conversation.displayName || conversation.senderId}</strong>
-                        <time dateTime={conversation.lastTs ? new Date(conversation.lastTs).toISOString() : undefined}>{formatConversationTime(conversation.lastTs)}</time>
+                        <time dateTime={conversation.lastTs ? new Date(conversation.lastTs).toISOString() : undefined}>{formatConversationTime(conversation.lastTs, locale)}</time>
                       </span>
-                      <small>{conversation.lastDirection === 'out' ? 'Bạn: ' : ''}{conversation.lastText || 'Chưa có nội dung'}</small>
+                      <small>{conversation.lastDirection === 'out' ? t('chatbot.youPrefix') : ''}{conversation.lastText || t('chatbot.noContent')}</small>
                     </span>
                   </button>
                 ))}
                 {!visibleConversations.length ? (
                   <div className="chatbot-inbox__empty chatbot-inbox__empty--centered">
                     <span className="chatbot-inbox__empty-icon" aria-hidden="true">{conversationQuery ? '⌕' : '✦'}</span>
-                    <strong>{conversationQuery ? 'Không tìm thấy hội thoại' : 'Chưa có hội thoại'}</strong>
-                    <span>{conversationQuery ? 'Thử tìm bằng tên hoặc nội dung khác.' : 'Tin nhắn mới từ khách hàng sẽ xuất hiện tại đây.'}</span>
+                    <strong>{conversationQuery ? t('chatbot.noSearchResult') : t('chatbot.noConversations')}</strong>
+                    <span>{conversationQuery ? t('chatbot.searchHint') : t('chatbot.emptyHint')}</span>
                   </div>
                 ) : null}
                 </div>
@@ -721,18 +724,18 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                       </div>
                     </>
                   ) : (
-                    <div><strong>Chi tiết hội thoại</strong><span>Chọn một khách hàng để xem tin nhắn.</span></div>
+                    <div><strong>{t('chatbot.conversationDetail')}</strong><span>{t('chatbot.selectCustomer')}</span></div>
                   )}
                 </div>
                 <div className="message-list" ref={messageListRef}>
                   {messagesLoading ? (
-                    <div className="chatbot-message-loading"><span /><span /><span /><small>Đang tải tin nhắn</small></div>
+                    <div className="chatbot-message-loading"><span /><span /><span /><small>{t('chatbot.loadingMessages')}</small></div>
                   ) : null}
                   {!messagesLoading && !selectedConversation ? (
                     <div className="chatbot-thread__empty">
                       <span aria-hidden="true">✦</span>
-                      <strong>Bắt đầu từ một hội thoại</strong>
-                      <p>Chọn khách hàng ở danh sách bên trái để xem lịch sử và gửi phản hồi.</p>
+                      <strong>{t('chatbot.startConversation')}</strong>
+                      <p>{t('chatbot.startHint')}</p>
                     </div>
                   ) : null}
                   {messages.map((message) => (
@@ -747,7 +750,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                         </span>
                         <div className="message-bubble__meta">
                           <strong>{getMessageDisplayName(message)}</strong>
-                          <span>{message.via} · {formatTime(message.ts)}</span>
+                          <span>{message.via} · {formatTime(message.ts, locale)}</span>
                         </div>
                       </div>
                       <p>{message.text}</p>
@@ -764,13 +767,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                         event.currentTarget.form?.requestSubmit();
                       }
                     }}
-                    placeholder={selectedConversation ? `Nhắn tin cho ${selectedConversation.displayName || 'khách hàng'}...` : 'Chọn một hội thoại để trả lời'}
+                    placeholder={selectedConversation ? t('chatbot.replyTo', { name: selectedConversation.displayName || t('chatbot.customer') }) : t('chatbot.selectToReply')}
                     rows={1}
                     disabled={!selectedMessagePageId || !selectedSenderId || sendingReply}
-                    aria-label="Nội dung tin nhắn"
+                    aria-label={t('chatbot.messageContent')}
                   />
                   <button className="button reply-box__send" type="submit" disabled={!selectedMessagePageId || !selectedSenderId || !replyText.trim() || sendingReply}>
-                    <span>{sendingReply ? 'Đang gửi' : 'Gửi'}</span>
+                    <span>{sendingReply ? t('chatbot.sending') : t('chatbot.send')}</span>
                     <svg aria-hidden="true" viewBox="0 0 20 20"><path d="m3 3 14 7-14 7 2.2-6L12 10 5.2 9 3 3Z" /></svg>
                   </button>
                 </form>
@@ -786,12 +789,12 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         <section className="section-card" id="chat-setting">
           <div className="section-card__header">
             <div>
-              <h2 className="section-card__title">Chat setting</h2>
+              <h2 className="section-card__title">{t('chatbot.settingsTitle')}</h2>
             </div>
           </div>
           <form className="kb-form" onSubmit={handleSaveSettings}>
             <label className="field">
-              <span>Model</span>
+              <span>{t('chatbot.model')}</span>
               <select
                 value={settingsForm.modelKey}
                 onChange={(event) => setSettingsForm((current) => ({ ...current, modelKey: event.target.value }))}
@@ -804,10 +807,10 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
               </select>
             </label>
             <div className="chip-row">
-              <span className="chip chip--blue">Current: {chatSettings.provider}</span>
-              <span className="chip chip--positive">Model: {chatSettings.model || '-'}</span>
+              <span className="chip chip--blue">{t('chatbot.current')}: {chatSettings.provider}</span>
+              <span className="chip chip--positive">{t('chatbot.model')}: {chatSettings.model || '-'}</span>
             </div>
-            <button className="button" type="submit">Lưu cấu hình</button>
+            <button className="button" type="submit">{t('chatbot.saveSettings')}</button>
           </form>
         </section>
       );
@@ -818,23 +821,23 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         <section className="section-card" id="rag">
           <div className="section-card__header">
             <div>
-              <h2 className="section-card__title">Kho kiến thức</h2>
-              <p className="section-card__subtitle">Nội dung dùng cho RAG khi bot trả lời bằng AI.</p>
+              <h2 className="section-card__title">{t('chatbot.knowledge')}</h2>
+              <p className="section-card__subtitle">{t('chatbot.knowledgeMeta')}</p>
             </div>
           </div>
           <form className="kb-form" onSubmit={handleCreateDoc}>
             <input
               value={docForm.title}
               onChange={(event) => setDocForm((current) => ({ ...current, title: event.target.value }))}
-              placeholder="Tiêu đề"
+              placeholder={t('chatbot.titlePlaceholder')}
             />
             <textarea
               value={docForm.content}
               onChange={(event) => setDocForm((current) => ({ ...current, content: event.target.value }))}
-              placeholder="Nội dung chính sách, sản phẩm, giá, vận chuyển..."
+              placeholder={t('chatbot.contentPlaceholder')}
               rows={4}
             />
-            <button className="button" type="submit">Thêm tài liệu</button>
+            <button className="button" type="submit">{t('chatbot.addDocument')}</button>
           </form>
           <div className="chatbot-page-grid">
             {docs.map((doc) => (
@@ -845,7 +848,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 </div>
                 <div className="mini-card__action">
                   <button className="button button--ghost button--small" type="button" onClick={() => handleDeleteDoc(doc.id)}>
-                    Xóa
+                    {t('chatbot.delete')}
                   </button>
                 </div>
               </article>
@@ -860,19 +863,19 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
         <section className="section-card" id="orders">
           <div className="section-card__header">
             <div>
-              <h2 className="section-card__title">Đơn hàng</h2>
-              <p className="section-card__subtitle">Bot tự tạo đơn khi khách gửi số điện thoại.</p>
+              <h2 className="section-card__title">{t('chatbot.ordersTitle')}</h2>
+              <p className="section-card__subtitle">{t('chatbot.ordersMeta')}</p>
             </div>
           </div>
           <div className="table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Khách</th>
-                  <th>Nội dung</th>
-                  <th>SĐT</th>
-                  <th>Trạng thái</th>
-                  <th>Thời gian</th>
+                  <th>{t('chatbot.customer')}</th>
+                  <th>{t('chatbot.content')}</th>
+                  <th>{t('chatbot.phone')}</th>
+                  <th>{t('chatbot.status')}</th>
+                  <th>{t('chatbot.time')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -887,13 +890,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                           {orderStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
                         </select>
                       </td>
-                      <td>{formatTime(order.ts)}</td>
+                      <td>{formatTime(order.ts, locale)}</td>
                     </tr>
                   ))
                 ) : (
                   <tr className="table-state-row">
                     <td className="table-state-cell" colSpan={5}>
-                      <div className="empty-state empty-state--compact table-empty-state">Chưa có đơn hàng nào.</div>
+                      <div className="empty-state empty-state--compact table-empty-state">{t('chatbot.noOrders')}</div>
                     </td>
                   </tr>
                 )}
@@ -907,12 +910,12 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       return (
         <>
           {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
-          {loading ? <section className="section-card empty-state empty-state--compact">Đang tải chatbot...</section> : null}
+          {loading ? <section className="section-card empty-state empty-state--compact">{t('chatbot.loading')}</section> : null}
 
           <section className="section-card">
             <div className="section-card__header section-card__header--compact">
               <div>
-                <h2 className="section-card__title">Users and Pages</h2>
+                <h2 className="section-card__title">{t('chatbot.usersPages')}</h2>
               </div>
             </div>
 
@@ -932,9 +935,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                         <div className="facebook-user-group__meta">
                           <h3>
                             <span>{group.ownerName}</span>
-                            <span className="chip chip--blue">{group.pages.length} pages</span>
+                            <span className="chip chip--blue">{t('chatbot.pagesCount', { count: group.pages.length })}</span>
                           </h3>
-                          <p>{group.ownerId || 'Unknown user'}</p>
+                          <p>{group.ownerId || t('chatbot.unknownUser')}</p>
                         </div>
                       </div>
                       <div className="facebook-user-group__actions">
@@ -943,8 +946,8 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                           type="button"
                           disabled={!group.ownerId}
                           onClick={() => handleRevokeFacebookAccount(group)}
-                          aria-label={`Revoke ${group.ownerName}`}
-                          title="Revoke account"
+                          aria-label={t('chatbot.revokeAccount', { name: group.ownerName })}
+                          title={t('chatbot.revokeAccount', { name: group.ownerName })}
                         >
                           <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
                             <path d="M9 3h6l1 2h4v2H4V5h4l1-2Z" />
@@ -974,7 +977,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                                 type="button"
                                 onClick={() => handleDisconnectPage(page)}
                               >
-                                Disconnect
+                                {t('chatbot.disconnect')}
                               </button>
                             ) : (
                               <button
@@ -983,7 +986,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                                 disabled={!page.canManage}
                                 onClick={() => handleConnectPage(page.id)}
                               >
-                                Connect
+                                {t('chatbot.connect')}
                               </button>
                             )}
                           </div>
@@ -994,7 +997,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                 ))}
               </div>
             ) : (
-              <div className="section-card__meta">No Pages are available yet.</div>
+              <div className="section-card__meta">{t('chatbot.noPages')}</div>
             )}
           </section>
         </>
@@ -1016,7 +1019,11 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
 
       {activeSection !== 'chat' ? (
         <section className="page__hero" id="dashboard">
-          <h1 className="page__title">{heroTitle}</h1>
+          <h1 className="page__title">{{
+            dashboard: t('chatbot.dashboardTitle'),
+            'chat-setting': t('chatbot.settingsTitle'),
+            orders: t('chatbot.ordersTitle'),
+          }[activeSection] || heroTitle}</h1>
           {activeSection !== 'dashboard' && heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
         </section>
       ) : null}

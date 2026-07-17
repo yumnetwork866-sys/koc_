@@ -1,11 +1,13 @@
 import React from 'react';
 import LegalPage from '../../components/LegalPage';
-import { PrivacyContent } from './legalContent';
+import { PrivacyContent, PrivacyContentVi } from './legalContent';
+import { useI18n } from '../../lib/language';
 
 const PrivacyPage = () => {
+  const { t, isVietnamese } = useI18n();
   return (
-    <LegalPage title="Yumnetwork Privacy Policy" updatedAt="July 1, 2026">
-      <PrivacyContent />
+    <LegalPage title={t('legal.privacyTitle')} updatedAt={t('legal.updatedAt')}>
+      {isVietnamese ? <PrivacyContentVi /> : <PrivacyContent />}
     </LegalPage>
   );
 };

@@ -84,7 +84,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
     <div className="page dashboard-page">
       <section className="page__hero dashboard-hero">
         <div className="dashboard-hero__copy">
-          <div className="dashboard-hero__eyebrow">TikTok analytics</div>
+          <div className="dashboard-hero__eyebrow">{t('dashboard.eyebrow')}</div>
           <h1 className="page__title">{t('dashboard.heroTitle') || heroTitle}</h1>
         </div>
 
@@ -107,7 +107,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
               <p className="stat-card__value">{formatNumber(kpis?.overview?.totalShares)}</p>
             </article>
             <article className="stat-card stat-card--soft">
-              <p className="stat-card__label">Top user</p>
+              <p className="stat-card__label">{t('dashboard.topUser')}</p>
               <p className="stat-card__value stat-card__value--small">{topUser?.name || '-'}</p>
             </article>
           </div>

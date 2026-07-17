@@ -1,7 +1,9 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useI18n } from '../lib/language';
 
 const Footer = () => {
+  const { t } = useI18n();
   return (
     <footer className="footer">
       <div className="footer__inner">
@@ -10,17 +12,17 @@ const Footer = () => {
         </div>
 
         <div className="footer__card">
-          <span className="footer__card-label">Legal</span>
+          <span className="footer__card-label">{t('shell.legal')}</span>
           <div className="footer__links">
-            <a href="/#contact" className="footer__link">Support</a>
+            <a href="/#contact" className="footer__link">{t('shell.support')}</a>
             <NavLink to="/terms" className="footer__link">
-              Terms of Service
+              {t('home.terms')}
             </NavLink>
             <NavLink to="/privacy" className="footer__link">
-              Privacy Policy
+              {t('home.privacy')}
             </NavLink>
             <NavLink to="/data-deletion" className="footer__link">
-              Data Deletion
+              {t('home.dataDeletion')}
             </NavLink>
           </div>
         </div>

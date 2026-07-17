@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   createRole, createUser, deleteRole, deleteUser, fetchRoles, fetchUsers, updateRole, updateUser,
 } from '../lib/api';
+import { useI18n } from '../lib/language';
 
 const initialForm = {
   name: '',
@@ -30,6 +31,7 @@ const createRoleKey = (label) => String(label || '')
   .slice(0, 64);
 
 const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
+  const { t } = useI18n();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState(fallbackRoles);
   const [form, setForm] = useState(initialForm);
@@ -68,7 +70,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         await loadData(controller.signal);
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setError(err.message || 'Failed to load users');
+          setError(err.message || t('users.loadError'));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -80,7 +82,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
     load();
 
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!isEditorOpen) return undefined;
@@ -192,14 +194,14 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       setRoles(await fetchRoles());
       resetRoleForm();
     } catch (err) {
-      setRoleError(err.message || 'Không lưu được role');
+      setRoleError(err.message || t('users.roleSaveError'));
     } finally {
       setRoleSaving(false);
     }
   };
 
   const handleDeleteRole = async (role) => {
-    if (!window.confirm(`Xóa role "${role.label}"?`)) return;
+    if (!window.confirm(t('users.roleDeleteConfirm', { name: role.label }))) return;
     try {
       setRoleError('');
       await deleteRole(role.key);
@@ -207,7 +209,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       if (roleFilter === role.key) setRoleFilter('all');
       resetRoleForm();
     } catch (err) {
-      setRoleError(err.message || 'Không xóa được role');
+      setRoleError(err.message || t('users.roleDeleteError'));
     }
   };
 
@@ -267,14 +269,14 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       closeEditor();
       await loadData();
     } catch (err) {
-      setError(err.message || (editingUser ? 'Không cập nhật được user' : 'Không tạo được user'));
+      setError(err.message || t(editingUser ? 'users.updateError' : 'users.createError'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (user) => {
-    const confirmed = window.confirm(`Xóa user "${user.name}" <${user.email}>?`);
+    const confirmed = window.confirm(t('users.deleteConfirm', { name: user.name, email: user.email }));
     if (!confirmed) {
       return;
     }
@@ -285,7 +287,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       await deleteUser(user.id);
       await loadData();
     } catch (err) {
-      setError(err.message || 'Không xóa được user');
+      setError(err.message || t('users.deleteError'));
     } finally {
       setDeletingId(null);
     }
@@ -300,7 +302,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         current.map((item) => (item.id === user.id ? { ...item, role: updatedUser.role } : item))
       );
     } catch (err) {
-      setError(err.message || 'Không cập nhật được role');
+      setError(err.message || t('users.roleUpdateError'));
     } finally {
       setUpdatingRoleId(null);
     }
@@ -315,23 +317,23 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
     <div className="page employee-table-page">
       <section className="page__hero employee-table__hero">
         <div className="employee-table__hero-copy">
-          <div className="employee-table__eyebrow">Quản trị hệ thống</div>
-          <h1 className="page__title">{heroTitle}</h1>
+          <div className="employee-table__eyebrow">{t('users.eyebrow')}</div>
+          <h1 className="page__title">{t('users.heroTitle') || heroTitle}</h1>
           {heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
         </div>
 
         <div className="employee-table__hero-actions">
           <button className="button button--ghost" type="button" onClick={openRoleManager}>
-            Quản lý vai trò
+            {t('users.manageRoles')}
           </button>
           <button className="button" type="button" onClick={openCreateModal}>
-            Tạo user
+            {t('users.create')}
           </button>
         </div>
       </section>
 
-      <section className="employee-table__summary" aria-label="Thống kê người dùng">
-        {[{ key: 'all', label: 'Tất cả' }, ...roles].map((role) => (
+      <section className="employee-table__summary" aria-label={t('users.summaryLabel')}>
+        {[{ key: 'all', label: t('users.all') }, ...roles].map((role) => (
           <button
             key={role.key}
             className={`employee-table__summary-item${roleFilter === role.key ? ' is-active' : ''}`}
@@ -354,31 +356,31 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card employee-table__table-card">
         <div className="section-card__header section-card__header--compact">
           <div>
-            <h2 className="section-card__title">Danh sách người dùng</h2>
+            <h2 className="section-card__title">{t('users.list')}</h2>
             <p className="section-card__meta">
-              Đang hiển thị {filteredRows.length} trên {rows.length} tài khoản
+              {t('users.showing', { visible: filteredRows.length, total: rows.length })}
             </p>
           </div>
         </div>
 
         <div className="employee-table__toolbar">
           <div className="employee-table__search">
-            <label className="sr-only" htmlFor="user-search">Tìm kiếm người dùng</label>
+            <label className="sr-only" htmlFor="user-search">{t('users.search')}</label>
             <input
               id="user-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Tìm theo tên hoặc email"
+              placeholder={t('users.searchPlaceholder')}
             />
           </div>
           <div className="employee-table__role-filter employee-table__select-wrap">
-            <label className="sr-only" htmlFor="user-role-filter">Lọc theo vai trò</label>
+            <label className="sr-only" htmlFor="user-role-filter">{t('users.filterRole')}</label>
             <select
               id="user-role-filter"
               value={roleFilter}
               onChange={(event) => setRoleFilter(event.target.value)}
             >
-              <option value="all">Tất cả vai trò</option>
+              <option value="all">{t('users.allRoles')}</option>
               {roleOptions.map((role) => (
                 <option key={role} value={role}>{getRoleLabel(role)}</option>
               ))}
@@ -394,7 +396,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               }}
               disabled={!activeFilters}
             >
-              Xóa lọc
+              {t('users.clearFilter')}
             </button>
           ) : null}
         </div>
@@ -403,9 +405,9 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           <table className="data-table employee-table__data-table">
             <thead>
               <tr>
-                <th>Tài khoản</th>
-                <th>Vai trò</th>
-                <th className="cell-actions">Thao tác</th>
+                <th>{t('users.account')}</th>
+                <th>{t('users.role')}</th>
+                <th className="cell-actions">{t('users.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -414,7 +416,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                   <td className="table-state-cell" colSpan={3}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
-                      <div>Đang tải user</div>
+                      <div>{t('users.loading')}</div>
                     </div>
                   </td>
                 </tr>
@@ -438,7 +440,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                         value={user.role}
                         onChange={(event) => handleRoleChange(user, event.target.value)}
                         disabled={updatingRoleId === user.id}
-                        aria-label={`Đổi vai trò cho ${user.name}`}
+                        aria-label={t('users.changeRole', { name: user.name })}
                       >
                         {roleOptions.map((role) => (
                           <option key={role} value={role}>{getRoleLabel(role)}</option>
@@ -452,7 +454,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                           className="action-menu__trigger"
                           aria-haspopup="menu"
                           aria-expanded={openActions.id === user.id}
-                          aria-label={`Mở thao tác cho ${user.name}`}
+                          aria-label={t('users.openActions', { name: user.name })}
                           onClick={(event) => toggleActionsMenu(user.id, event.currentTarget)}
                         >
                           ...
@@ -477,7 +479,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                               openEditModal(user);
                             }}
                           >
-                            Sửa
+                            {t('users.edit')}
                           </button>
                           <button
                             type="button"
@@ -489,7 +491,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                             }}
                             disabled={deletingId === user.id}
                           >
-                            {deletingId === user.id ? 'Đang xóa' : 'Xóa'}
+                            {deletingId === user.id ? t('users.deleting') : t('users.delete')}
                           </button>
                         </div>
                         ) : null}
@@ -501,7 +503,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                 <tr className="table-state-row">
                   <td className="table-state-cell" colSpan={3}>
                     <div className="empty-state empty-state--compact table-empty-state">
-                      <div>Không có user khớp bộ lọc hiện tại.</div>
+                      <div>{t('users.noMatch')}</div>
                     </div>
                   </td>
                 </tr>
@@ -521,21 +523,21 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           >
             <div className="employee-table__modal-header">
               <div>
-                <span className="employee-table__modal-eyebrow">Tài khoản</span>
+                <span className="employee-table__modal-eyebrow">{t('users.account')}</span>
                 <h2 id="user-editor-title" className="section-card__title">
-                  {editingUser ? 'Chỉnh sửa người dùng' : 'Tạo người dùng mới'}
+                  {editingUser ? t('users.editorEdit') : t('users.editorCreate')}
                 </h2>
                 <p className="section-card__meta">
                   {editingUser
-                    ? `Cập nhật hồ sơ và role cho ${editingUser.name}.`
-                    : 'Tạo tài khoản mới cho hệ thống.'}
+                    ? t('users.editMeta', { name: editingUser.name })
+                    : t('users.createMeta')}
                 </p>
               </div>
               <button
                 className="employee-table__modal-close"
                 type="button"
                 onClick={closeEditor}
-                aria-label="Đóng"
+                aria-label={t('users.close')}
               >
                 ×
               </button>
@@ -549,7 +551,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
 
             <form className="employee-table__modal-form" onSubmit={handleSubmit}>
               <div className="field">
-                <label htmlFor="name">Họ và tên</label>
+                <label htmlFor="name">{t('users.fullName')}</label>
                 <input id="name" name="name" value={form.name} onChange={handleChange} required placeholder="Nguyễn Văn A" />
               </div>
               {!editingUser ? (
@@ -559,7 +561,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                     <input id="email" name="email" type="email" value={form.email} onChange={handleChange} required placeholder="name@company.com" />
                   </div>
                   <div className="field">
-                    <label htmlFor="password">Mật khẩu</label>
+                    <label htmlFor="password">{t('users.password')}</label>
                     <input
                       id="password"
                       name="password"
@@ -569,16 +571,16 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                       autoComplete="new-password"
                       minLength="8"
                       required
-                      placeholder="Tối thiểu 8 ký tự"
+                      placeholder={t('users.passwordPlaceholder')}
                     />
                     <p className="employee-table__field-hint">
-                      Dùng tối thiểu 8 ký tự.
+                      {t('users.passwordHint')}
                     </p>
                   </div>
                 </>
               ) : null}
               <div className="field">
-                <label htmlFor="role">Vai trò</label>
+                <label htmlFor="role">{t('users.role')}</label>
                 <select id="role" name="role" value={form.role} onChange={handleChange}>
                   {roleOptions.map((role) => (
                     <option key={role} value={role}>{getRoleLabel(role)}</option>
@@ -587,10 +589,10 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               </div>
               <div className="actions employee-table__modal-actions">
                 <button className="button button--ghost" type="button" onClick={closeEditor} disabled={saving}>
-                  Hủy
+                  {t('users.cancel')}
                 </button>
                 <button className="button" type="submit" disabled={saving}>
-                  {saving ? (editingUser ? 'Đang lưu' : 'Đang tạo') : (editingUser ? 'Lưu thay đổi' : 'Tạo user')}
+                  {saving ? (editingUser ? t('users.saving') : t('users.creating')) : (editingUser ? t('users.save') : t('users.create'))}
                 </button>
               </div>
             </form>
@@ -605,9 +607,9 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           <div className="modal-card employee-table__role-modal" role="dialog" aria-modal="true" aria-labelledby="role-manager-title">
             <div className="employee-table__modal-header employee-table__modal-header--roles">
               <div>
-                <h2 id="role-manager-title" className="section-card__title">Quản lý vai trò</h2>
+                <h2 id="role-manager-title" className="section-card__title">{t('users.manageRoles')}</h2>
               </div>
-              <button className="employee-table__modal-close" type="button" onClick={() => setIsRoleManagerOpen(false)} aria-label="Đóng">×</button>
+              <button className="employee-table__modal-close" type="button" onClick={() => setIsRoleManagerOpen(false)} aria-label={t('users.close')}>×</button>
             </div>
 
             {roleError ? <div className="employee-table__modal-error empty-state empty-state--compact">{roleError}</div> : null}
@@ -615,8 +617,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
             <div className="employee-table__role-manager">
               <section className="employee-table__role-list-panel">
                 <div className="employee-table__role-panel-heading">
-                  <div><strong>Danh sách vai trò</strong><span>{roles.length} vai trò</span></div>
-                  <button className="button button--ghost button--small" type="button" onClick={resetRoleForm}>+ Thêm mới</button>
+                  <div><strong>{t('users.roleList')}</strong><span>{t('users.roleCount', { count: roles.length })}</span></div>
+                  <button className="button button--ghost button--small" type="button" onClick={resetRoleForm}>{t('users.addRole')}</button>
                 </div>
                 <div className="employee-table__role-list">
                   {roles.map((role) => (
@@ -625,13 +627,13 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                       <span>
                         <span className="employee-table__role-name">
                           <strong>{role.label}</strong>
-                          {!role.is_system ? <em>Tùy chỉnh</em> : null}
+                          {!role.is_system ? <em>{t('users.customRole')}</em> : null}
                         </span>
                       </span>
-                      <span>{role.user_count || 0} người</span>
+                      <span>{t('users.userCount', { count: role.user_count || 0 })}</span>
                     </button>
                     {!role.is_system ? (
-                      <button className="button button--ghost button--small button--danger" type="button" onClick={() => handleDeleteRole(role)}>Xóa</button>
+                      <button className="button button--ghost button--small button--danger" type="button" onClick={() => handleDeleteRole(role)}>{t('users.delete')}</button>
                     ) : null}
                   </div>
                   ))}
@@ -642,7 +644,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                 <div className="field">
                   <input
                     id="role-label"
-                    aria-label="Tên vai trò"
+                    aria-label={t('users.roleName')}
                     value={roleForm.label}
                     required
                     onChange={(event) => setRoleForm((current) => ({
@@ -650,12 +652,12 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                       label: event.target.value,
                       key: editingRoleKey ? current.key : createRoleKey(event.target.value),
                     }))}
-                    placeholder="Ví dụ: Biên tập viên"
+                    placeholder={t('users.rolePlaceholder')}
                   />
                 </div>
                 <div className="actions">
-                  {editingRoleKey ? <button className="button button--ghost" type="button" onClick={resetRoleForm}>Hủy sửa</button> : null}
-                  <button className="button" type="submit" disabled={roleSaving}>{roleSaving ? 'Đang lưu' : (editingRoleKey ? 'Lưu thay đổi' : 'Tạo vai trò')}</button>
+                  {editingRoleKey ? <button className="button button--ghost" type="button" onClick={resetRoleForm}>{t('users.cancelEdit')}</button> : null}
+                  <button className="button" type="submit" disabled={roleSaving}>{roleSaving ? t('users.saving') : (editingRoleKey ? t('users.save') : t('users.createRole'))}</button>
                 </div>
               </form>
             </div>

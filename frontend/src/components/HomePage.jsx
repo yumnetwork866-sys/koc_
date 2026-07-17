@@ -3,43 +3,24 @@ import { Link } from 'react-router-dom';
 import { PLATFORMS } from '../lib/platforms';
 import { useI18n } from '../lib/language';
 
-const productHighlights = [
-  {
-    title: 'Platform reporting',
-    description: 'Connect supported platforms, sync approved metrics, and review performance by user or workspace.',
-  },
-  {
-    title: 'Messaging automation',
-    description: 'Connect messaging channels, receive conversations, and manage responses and knowledge.',
-  },
-  {
-    title: 'Weekly outputs',
-    description: 'Generate summaries for selected reporting windows and save them for review.',
-  },
-];
-
-const processSteps = [
-  {
-    title: 'Connect',
-    description: 'Add approved sources and verify access.',
-  },
-  {
-    title: 'Organize',
-    description: 'Map videos to the right owners.',
-  },
-  {
-    title: 'Report',
-    description: 'Review outputs and share the result.',
-  },
-];
-
 const HomePage = () => {
   const { t } = useI18n();
+  const productHighlights = [
+    { title: t('home.featureReporting'), description: t('home.featureReportingMeta') },
+    { title: t('home.featureMessaging'), description: t('home.featureMessagingMeta') },
+    { title: t('home.featureWeekly'), description: t('home.featureWeeklyMeta') },
+  ];
+  const processSteps = [
+    { title: t('home.stepConnect'), description: t('home.stepConnectMeta') },
+    { title: t('home.stepOrganize'), description: t('home.stepOrganizeMeta') },
+    { title: t('home.stepReport'), description: t('home.stepReportMeta') },
+  ];
   const privacyContactEmail = import.meta.env.VITE_PRIVACY_CONTACT_EMAIL || 'privacy@yumnetwork.vn';
   const platformHighlights = PLATFORMS.map((platform) => ({
     title: platform.label,
-    description: platform.description,
-    status: platform.status,
+    description: platform.status === 'active' ? t('home.primaryPlatform') : t('home.comingSoon'),
+    status: platform.status === 'active' ? t('home.active') : t('home.comingSoon'),
+    statusKey: platform.status,
   }));
 
   return (
@@ -47,7 +28,7 @@ const HomePage = () => {
       <section className="page__hero home-page__hero" id="overview">
         <div className="home-page__hero-copy">
           <h1 className="page__title">{t('home.heroTitle')}</h1>
-          <div className="home-page__hero-badges" aria-label="Quick summary">
+          <div className="home-page__hero-badges" aria-label={t('home.quickSummary')}>
             {t('home.heroBadges')?.map((badge) => (
               <span className="home-page__badge" key={badge}>
                 {badge}
@@ -61,7 +42,7 @@ const HomePage = () => {
           </div>
         </div>
 
-        <aside className="section-card home-page__hero-card" aria-label="Platform summary">
+        <aside className="section-card home-page__hero-card" aria-label={t('home.platformSummary')}>
           <div className="section-card__header home-page__hero-card-header">
             <div>
               <p className="home-page__card-kicker">{t('home.atAGlance')}</p>
@@ -96,10 +77,10 @@ const HomePage = () => {
 
         <div className="platform-grid">
           {platformHighlights.map((platform) => (
-            <article className={`platform-card platform-card--${platform.status}`} key={platform.title}>
+            <article className={`platform-card platform-card--${platform.statusKey}`} key={platform.title}>
               <div className="metric-item__head">
                 <span>{platform.title}</span>
-                <span className={`chip ${platform.status === 'active' ? 'chip--positive' : 'chip--amber'}`}>
+                <span className={`chip ${platform.statusKey === 'active' ? 'chip--positive' : 'chip--amber'}`}>
                   {platform.status}
                 </span>
               </div>
@@ -149,14 +130,13 @@ const HomePage = () => {
           </div>
 
           <div className="chip-row">
-            <span className="chip chip--blue">Server-side OAuth</span>
-            <span className="chip chip--positive">Role-based access</span>
-            <span className="chip chip--amber">No public data exposure</span>
+            <span className="chip chip--blue">{t('home.serverOauth')}</span>
+            <span className="chip chip--positive">{t('home.roleAccess')}</span>
+            <span className="chip chip--amber">{t('home.noPublicExposure')}</span>
           </div>
 
           <p className="home-page__copy">
-            Supported platform connections are optional. We use approved data only to connect the platform, sync
-            reporting, and show it to authorized workspace users. You can disconnect access at any time.
+            {t('home.dataUsage')}
           </p>
         </article>
       </section>
@@ -181,9 +161,9 @@ const HomePage = () => {
       </section>
 
       <section className="home-page__legal-links" aria-label={t('home.legalLinks')}>
-        <Link to="/terms">Terms of Service</Link>
-        <Link to="/privacy">Privacy Policy</Link>
-        <Link to="/data-deletion">Data Deletion</Link>
+        <Link to="/terms">{t('home.terms')}</Link>
+        <Link to="/privacy">{t('home.privacy')}</Link>
+        <Link to="/data-deletion">{t('home.dataDeletion')}</Link>
       </section>
     </main>
   );

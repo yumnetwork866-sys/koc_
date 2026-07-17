@@ -6,12 +6,14 @@ import ProtectedLayout from './layouts/ProtectedLayout';
 import { protectedRedirectConfig, protectedRouteConfig, publicRouteConfig } from './routes/appRouteConfig';
 import './App.css';
 import './design-system.css';
+import { useI18n } from './lib/language';
 
 const renderRoutes = (routeConfig) => routeConfig.map((route) => (
   <Route key={route.path} path={route.path} element={route.element} />
 ));
 
 function App() {
+  const { t } = useI18n();
   return (
     <Router>
       <AppErrorBoundary>
@@ -21,7 +23,7 @@ function App() {
               <div className="page">
                 <section className="section-card empty-state">
                   <div className="loading-dot" />
-                  <div>Đang tải nội dung...</div>
+                  <div>{t('shell.loadingContent')}</div>
                 </section>
               </div>
             </div>

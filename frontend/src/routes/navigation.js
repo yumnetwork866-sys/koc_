@@ -1,4 +1,5 @@
 export const topNavItems = [
+  { to: '/manage/koc-performance', label: 'TikTok Shop' },
   { to: '/dashboard', label: 'TikTok' },
   { to: '/chatbot', label: 'Facebook' },
   { to: '/manage/users', label: 'Admin', adminOnly: true },
@@ -8,29 +9,34 @@ export const sidebarSections = [
   {
     title: 'TikTok',
     items: [
-      { to: '/dashboard', label: 'Dashboard' },
-      { to: '/manage/koc-performance', label: 'KOC performance' },
-      { to: '/manage/shop-analytics', label: 'Shop analytics' },
-      { to: '/bookings', label: 'Bookings' },
-      { to: '/manage/channels', label: 'Channels' },
-      { to: '/videos', label: 'Videos' },
-      { to: '/reports', label: 'Reports' },
+      { to: '/dashboard', labelKey: 'navigation.dashboard' },
+      { to: '/manage/channels', labelKey: 'navigation.channels' },
+      { to: '/videos', labelKey: 'navigation.videos' },
+    ],
+  },
+  {
+    title: 'TikTok Shop',
+    items: [
+      { to: '/manage/koc-performance', labelKey: 'navigation.kocPerformance' },
+      { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
+      { to: '/bookings', labelKey: 'navigation.bookings' },
+      { to: '/reports', labelKey: 'navigation.reports' },
     ],
   },
   {
     title: 'Facebook',
     items: [
-      { to: '/chatbot/dashboard', label: 'Dashboard' },
-      { to: '/chatbot/chat', label: 'Chat' },
-      { to: '/chatbot/orders', label: 'Đơn hàng' },
+      { to: '/chatbot/dashboard', labelKey: 'navigation.dashboard' },
+      { to: '/chatbot/chat', labelKey: 'navigation.chat' },
+      { to: '/chatbot/orders', labelKey: 'navigation.orders' },
     ],
   },
   {
     title: 'Admin',
     items: [
-      { to: '/manage/users', label: 'Users', adminOnly: true },
-      { to: '/manage/schedules', label: 'Schedule', adminOnly: true },
-      { to: '/chatbot/chat-setting', label: 'Chat setting', adminOnly: true },
+      { to: '/manage/users', labelKey: 'navigation.users', adminOnly: true },
+      { to: '/manage/schedules', labelKey: 'navigation.schedule', adminOnly: true },
+      { to: '/chatbot/chat-setting', labelKey: 'navigation.chatSettings', adminOnly: true },
     ],
   },
 ];

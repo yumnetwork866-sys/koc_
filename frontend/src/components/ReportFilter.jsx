@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { fetchReports, generateWeeklyReport } from '../lib/api';
+import { useI18n } from '../lib/language';
 
 const getMonday = () => {
   const date = new Date();
@@ -14,7 +15,8 @@ const addDays = (dateText, days) => {
   return date.toISOString().slice(0, 10);
 };
 
-const ReportFilter = ({ heroTitle, heroSubtitle }) => {
+const ReportFilter = ({ heroTitle }) => {
+  const { t } = useI18n();
   const [reports, setReports] = useState([]);
   const [weekStart, setWeekStart] = useState(getMonday());
   const [weekEnd, setWeekEnd] = useState(addDays(getMonday(), 6));
@@ -37,7 +39,7 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
         await loadReports(controller.signal);
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setError(err.message || 'Failed to load reports');
+          setError(err.message || t('reports.loadError'));
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -49,7 +51,7 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
     load();
 
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   const latestReport = useMemo(() => reports[0] || null, [reports]);
 
@@ -65,7 +67,7 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
       });
       await loadReports();
     } catch (err) {
-      setError(err.message || 'Không generate được báo cáo');
+      setError(err.message || t('reports.generateError'));
     } finally {
       setGenerating(false);
     }
@@ -74,18 +76,18 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
   return (
     <div className="page">
       <section className="page__hero">
-        <h1 className="page__title">{heroTitle}</h1>
+        <h1 className="page__title">{t('reports.heroTitle') || heroTitle}</h1>
         <div className="page__stats">
           <article className="stat-card">
-            <p className="stat-card__label">Reports</p>
+            <p className="stat-card__label">{t('reports.count')}</p>
             <p className="stat-card__value">{reports.length}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Latest start</p>
+            <p className="stat-card__label">{t('reports.latestStart')}</p>
             <p className="stat-card__value stat-card__value--small">{latestReport?.week_start || '-'}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">Latest end</p>
+            <p className="stat-card__label">{t('reports.latestEnd')}</p>
             <p className="stat-card__value stat-card__value--small">{latestReport?.week_end || '-'}</p>
           </article>
         </div>
@@ -96,22 +98,22 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Generate weekly report</h2>
+            <h2 className="section-card__title">{t('reports.generateTitle')}</h2>
           </div>
         </div>
 
         <form className="filter-panel" onSubmit={handleGenerate}>
           <div className="field">
-            <label htmlFor="week_start">Week start</label>
+            <label htmlFor="week_start">{t('reports.weekStart')}</label>
             <input id="week_start" type="date" value={weekStart} onChange={(event) => setWeekStart(event.target.value)} />
           </div>
           <div className="field">
-            <label htmlFor="week_end">Week end</label>
+            <label htmlFor="week_end">{t('reports.weekEnd')}</label>
             <input id="week_end" type="date" value={weekEnd} onChange={(event) => setWeekEnd(event.target.value)} />
           </div>
           <div className="actions">
             <button className="button" type="submit" disabled={generating}>
-              {generating ? 'Đang generate' : 'Generate report'}
+              {generating ? t('reports.generating') : t('reports.generate')}
             </button>
           </div>
         </form>
@@ -120,14 +122,14 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
       <section className="section-card">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Danh sách báo cáo</h2>
+            <h2 className="section-card__title">{t('reports.list')}</h2>
           </div>
         </div>
 
         {loading ? (
           <div className="empty-state">
             <div className="loading-dot" />
-            <div>Đang tải báo cáo</div>
+            <div>{t('reports.loading')}</div>
           </div>
         ) : reports.length ? (
           <div className="metric-list">
@@ -135,14 +137,14 @@ const ReportFilter = ({ heroTitle, heroSubtitle }) => {
               <article className="metric-item report-block" key={report.id}>
                 <div className="metric-item__head">
                   <span>{report.week_start} - {report.week_end}</span>
-                  <span className="chip chip--blue">AI weekly report</span>
+                  <span className="chip chip--blue">{t('reports.type')}</span>
                 </div>
                 <pre className="report-content">{report.generated_content}</pre>
               </article>
             ))}
           </div>
         ) : (
-          <div className="empty-state">Chưa có báo cáo tuần.</div>
+          <div className="empty-state">{t('reports.empty')}</div>
         )}
       </section>
     </div>

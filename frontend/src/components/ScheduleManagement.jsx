@@ -97,7 +97,7 @@ const ScheduleManagement = ({ heroTitle, heroSubtitle }) => {
   return (
     <div className="page schedule-page">
       <section className="page__hero">
-        <div><p className="page__eyebrow">Admin</p><h1>{heroTitle || t('schedule.title')}</h1><p>{heroSubtitle || t('schedule.subtitle')}</p></div>
+        <div><p className="page__eyebrow">Admin</p><h1>{t('schedule.title') || heroTitle}</h1><p>{t('schedule.subtitle') || heroSubtitle}</p></div>
       </section>
       {error ? <section className="section-card empty-state empty-state--compact" role="alert">{error}</section> : null}
       {notice ? <section className="section-card empty-state empty-state--compact" role="status">{notice}</section> : null}

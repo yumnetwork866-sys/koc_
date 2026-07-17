@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { isAdminSession } from '../lib/session';
 import { useSession } from '../lib/useSession';
 import { sidebarSections } from '../routes/navigation';
+import { useI18n } from '../lib/language';
 
 const sidebarIcons = {
   dashboard: [
@@ -129,12 +130,19 @@ const PlatformIcon = ({ type }) => (
 );
 
 const Sidebar = ({ isCollapsed, onToggle }) => {
+  const { t } = useI18n();
   const location = useLocation();
   const session = useSession();
   const isAdminArea = location.pathname.startsWith('/manage/users') || location.pathname.startsWith('/manage/schedules') || location.pathname.startsWith('/chatbot/chat-setting');
   const isFacebookArea = location.pathname.startsWith('/chatbot');
+  const isTikTokShopArea = [
+    '/manage/koc-performance',
+    '/manage/shop-analytics',
+    '/bookings',
+    '/reports',
+  ].some((prefix) => location.pathname.startsWith(prefix));
   const adminVisible = isAdminSession(session);
-  const activeSectionTitle = isAdminArea ? 'Admin' : isFacebookArea ? 'Facebook' : 'TikTok';
+  const activeSectionTitle = isAdminArea ? 'Admin' : isFacebookArea ? 'Facebook' : isTikTokShopArea ? 'TikTok Shop' : 'TikTok';
   const visibleSections = sidebarSections.filter((section) => section.title === activeSectionTitle);
 
   return (
@@ -148,14 +156,14 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           type="button"
           className="sidebar__toggle"
           onClick={onToggle}
-          aria-label={isCollapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}
+          aria-label={isCollapsed ? t('navigation.expand') : t('navigation.collapse')}
           aria-expanded={!isCollapsed}
-          title={isCollapsed ? 'Mở rộng' : 'Thu gọn'}
+          title={isCollapsed ? t('navigation.expand') : t('navigation.collapse')}
         >
           <CollapseIcon isCollapsed={isCollapsed} />
         </button>
       </div>
-      <nav className="sidebar__nav" aria-label="Workspace">
+      <nav className="sidebar__nav" aria-label={t('navigation.workspace')}>
         {visibleSections.map((section) => (
           <div className="sidebar__section" key={section.title}>
             <div className="sidebar__section-links">
@@ -166,10 +174,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
                     key={item.to}
                     to={item.to}
                     className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
-                    title={item.label}
+                    title={t(item.labelKey)}
                   >
                     <SidebarIcon name={routeIconMap[item.to]} />
-                    <span className="sidebar__link-label">{item.label}</span>
+                    <span className="sidebar__link-label">{t(item.labelKey)}</span>
                   </NavLink>
                 ))}
             </div>
