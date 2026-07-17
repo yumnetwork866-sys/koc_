@@ -39,6 +39,23 @@ const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
 const sellerAffiliateCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs, maxEntries: 1000 });
 const creatorProfileRefreshJobs = new Map();
 const creatorProfileRefreshKey = (shopId, exportId) => `${shopId}:${exportId}`;
+const startCreatorProfileRefresh = (shop, exportRecord, { force = false } = {}) => {
+  if (!shop || !exportRecord) return false;
+  const refreshKey = creatorProfileRefreshKey(shop.id, exportRecord.id);
+  const existing = creatorProfileRefreshJobs.get(refreshKey);
+  if (existing?.status === 'PROCESSING') return false;
+  const completedAt = existing?.completed_at ? new Date(existing.completed_at).getTime() : 0;
+  if (!force && completedAt > Date.now() - 6 * 60 * 60 * 1000) return false;
+  creatorProfileRefreshJobs.set(refreshKey, { status: 'PROCESSING', started_at: new Date() });
+  setImmediate(() => refreshCreatorPerformanceProfiles(shop, exportRecord).then((count) => {
+    creatorProfileRefreshJobs.set(refreshKey, { status: 'SUCCEEDED', count, completed_at: new Date() });
+    console.log('[Creator Performance] Profiles refreshed', { shopId: shop.id, taskId: exportRecord.task_id, count });
+  }).catch((error) => {
+    creatorProfileRefreshJobs.set(refreshKey, { status: 'FAILED', error: error.message, completed_at: new Date() });
+    console.error('[Creator Performance] Profile refresh failed', { shopId: shop.id, taskId: exportRecord.task_id, message: error.message });
+  }));
+  return true;
+};
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3005';
 const redirectUrl = (status, message, returnPath = '/manage/shop-analytics') => {
@@ -292,6 +309,30 @@ const mapWithConcurrency = async (items, concurrency, mapper) => {
   return results;
 };
 
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const targetDetailRetryCodes = new Set([36009002, 36009037]);
+const getTargetCollaborationWithRetry = async (shop, collaborationId) => {
+  const retryCount = Math.min(5, Math.max(0, Number(process.env.TIKTOK_TARGET_DETAIL_RETRY_COUNT ?? 3) || 0));
+  let lastError;
+  for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+    try {
+      return await getTargetCollaboration({
+        authorization: shop.authorization,
+        shopCipher: shop.cipher,
+        collaborationId,
+      });
+    } catch (error) {
+      lastError = error;
+      const rateLimited = targetDetailRetryCodes.has(Number(error.tiktokCode));
+      const transientNetworkError = error.tiktokCode == null
+        && /fetch|network|socket|timeout|aborted/i.test(String(error.message || ''));
+      if (attempt >= retryCount || (!rateLimited && !transientNetworkError)) throw error;
+      await delay(500 * (2 ** attempt));
+    }
+  }
+  throw lastError;
+};
+
 const listOpenCollaborations = affiliateResponse('open-collaborations', (shop, req) => searchOpenCollaborations({
   authorization: shop.authorization,
   shopCipher: shop.cipher,
@@ -310,15 +351,21 @@ const listTargetCollaborations = affiliateResponse('target-collaborations', asyn
     status: ['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'].includes(req.query.status) ? req.query.status : 'ONGOING',
   });
   const rows = Array.isArray(payload.data?.target_collaborations) ? payload.data.target_collaborations : [];
-  const detailedRows = await mapWithConcurrency(rows, 4, async (row) => {
+  // TikTok throttles this detail endpoint much more aggressively than the search
+  // endpoint. Fetch sequentially so a page load does not create a burst of up to
+  // 100 requests; retry only rate limits and transient transport failures.
+  const detailedRows = await mapWithConcurrency(rows, 1, async (row) => {
     try {
-      const detail = await getTargetCollaboration({
-        authorization: shop.authorization,
-        shopCipher: shop.cipher,
-        collaborationId: row.id,
-      });
+      const detail = await getTargetCollaborationWithRetry(shop, row.id);
       return { ...row, ...(detail.data?.target_collaboration || {}) };
-    } catch {
+    } catch (error) {
+      console.warn('[Target Collaborations] Creator detail unavailable', {
+        shopId: shop.id,
+        collaborationId: row.id,
+        code: error.tiktokCode || null,
+        requestId: error.requestId || null,
+        message: error.message,
+      });
       return row;
     }
   });
@@ -483,6 +530,9 @@ const listCreatorPerformance = async (req, res) => {
       shop.id,
       rows.map((row) => row.toJSON()),
     );
+    if (sharedCreatorRows.some((row) => !row.avatar_url)) {
+      startCreatorProfileRefresh(shop, snapshotExport);
+    }
     res.json({
       export: exportRecord,
       snapshot_export: snapshotExport,
@@ -515,33 +565,7 @@ const syncCreatorPerformance = async (req, res) => {
     }
     const profile_refresh_started = exportRecord.status === 'SUCCEEDED';
     if (profile_refresh_started) {
-      const refreshKey = creatorProfileRefreshKey(shop.id, exportRecord.id);
-      if (creatorProfileRefreshJobs.get(refreshKey)?.status !== 'PROCESSING') {
-        creatorProfileRefreshJobs.set(refreshKey, { status: 'PROCESSING', started_at: new Date() });
-        setImmediate(() => refreshCreatorPerformanceProfiles(shop, exportRecord).then((count) => {
-          creatorProfileRefreshJobs.set(refreshKey, {
-            status: 'SUCCEEDED',
-            count,
-            completed_at: new Date(),
-          });
-          console.log('[Creator Performance] Profiles refreshed', {
-            shopId: shop.id,
-            taskId: exportRecord.task_id,
-            count,
-          });
-        }).catch((error) => {
-          creatorProfileRefreshJobs.set(refreshKey, {
-            status: 'FAILED',
-            error: error.message,
-            completed_at: new Date(),
-          });
-          console.error('[Creator Performance] Profile refresh failed', {
-            shopId: shop.id,
-            taskId: exportRecord.task_id,
-            message: error.message,
-          });
-        }));
-      }
+      startCreatorProfileRefresh(shop, exportRecord, { force: true });
     }
     res.status(202).json({
       export: exportRecord,

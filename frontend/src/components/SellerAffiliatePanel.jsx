@@ -28,11 +28,12 @@ const formatStatus = (value, t) => {
 };
 const CreatorAvatar = ({ src, name }) => {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => { setFailed(false); setRetry(0); }, [src]);
   if (!src || failed) {
     return <span className="creator-identity__avatar creator-identity__avatar--fallback">{String(name || 'C').charAt(0)}</span>;
   }
-  return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+  return <img className="creator-identity__avatar" src={retry ? `${src}#avatar-retry` : src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => { if (!retry) setRetry(1); else setFailed(true); }} />;
 };
 const formatReportDate = (value) => {
   const match = String(value || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
