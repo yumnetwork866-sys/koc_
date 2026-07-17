@@ -10,7 +10,7 @@ const serializeJob = async (job) => {
   const runs = await ScheduledJobRun.findAll({
     where: { scheduled_job_id: job.id },
     order: [['started_at', 'DESC']],
-    limit: 10,
+    limit: 30,
   });
   return { ...job.toJSON(), run_count: job.run_times.length, runs };
 };

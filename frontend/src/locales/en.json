@@ -887,6 +887,24 @@
   "schedule": {
     "title": "Schedule management",
     "subtitle": "Configure automated data synchronization jobs.",
+    "overview": "Schedule operations overview",
+    "totalJobs": "Total jobs",
+    "activeJobs": "Active schedules",
+    "runningJobs": "Running now",
+    "failedRuns": "Failed runs",
+    "tabsLabel": "Schedule management sections",
+    "scheduleTab": "Schedules",
+    "logsTab": "Run logs",
+    "logsTitle": "Execution logs",
+    "logsCount": "{{count}} runs",
+    "filterJob": "Filter by job",
+    "filterStatus": "Filter by status",
+    "allJobs": "All jobs",
+    "allStatuses": "All statuses",
+    "refresh": "Refresh",
+    "job": "Job",
+    "error": "Error",
+    "noLogs": "No runs match the selected filters.",
     "loading": "Loading schedules",
     "enabled": "Enabled",
     "disabled": "Disabled",
@@ -894,6 +912,8 @@
     "runsPerDay": "Runs per day",
     "runTimes": "Run times",
     "runNumber": "Run {{number}}",
+    "addRunTime": "Add run time",
+    "removeRunTime": "Remove run time {{number}}",
     "save": "Save schedule",
     "runNow": "Run now",
     "running": "Running",
@@ -911,6 +931,16 @@
     "loadError": "Unable to load schedules.",
     "saveError": "Unable to save schedule.",
     "runError": "Unable to start the job.",
+    "statuses": {
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "processing": "Running",
+      "empty": "Never run"
+    },
+    "triggers": {
+      "manual": "Manual",
+      "scheduled": "Scheduled"
+    },
     "jobs": {
       "tiktok_creator_performance": {
         "name": "TikTok Creator Performance",

@@ -1,4 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Activity,
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+  History,
+  LoaderCircle,
+  Plus,
+  Play,
+  RefreshCw,
+  Save,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
 import { fetchSchedules, runScheduleNow, updateSchedule } from '../lib/api';
 import { useI18n } from '../lib/language';
 
@@ -18,11 +32,26 @@ const formatDateTime = (value, locale) => value
   ? new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(value))
   : '—';
 
-const ScheduleManagement = ({ heroTitle, heroSubtitle }) => {
+const durationInSeconds = (run) => run.completed_at
+  ? Math.max(0, Math.round((new Date(run.completed_at) - new Date(run.started_at)) / 1000))
+  : null;
+
+const ScheduleStatusIcon = ({ status }) => {
+  if (status === 'SUCCEEDED') return <CheckCircle2 aria-hidden="true" />;
+  if (status === 'FAILED') return <XCircle aria-hidden="true" />;
+  if (status === 'PROCESSING') return <LoaderCircle className="is-spinning" aria-hidden="true" />;
+  return <Clock3 aria-hidden="true" />;
+};
+
+const ScheduleManagement = () => {
   const { t, language } = useI18n();
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
   const [schedules, setSchedules] = useState([]);
+  const [activeTab, setActiveTab] = useState('schedules');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [jobFilter, setJobFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [savingKey, setSavingKey] = useState('');
   const [runningKey, setRunningKey] = useState('');
   const [error, setError] = useState('');
@@ -30,6 +59,7 @@ const ScheduleManagement = ({ heroTitle, heroSubtitle }) => {
 
   const load = useCallback(async (signal, quiet = false) => {
     if (!quiet) setLoading(true);
+    else setRefreshing(true);
     try {
       const payload = await fetchSchedules(signal);
       setSchedules(payload.schedules || []);
@@ -37,7 +67,10 @@ const ScheduleManagement = ({ heroTitle, heroSubtitle }) => {
     } catch (err) {
       if (err.name !== 'AbortError') setError(err.message || t('schedule.loadError'));
     } finally {
-      if (!quiet && !signal?.aborted) setLoading(false);
+      if (!signal?.aborted) {
+        if (!quiet) setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [t]);
 
@@ -47,7 +80,15 @@ const ScheduleManagement = ({ heroTitle, heroSubtitle }) => {
     return () => controller.abort();
   }, [load]);
 
-  const hasRunningJob = useMemo(() => schedules.some((schedule) => schedule.runs?.[0]?.status === 'PROCESSING'), [schedules]);
+  const allRuns = useMemo(() => schedules.flatMap((schedule) => (
+    (schedule.runs || []).map((run) => ({ ...run, job_key: schedule.job_key }))
+  )).sort((a, b) => new Date(b.started_at) - new Date(a.started_at)), [schedules]);
+
+  const hasRunningJob = useMemo(
+    () => allRuns.some((run) => run.status === 'PROCESSING'),
+    [allRuns],
+  );
+
   useEffect(() => {
     if (!hasRunningJob) return undefined;
     const controller = new AbortController();
@@ -57,6 +98,15 @@ const ScheduleManagement = ({ heroTitle, heroSubtitle }) => {
       window.clearInterval(interval);
     };
   }, [hasRunningJob, load]);
+
+  const filteredRuns = useMemo(() => allRuns.filter((run) => (
+    (statusFilter === 'ALL' || run.status === statusFilter)
+    && (jobFilter === 'ALL' || run.job_key === jobFilter)
+  )), [allRuns, jobFilter, statusFilter]);
+
+  const enabledCount = schedules.filter((schedule) => schedule.enabled).length;
+  const runningCount = allRuns.filter((run) => run.status === 'PROCESSING').length;
+  const failedCount = allRuns.filter((run) => run.status === 'FAILED').length;
 
   const patchSchedule = (jobKey, patch) => setSchedules((items) => items.map((item) => (
     item.job_key === jobKey ? { ...item, ...patch } : item
@@ -86,6 +136,7 @@ const ScheduleManagement = ({ heroTitle, heroSubtitle }) => {
       setError('');
       await runScheduleNow(schedule.job_key);
       setNotice(t('schedule.started'));
+      setActiveTab('logs');
       await load(undefined, true);
     } catch (err) {
       setError(err.message || t('schedule.runError'));
@@ -94,29 +145,161 @@ const ScheduleManagement = ({ heroTitle, heroSubtitle }) => {
     }
   };
 
+  const statusLabel = (status) => t(`schedule.statuses.${String(status || 'EMPTY').toLowerCase()}`);
+  const triggerLabel = (trigger) => t(`schedule.triggers.${String(trigger || 'SCHEDULED').toLowerCase()}`);
+  const resultLabel = (run) => {
+    if (!run.summary) return '—';
+    const total = run.summary.total ?? run.summary.channels ?? 0;
+    const succeeded = run.summary.succeeded ?? Math.max(0, total - (run.summary.failed ?? 0));
+    return `${succeeded}/${total}`;
+  };
+
   return (
-    <div className="page schedule-page">
-      <section className="page__hero">
-        <div><p className="page__eyebrow">Admin</p><h1>{t('schedule.title') || heroTitle}</h1><p>{t('schedule.subtitle') || heroSubtitle}</p></div>
+    <div className="page schedule-page schedule-page--operations">
+      <section className="page__hero schedule-page__hero">
+        <div>
+          <p className="page__eyebrow">Admin</p>
+          <h1>{t('schedule.title')}</h1>
+        </div>
       </section>
-      {error ? <section className="section-card empty-state empty-state--compact" role="alert">{error}</section> : null}
-      {notice ? <section className="section-card empty-state empty-state--compact" role="status">{notice}</section> : null}
+
+      <section className="schedule-overview" aria-label={t('schedule.overview')}>
+        <article><CalendarClock aria-hidden="true" /><div><span>{t('schedule.totalJobs')}</span><strong>{schedules.length}</strong></div></article>
+        <article><CheckCircle2 aria-hidden="true" /><div><span>{t('schedule.activeJobs')}</span><strong>{enabledCount}</strong></div></article>
+        <article className={runningCount ? 'is-running' : ''}><Activity aria-hidden="true" /><div><span>{t('schedule.runningJobs')}</span><strong>{runningCount}</strong></div></article>
+        <article className={failedCount ? 'is-failed' : ''}><XCircle aria-hidden="true" /><div><span>{t('schedule.failedRuns')}</span><strong>{failedCount}</strong></div></article>
+      </section>
+
+      {error ? <div className="schedule-alert schedule-alert--error" role="alert"><XCircle aria-hidden="true" />{error}</div> : null}
+      {notice ? <div className="schedule-alert schedule-alert--success" role="status"><CheckCircle2 aria-hidden="true" />{notice}<button type="button" aria-label={t('common.close')} onClick={() => setNotice('')}>×</button></div> : null}
+
+      <div className="schedule-tabs" role="tablist" aria-label={t('schedule.tabsLabel')}>
+        <button type="button" role="tab" aria-selected={activeTab === 'schedules'} onClick={() => setActiveTab('schedules')}>
+          <CalendarClock aria-hidden="true" />{t('schedule.scheduleTab')}<span>{schedules.length}</span>
+        </button>
+        <button type="button" role="tab" aria-selected={activeTab === 'logs'} onClick={() => setActiveTab('logs')}>
+          <History aria-hidden="true" />{t('schedule.logsTab')}<span>{allRuns.length}</span>
+        </button>
+      </div>
+
       {loading ? <section className="section-card empty-state"><span className="loading-dot" />{t('schedule.loading')}</section> : null}
-      {!loading ? <div className="schedule-grid">{schedules.map((schedule) => {
-        const latest = schedule.runs?.[0];
-        return <article className="section-card schedule-card" key={schedule.job_key}>
-          <div className="section-card__header schedule-card__header"><div><h2 className="section-card__title">{t(`schedule.jobs.${schedule.job_key}.name`)}</h2><p className="section-card__meta">{t(`schedule.jobs.${schedule.job_key}.description`)}</p></div><label className="schedule-toggle"><input type="checkbox" checked={schedule.enabled} onChange={(event) => patchSchedule(schedule.job_key, { enabled: event.target.checked })} /><span>{schedule.enabled ? t('schedule.enabled') : t('schedule.disabled')}</span></label></div>
-          <div className="schedule-form-grid">
-            <label className="field"><span>{t('schedule.timezone')}</span><select value={schedule.timezone} onChange={(event) => patchSchedule(schedule.job_key, { timezone: event.target.value })}>{TIMEZONES.map((timezone) => <option value={timezone} key={timezone}>{timezone}</option>)}</select></label>
-            <label className="field"><span>{t('schedule.runsPerDay')}</span><select value={schedule.run_times.length} onChange={(event) => patchSchedule(schedule.job_key, { run_times: resizeRunTimes(schedule.run_times, Number(event.target.value)), run_count: Number(event.target.value) })}>{[1, 2, 3, 4, 5, 6].map((count) => <option value={count} key={count}>{count}</option>)}</select></label>
+
+      {!loading && activeTab === 'schedules' ? (
+        <div className="schedule-grid schedule-grid--compact" role="tabpanel">
+          {schedules.map((schedule) => {
+            const latest = schedule.runs?.[0];
+            const isRunning = runningKey === schedule.job_key || latest?.status === 'PROCESSING';
+            return (
+              <article className="section-card schedule-card schedule-card--compact" key={schedule.job_key}>
+                <header className="schedule-card__header">
+                  <span className="schedule-card__icon" aria-hidden="true"><CalendarClock /></span>
+                  <div className="schedule-card__heading">
+                    <h2>{t(`schedule.jobs.${schedule.job_key}.name`)}</h2>
+                    <p>{t(`schedule.jobs.${schedule.job_key}.description`)}</p>
+                  </div>
+                  <label className="schedule-switch">
+                    <input
+                      type="checkbox"
+                      checked={schedule.enabled}
+                      onChange={(event) => patchSchedule(schedule.job_key, { enabled: event.target.checked })}
+                    />
+                    <span className="schedule-switch__track" aria-hidden="true"><i /></span>
+                    <span>{schedule.enabled ? t('schedule.enabled') : t('schedule.disabled')}</span>
+                  </label>
+                </header>
+
+                <div className="schedule-card__body">
+                  <div className="schedule-form-grid">
+                    <label className="field"><span>{t('schedule.timezone')}</span><select value={schedule.timezone} onChange={(event) => patchSchedule(schedule.job_key, { timezone: event.target.value })}>{TIMEZONES.map((timezone) => <option value={timezone} key={timezone}>{timezone}</option>)}</select></label>
+                  </div>
+                  <div className="schedule-times">
+                    <span className="schedule-times__label">{t('schedule.runTimes')}</span>
+                    <div className="schedule-time-list">
+                      {schedule.run_times.map((time, index) => {
+                        const inputId = `${schedule.job_key}-run-time-${index}`;
+                        return (
+                          <div className="schedule-time-row" key={inputId}>
+                            <span className="schedule-time-index" aria-hidden="true">{index + 1}</span>
+                            <label className="sr-only" htmlFor={inputId}>{t('schedule.runNumber', { number: index + 1 })}</label>
+                            <input
+                              id={inputId}
+                              type="time"
+                              value={time}
+                              onChange={(event) => {
+                                const times = [...schedule.run_times];
+                                times[index] = event.target.value;
+                                patchSchedule(schedule.job_key, { run_times: times });
+                              }}
+                            />
+                            <button
+                              className="schedule-time-delete"
+                              type="button"
+                              aria-label={t('schedule.removeRunTime', { number: index + 1 })}
+                              title={t('schedule.removeRunTime', { number: index + 1 })}
+                              disabled={schedule.run_times.length <= 1}
+                              onClick={() => patchSchedule(schedule.job_key, {
+                                run_times: schedule.run_times.filter((_, timeIndex) => timeIndex !== index),
+                              })}
+                            >
+                              <Trash2 aria-hidden="true" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      className="schedule-time-add"
+                      type="button"
+                      aria-label={t('schedule.addRunTime')}
+                      title={t('schedule.addRunTime')}
+                      disabled={schedule.run_times.length >= 6}
+                      onClick={() => patchSchedule(schedule.job_key, {
+                        run_times: resizeRunTimes(schedule.run_times, schedule.run_times.length + 1),
+                      })}
+                    >
+                      <Plus aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="schedule-latest schedule-latest--compact">
+                  <div><span>{t('schedule.latestRun')}</span><strong>{formatDateTime(latest?.started_at, locale)}</strong></div>
+                  <div><span>{t('schedule.status')}</span><strong className={`schedule-run-status is-${String(latest?.status || 'EMPTY').toLowerCase()}`}><ScheduleStatusIcon status={latest?.status} />{statusLabel(latest?.status)}</strong></div>
+                  <div><span>{t('schedule.result')}</span><strong>{resultLabel(latest || {})}</strong></div>
+                </div>
+                {latest?.error ? <p className="schedule-card__error" title={latest.error}>{latest.error}</p> : null}
+
+                <footer className="schedule-card__actions">
+                  <button className="button schedule-action schedule-action--save" type="button" disabled={savingKey === schedule.job_key} onClick={() => save(schedule)}><Save aria-hidden="true" />{savingKey === schedule.job_key ? t('common.loading') : t('schedule.save')}</button>
+                  <button className="button button--ghost schedule-action" type="button" disabled={isRunning} onClick={() => runNow(schedule)}><Play aria-hidden="true" />{isRunning ? t('schedule.running') : t('schedule.runNow')}</button>
+                </footer>
+              </article>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {!loading && activeTab === 'logs' ? (
+        <section className="section-card schedule-logs" role="tabpanel">
+          <header className="schedule-logs__toolbar">
+            <div><h2>{t('schedule.logsTitle')}</h2><span>{t('schedule.logsCount', { count: filteredRuns.length })}</span></div>
+            <div className="schedule-logs__filters">
+              <label><span className="sr-only">{t('schedule.filterJob')}</span><select value={jobFilter} onChange={(event) => setJobFilter(event.target.value)}><option value="ALL">{t('schedule.allJobs')}</option>{schedules.map((schedule) => <option value={schedule.job_key} key={schedule.job_key}>{t(`schedule.jobs.${schedule.job_key}.name`)}</option>)}</select></label>
+              <label><span className="sr-only">{t('schedule.filterStatus')}</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">{t('schedule.allStatuses')}</option><option value="SUCCEEDED">{statusLabel('SUCCEEDED')}</option><option value="FAILED">{statusLabel('FAILED')}</option><option value="PROCESSING">{statusLabel('PROCESSING')}</option></select></label>
+              <button className="button button--ghost schedule-logs__refresh" type="button" disabled={refreshing} onClick={() => load(undefined, true)}><RefreshCw className={refreshing ? 'is-spinning' : ''} aria-hidden="true" />{t('schedule.refresh')}</button>
+            </div>
+          </header>
+          <div className="table-wrap schedule-logs__table-wrap">
+            <table className="data-table schedule-logs__table">
+              <thead><tr><th>{t('schedule.startedAt')}</th><th>{t('schedule.job')}</th><th>{t('schedule.trigger')}</th><th>{t('schedule.status')}</th><th>{t('schedule.duration')}</th><th>{t('schedule.result')}</th><th>{t('schedule.error')}</th></tr></thead>
+              <tbody>
+                {filteredRuns.map((run) => <tr key={run.id}><td>{formatDateTime(run.started_at, locale)}</td><td><strong>{t(`schedule.jobs.${run.job_key}.name`)}</strong></td><td>{triggerLabel(run.trigger_type)}</td><td><span className={`schedule-run-status is-${String(run.status).toLowerCase()}`}><ScheduleStatusIcon status={run.status} />{statusLabel(run.status)}</span></td><td>{durationInSeconds(run) === null ? '—' : `${durationInSeconds(run)}s`}</td><td>{resultLabel(run)}</td><td><span className="schedule-log-error" title={run.error || ''}>{run.error || '—'}</span></td></tr>)}
+                {!filteredRuns.length ? <tr><td colSpan="7"><div className="empty-state empty-state--compact">{t('schedule.noLogs')}</div></td></tr> : null}
+              </tbody>
+            </table>
           </div>
-          <div className="schedule-times"><span className="schedule-times__label">{t('schedule.runTimes')}</span><div>{schedule.run_times.map((time, index) => <label key={`${schedule.job_key}-${index}`}><span>{t('schedule.runNumber', { number: index + 1 })}</span><input type="time" value={time} onChange={(event) => { const times = [...schedule.run_times]; times[index] = event.target.value; patchSchedule(schedule.job_key, { run_times: times }); }} /></label>)}</div></div>
-          <div className="schedule-card__actions"><button className="button" type="button" disabled={savingKey === schedule.job_key} onClick={() => save(schedule)}>{savingKey === schedule.job_key ? t('common.loading') : t('schedule.save')}</button><button className="button button--ghost" type="button" disabled={runningKey === schedule.job_key || latest?.status === 'PROCESSING'} onClick={() => runNow(schedule)}>{runningKey === schedule.job_key || latest?.status === 'PROCESSING' ? t('schedule.running') : t('schedule.runNow')}</button></div>
-          <div className="schedule-latest"><div><span>{t('schedule.latestRun')}</span><strong>{formatDateTime(latest?.started_at, locale)}</strong></div><div><span>{t('schedule.status')}</span><strong className={`chip schedule-status schedule-status--${String(latest?.status || 'EMPTY').toLowerCase()}`}>{latest?.status || t('schedule.never')}</strong></div>{latest?.summary ? <div><span>{t('schedule.result')}</span><strong>{latest.summary.succeeded ?? 0}/{latest.summary.total ?? latest.summary.channels ?? 0} {t('schedule.succeeded')}</strong></div> : null}</div>
-          {latest?.error ? <p className="schedule-card__error">{latest.error}</p> : null}
-          {schedule.runs?.length ? <details className="schedule-history"><summary>{t('schedule.history')}</summary><div className="table-wrap"><table className="data-table"><thead><tr><th>{t('schedule.startedAt')}</th><th>{t('schedule.trigger')}</th><th>{t('schedule.status')}</th><th>{t('schedule.duration')}</th></tr></thead><tbody>{schedule.runs.map((run) => <tr key={run.id}><td>{formatDateTime(run.started_at, locale)}</td><td>{run.trigger_type}</td><td><span className="chip">{run.status}</span></td><td>{run.completed_at ? `${Math.max(0, Math.round((new Date(run.completed_at) - new Date(run.started_at)) / 1000))}s` : '—'}</td></tr>)}</tbody></table></div></details> : null}
-        </article>;
-      })}</div> : null}
+        </section>
+      ) : null}
     </div>
   );
 };

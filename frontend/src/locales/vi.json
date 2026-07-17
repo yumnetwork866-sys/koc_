@@ -887,6 +887,24 @@
   "schedule": {
     "title": "Quản lý lịch chạy",
     "subtitle": "Cấu hình các tác vụ tự động đồng bộ dữ liệu trong hệ thống.",
+    "overview": "Tổng quan vận hành lịch chạy",
+    "totalJobs": "Tổng tác vụ",
+    "activeJobs": "Lịch đang bật",
+    "runningJobs": "Đang chạy",
+    "failedRuns": "Lần chạy lỗi",
+    "tabsLabel": "Các mục quản lý lịch chạy",
+    "scheduleTab": "Lịch chạy",
+    "logsTab": "Nhật ký chạy",
+    "logsTitle": "Nhật ký thực thi",
+    "logsCount": "{{count}} lần chạy",
+    "filterJob": "Lọc theo tác vụ",
+    "filterStatus": "Lọc theo trạng thái",
+    "allJobs": "Tất cả tác vụ",
+    "allStatuses": "Tất cả trạng thái",
+    "refresh": "Làm mới",
+    "job": "Tác vụ",
+    "error": "Lỗi",
+    "noLogs": "Không có lần chạy phù hợp với bộ lọc.",
     "loading": "Đang tải cấu hình lịch chạy",
     "enabled": "Đang bật",
     "disabled": "Đã tắt",
@@ -894,6 +912,8 @@
     "runsPerDay": "Số lần chạy mỗi ngày",
     "runTimes": "Thời gian chạy",
     "runNumber": "Lần {{number}}",
+    "addRunTime": "Thêm giờ chạy",
+    "removeRunTime": "Xóa giờ chạy lần {{number}}",
     "save": "Lưu lịch chạy",
     "runNow": "Chạy ngay",
     "running": "Đang chạy",
@@ -911,6 +931,16 @@
     "loadError": "Không tải được lịch chạy.",
     "saveError": "Không lưu được lịch chạy.",
     "runError": "Không thể bắt đầu tác vụ.",
+    "statuses": {
+      "succeeded": "Thành công",
+      "failed": "Thất bại",
+      "processing": "Đang chạy",
+      "empty": "Chưa chạy"
+    },
+    "triggers": {
+      "manual": "Thủ công",
+      "scheduled": "Theo lịch"
+    },
     "jobs": {
       "tiktok_creator_performance": {
         "name": "TikTok Creator Performance",
