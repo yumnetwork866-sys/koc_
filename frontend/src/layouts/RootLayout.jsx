@@ -6,6 +6,7 @@ import { useLanguage } from '../lib/language';
 const RootLayout = () => {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
+  const isLandingPage = location.pathname === '/';
   const language = useLanguage();
 
   useEffect(() => {
@@ -13,7 +14,7 @@ const RootLayout = () => {
   }, [language]);
 
   return (
-    <div className={`app-shell${isLoginPage ? ' app-shell--auth' : ''}`}>
+    <div className={`app-shell${isLoginPage ? ' app-shell--auth' : ''}${isLandingPage ? ' app-shell--landing' : ''}`}>
       <Header />
       <Outlet />
     </div>

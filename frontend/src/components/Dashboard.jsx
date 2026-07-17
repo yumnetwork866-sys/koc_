@@ -89,8 +89,10 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
         </div>
 
         <div className="dashboard-hero__summary">
-          <div className="dashboard-hero__ring">
-            <div className="dashboard-hero__ring-value">{formatNumber(totalViews)}</div>
+          <div className={`dashboard-hero__ring${loading ? ' dashboard-hero__ring--loading' : ''}`} aria-live="polite">
+            <div className="dashboard-hero__ring-value" title={loading ? undefined : formatNumber(totalViews)}>
+              {loading ? '—' : formatNumber(totalViews)}
+            </div>
             <div className="dashboard-hero__ring-label">{t('dashboard.totalViews')}</div>
           </div>
           <div className="dashboard-hero__mini-grid">

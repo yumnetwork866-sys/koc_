@@ -25,43 +25,53 @@ const HomePage = () => {
 
   return (
     <main className="page home-page">
-      <section className="page__hero home-page__hero" id="overview">
+      <section className="home-page__hero" id="overview">
         <div className="home-page__hero-copy">
-          <h1 className="page__title">{t('home.heroTitle')}</h1>
-          <div className="home-page__hero-badges" aria-label={t('home.quickSummary')}>
-            {t('home.heroBadges')?.map((badge) => (
-              <span className="home-page__badge" key={badge}>
-                {badge}
-              </span>
-            ))}
-          </div>
+          <h1 className="home-page__headline">
+            {t('home.heroPrefix')} <span>{t('home.heroHighlight')}</span>
+          </h1>
+          <p className="home-page__hero-description">{t('home.heroDescription')}</p>
           <div className="home-page__actions">
-            <Link to="/dashboard" className="button">
-              {t('home.goToDashboard')}
+            <Link to="/manage/affiliate" className="home-page__cta home-page__cta--primary">
+              {t('home.startNow')}
+              <span aria-hidden="true">→</span>
             </Link>
+            <a href="#platforms" className="home-page__cta home-page__cta--secondary">{t('home.explorePlatform')}</a>
           </div>
         </div>
 
-        <aside className="section-card home-page__hero-card" aria-label={t('home.platformSummary')}>
-          <div className="section-card__header home-page__hero-card-header">
-            <div>
-              <p className="home-page__card-kicker">{t('home.atAGlance')}</p>
-              <h2 className="section-card__title">{t('home.whoItServes')}</h2>
+        <aside className="home-page__preview-wrap" aria-label={t('home.platformSummary')}>
+          <span className="home-page__floating-badge home-page__floating-badge--live"><i />{t('home.previewLive')}</span>
+          <span className="home-page__floating-badge home-page__floating-badge--sync">✓ {t('home.previewSynced')}</span>
+          <div className="home-page__dashboard-preview">
+            <div className="home-page__preview-header">
+              <div>
+                <span className="home-page__preview-kicker">{t('home.previewLabel')}</span>
+                <h2>{t('home.previewTitle')}</h2>
+              </div>
+              <span className="home-page__preview-period">{t('home.previewPeriod')}⌄</span>
             </div>
-          </div>
-
-          <div className="home-page__summary-grid">
-            <div className="stat-card">
-              <p className="stat-card__label">{t('home.primaryUsers')}</p>
-              <p className="stat-card__value stat-card__value--small">{t('home.primaryUsersValue')}</p>
+            <div className="home-page__preview-grid">
+              <article className="home-page__preview-main-stat">
+                <span>{t('home.previewViews')}</span>
+                <strong>8.42M</strong>
+                <em>↗ {t('home.previewGrowth')}</em>
+              </article>
+              <article><span>{t('home.previewEngagement')}</span><strong>8.6%</strong></article>
+              <article><span>{t('home.previewCreators')}</span><strong>48</strong></article>
             </div>
-            <div className="stat-card">
-              <p className="stat-card__label">{t('home.mainAction')}</p>
-              <p className="stat-card__value stat-card__value--small">{t('home.mainActionValue')}</p>
+            <div className="home-page__chart-head"><span>{t('home.previewViews')}</span><span>{t('home.previewDateRange')}</span></div>
+            <div className="home-page__chart" aria-hidden="true">
+              <svg viewBox="0 0 520 170" preserveAspectRatio="none">
+                <path className="home-page__chart-grid" d="M0 35H520M0 85H520M0 135H520" />
+                <path className="home-page__chart-area" d="M0 145 C55 142 68 115 112 120 S175 72 215 86 S275 55 318 68 S380 28 420 46 S480 18 520 25 V170 H0Z" />
+                <path className="home-page__chart-line" d="M0 145 C55 142 68 115 112 120 S175 72 215 86 S275 55 318 68 S380 28 420 46 S480 18 520 25" />
+                <circle cx="420" cy="46" r="5" fill="#fff" stroke="#7157e8" strokeWidth="3" />
+              </svg>
             </div>
-            <div className="stat-card">
-              <p className="stat-card__label">{t('home.entryPoint')}</p>
-              <p className="stat-card__value stat-card__value--small">{t('home.entryPointValue')}</p>
+            <div className="home-page__preview-footer">
+              <span className="home-page__preview-avatars"><i>AN</i><i>MK</i><i>+8</i></span>
+              <span><b>✓</b>{t('home.previewGoal')}</span>
             </div>
           </div>
         </aside>
