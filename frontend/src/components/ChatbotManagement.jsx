@@ -739,8 +739,9 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     </div>
                   ) : null}
                   {messages.map((message) => (
-                    <article key={message.id} className={`message-bubble message-bubble--${message.direction}`}>
-                      <div className="message-bubble__head">
+                    <article key={message.id} className={`message-row message-row--${message.direction}`}>
+                      <time className="message-row__time">{formatTime(message.ts, locale)}</time>
+                      <div className="message-row__body">
                         <span className="message-bubble__avatar" aria-hidden="true">
                           {message.avatarUrl ? (
                             <img src={message.avatarUrl} alt="" />
@@ -748,12 +749,15 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                             getMessageAvatarText(message)
                           )}
                         </span>
-                        <div className="message-bubble__meta">
-                          <strong>{getMessageDisplayName(message)}</strong>
-                          <span>{message.via} · {formatTime(message.ts, locale)}</span>
+                        <div className="message-bubble__content">
+                          <div className="message-bubble__meta">
+                            <strong>{getMessageDisplayName(message)}</strong>
+                          </div>
+                          <div className={`message-bubble message-bubble--${message.direction}`}>
+                            <p>{message.text}</p>
+                          </div>
                         </div>
                       </div>
-                      <p>{message.text}</p>
                     </article>
                   ))}
                 </div>
@@ -772,8 +776,13 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                     disabled={!selectedMessagePageId || !selectedSenderId || sendingReply}
                     aria-label={t('chatbot.messageContent')}
                   />
-                  <button className="button reply-box__send" type="submit" disabled={!selectedMessagePageId || !selectedSenderId || !replyText.trim() || sendingReply}>
-                    <span>{sendingReply ? t('chatbot.sending') : t('chatbot.send')}</span>
+                  <button
+                    className="button reply-box__send"
+                    type="submit"
+                    disabled={!selectedMessagePageId || !selectedSenderId || !replyText.trim() || sendingReply}
+                    aria-label={sendingReply ? t('chatbot.sending') : t('chatbot.send')}
+                    title={sendingReply ? t('chatbot.sending') : t('chatbot.send')}
+                  >
                     <svg aria-hidden="true" viewBox="0 0 20 20"><path d="m3 3 14 7-14 7 2.2-6L12 10 5.2 9 3 3Z" /></svg>
                   </button>
                 </form>
