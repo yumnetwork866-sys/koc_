@@ -31,6 +31,7 @@ const defaultMigrationNames = [
   '022_add_creator_performance_profile',
   '023_add_creator_performance_open_id',
   '024_create_scheduled_jobs',
+  '025_create_tiktok_creator_profiles',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

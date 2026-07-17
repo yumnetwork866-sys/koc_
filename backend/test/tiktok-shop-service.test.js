@@ -7,6 +7,7 @@ const {
   SHOP_PERFORMANCE_PATH,
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
+  TARGET_COLLABORATION_DETAIL_PATH,
   AFFILIATE_ORDERS_PATH,
   SAMPLE_APPLICATIONS_PATH,
   CREATOR_CONTENT_DETAILS_PATH,
@@ -20,6 +21,7 @@ const {
   normalizeShopPerformance,
   searchOpenCollaborations,
   searchTargetCollaborations,
+  getTargetCollaboration,
   searchAffiliateOrders,
   searchSellerSampleApplications,
   searchMarketplaceCreators,
@@ -266,6 +268,30 @@ test('search target collaborations sends supported seller filters', async (t) =>
       collaboration_status: 'ONGOING',
     });
     return successResponse({ target_collaborations: [] });
+  });
+});
+
+test('search target collaborations defaults the required status to ONGOING', async (t) => {
+  configure(t);
+  const payload = await searchTargetCollaborations({
+    authorization: sellerAuthorization(), shopCipher: 'cipher-1',
+  }, async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), { collaboration_status: 'ONGOING' });
+    return successResponse({ target_collaborations: [{ id: 'target-1', type: 'STANDARD' }] });
+  });
+  assert.equal(payload.data.target_collaborations[0].status, 'ONGOING');
+  assert.equal(payload.data.target_collaborations[0].collaboration_status, 'ONGOING');
+});
+
+test('get target collaboration loads creator profiles from the detail endpoint', async (t) => {
+  configure(t);
+  await getTargetCollaboration({
+    authorization: sellerAuthorization(), shopCipher: 'cipher-1', collaborationId: 'target-1',
+  }, async (url, options) => {
+    assert.equal(url.pathname, `${TARGET_COLLABORATION_DETAIL_PATH}/target-1`);
+    assert.equal(options.method, 'GET');
+    assert.equal(options.body, undefined);
+    return successResponse({ target_collaboration: { creators: [{ username: 'creator.one' }] } });
   });
 });
 

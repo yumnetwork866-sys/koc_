@@ -167,6 +167,7 @@ const Header = () => {
   const connectionOptions = [
     { id: 'tiktok', group: 'tiktok', label: t('header.connectTikTok'), meta: t('header.connectTikTokMeta') },
     { id: 'creator', group: 'tiktok', label: t('header.connectTikTokCreator'), meta: t('header.connectTikTokCreatorMeta') },
+    { id: 'shop', group: 'tiktok', label: t('header.connectTikTokShop'), meta: t('header.connectTikTokShopMeta') },
     { id: 'facebook', group: 'facebook', label: t('header.connectFacebook'), meta: t('header.connectFacebookMeta') },
   ];
   const connectionGroups = [

@@ -13,6 +13,10 @@ const {
   searchMarketplaceCreators,
   SELLER_CREATOR_MARKETPLACE_SCOPE,
 } = require('./tiktokShopService');
+const {
+  saveCreatorProfiles,
+  hydrateCreatorRows,
+} = require('./tiktokCreatorProfileService');
 
 const WINDOW_DAYS = { PAST_24H: 1, PAST_7_DAYS: 7, PAST_30_DAYS: 30 };
 const VALID_PLAN_TYPES = new Set(['ALL', 'TARGET', 'OPEN', 'PARTNER']);
@@ -271,7 +275,9 @@ const refreshCreatorPerformanceProfiles = async (shop, exportRecord, dependencie
   const rows = snapshots.map((snapshot) => snapshot.toJSON());
   const persistRows = async (profileRows) => {
     if (!profileRows.length) return;
-    await TikTokCreatorPerformanceSnapshot.bulkCreate(profileRows, {
+    await saveCreatorProfiles(shop.id, profileRows, 'performance');
+    const sharedRows = await hydrateCreatorRows(shop.id, profileRows);
+    await TikTokCreatorPerformanceSnapshot.bulkCreate(sharedRows, {
       conflictAttributes: ['shop_id', 'username', 'start_date', 'end_date', 'plan_type'],
       updateOnDuplicate: ['nickname', 'avatar_url', 'creator_open_id', 'followers'],
     });
@@ -399,6 +405,9 @@ const processCreatorPerformanceExport = async (shop, exportRecord, {
           currency: REGION_CURRENCY[String(shop.region || '').toUpperCase()] || 'USD',
         });
         await enrichCreatorRows(shop, rows, { searchSamples, searchMarketplace });
+        await saveCreatorProfiles(shop.id, rows, 'performance');
+        const sharedRows = await hydrateCreatorRows(shop.id, rows);
+        rows.splice(0, rows.length, ...sharedRows);
         await sequelize.transaction(async (transaction) => {
           if (rows.length) {
             await TikTokCreatorPerformanceSnapshot.bulkCreate(rows, {

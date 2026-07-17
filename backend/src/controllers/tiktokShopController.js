@@ -12,6 +12,7 @@ const {
   getShopPerformance,
   searchOpenCollaborations,
   searchTargetCollaborations,
+  getTargetCollaboration,
   searchAffiliateOrders,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
@@ -26,6 +27,10 @@ const {
 } = require('../services/tiktokCreatorPerformanceService');
 const { createTtlPromiseCache } = require('../lib/ttlPromiseCache');
 const { isDemoAuthorization, sellerAffiliateFixture } = require('../lib/tiktokDemoFixtures');
+const {
+  hydrateCreatorRows,
+  syncAndHydrateCollaborationCreators,
+} = require('../services/tiktokCreatorProfileService');
 
 const affiliateCacheTtlValue = Number(process.env.TIKTOK_SELLER_AFFILIATE_CACHE_TTL_MS ?? 120000);
 const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
@@ -273,6 +278,20 @@ const affiliateResponse = (namespace, operation) => async (req, res) => {
   }
 };
 
+const mapWithConcurrency = async (items, concurrency, mapper) => {
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+};
+
 const listOpenCollaborations = affiliateResponse('open-collaborations', (shop, req) => searchOpenCollaborations({
   authorization: shop.authorization,
   shopCipher: shop.cipher,
@@ -281,14 +300,31 @@ const listOpenCollaborations = affiliateResponse('open-collaborations', (shop, r
   keyword: req.query.keyword,
 }));
 
-const listTargetCollaborations = affiliateResponse('target-collaborations', (shop, req) => searchTargetCollaborations({
-  authorization: shop.authorization,
-  shopCipher: shop.cipher,
-  pageToken: req.query.page_token,
-  pageSize: pageSizeValue(req.query.page_size),
-  keyword: req.query.keyword,
-  status: ['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'].includes(req.query.status) ? req.query.status : null,
-}));
+const listTargetCollaborations = affiliateResponse('target-collaborations', async (shop, req) => {
+  const payload = await searchTargetCollaborations({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    pageToken: req.query.page_token,
+    pageSize: pageSizeValue(req.query.page_size),
+    keyword: req.query.keyword,
+    status: ['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'].includes(req.query.status) ? req.query.status : 'ONGOING',
+  });
+  const rows = Array.isArray(payload.data?.target_collaborations) ? payload.data.target_collaborations : [];
+  const detailedRows = await mapWithConcurrency(rows, 4, async (row) => {
+    try {
+      const detail = await getTargetCollaboration({
+        authorization: shop.authorization,
+        shopCipher: shop.cipher,
+        collaborationId: row.id,
+      });
+      return { ...row, ...(detail.data?.target_collaboration || {}) };
+    } catch {
+      return row;
+    }
+  });
+  const sharedProfileRows = await syncAndHydrateCollaborationCreators(shop.id, detailedRows);
+  return { ...payload, data: { ...payload.data, target_collaborations: sharedProfileRows } };
+});
 
 const listAffiliateOrders = affiliateResponse('orders', (shop, req) => searchAffiliateOrders({
   authorization: shop.authorization,
@@ -443,12 +479,16 @@ const listCreatorPerformance = async (req, res) => {
         shopId: shop.id, startDate: snapshotExport.start_date, endDate: snapshotExport.end_date, planType: snapshotExport.plan_type,
       },
     });
+    const sharedCreatorRows = await hydrateCreatorRows(
+      shop.id,
+      rows.map((row) => row.toJSON()),
+    );
     res.json({
       export: exportRecord,
       snapshot_export: snapshotExport,
       is_fallback: !exportRecord || String(exportRecord.id) !== String(snapshotExport.id),
       requested_end_date: requestedEndDate,
-      creators: rows,
+      creators: sharedCreatorRows,
       total_count: count,
       totals: totals[0],
       page,

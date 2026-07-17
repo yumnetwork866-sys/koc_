@@ -9,6 +9,7 @@ const SELLER_AFFILIATE_SCOPE = 'seller.affiliate_collaboration.read';
 const SELLER_CREATOR_MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
 const OPEN_COLLABORATIONS_PATH = '/affiliate_seller/202412/open_collaborations/search';
 const TARGET_COLLABORATIONS_PATH = '/affiliate_seller/202409/target_collaborations/search';
+const TARGET_COLLABORATION_DETAIL_PATH = '/affiliate_seller/202409/target_collaborations';
 const AFFILIATE_ORDERS_PATH = '/affiliate_seller/202410/orders/search';
 const OPEN_COLLABORATION_SETTINGS_PATH = '/affiliate_seller/202409/open_collaboration_settings';
 const SAMPLE_APPLICATIONS_PATH = '/affiliate_seller/202508/sample_applications/search';
@@ -237,17 +238,41 @@ const searchOpenCollaborations = ({ authorization, shopCipher, pageToken, pageSi
   }, fetchImpl);
 };
 
-const searchTargetCollaborations = ({ authorization, shopCipher, pageToken, pageSize = 20, keyword, status } = {}, fetchImpl) => {
+const searchTargetCollaborations = async ({ authorization, shopCipher, pageToken, pageSize = 20, keyword, status = 'ONGOING' } = {}, fetchImpl) => {
   const normalizedKeyword = String(keyword || '').trim();
-  return sellerAffiliateRequest({
+  const normalizedStatus = status || 'ONGOING';
+  const payload = await sellerAffiliateRequest({
     authorization,
     shopCipher,
     path: TARGET_COLLABORATIONS_PATH,
     query: { page_size: pageSize, ...(pageToken ? { page_token: pageToken } : {}) },
     body: {
       ...(normalizedKeyword ? { search_param: { keyword_type: /^\d+$/.test(normalizedKeyword) ? 'TARGET_COLLABORATION_ID' : 'TARGET_COLLABORATION_NAME', keyword: normalizedKeyword } } : {}),
-      ...(status ? { collaboration_status: status } : {}),
+      collaboration_status: normalizedStatus,
     },
+  }, fetchImpl);
+  const rows = Array.isArray(payload.data?.target_collaborations) ? payload.data.target_collaborations : [];
+  return {
+    ...payload,
+    data: {
+      ...payload.data,
+      target_collaborations: rows.map((row) => ({
+        ...row,
+        status: normalizedStatus,
+        collaboration_status: normalizedStatus,
+      })),
+    },
+  };
+};
+
+const getTargetCollaboration = ({ authorization, shopCipher, collaborationId } = {}, fetchImpl) => {
+  const normalizedId = String(collaborationId || '').trim();
+  if (!normalizedId) throw new Error('target collaboration id is required.');
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: `${TARGET_COLLABORATION_DETAIL_PATH}/${encodeURIComponent(normalizedId)}`,
+    method: 'GET',
   }, fetchImpl);
 };
 
@@ -403,6 +428,7 @@ module.exports = {
   SELLER_CREATOR_MARKETPLACE_SCOPE,
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
+  TARGET_COLLABORATION_DETAIL_PATH,
   AFFILIATE_ORDERS_PATH,
   SAMPLE_APPLICATIONS_PATH,
   CREATOR_CONTENT_DETAILS_PATH,
@@ -419,6 +445,7 @@ module.exports = {
   normalizeShopPerformance,
   searchOpenCollaborations,
   searchTargetCollaborations,
+  getTargetCollaboration,
   searchAffiliateOrders,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,

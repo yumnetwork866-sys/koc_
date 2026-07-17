@@ -255,6 +255,26 @@ const TikTokCreatorPerformanceSnapshot = sequelize.define('TikTokCreatorPerforma
   indexes: [{ unique: true, fields: ['shop_id', 'username', 'start_date', 'end_date', 'plan_type'] }],
 });
 
+const TikTokCreatorProfile = sequelize.define('TikTokCreatorProfile', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  creator_open_id: DataTypes.STRING,
+  username: { type: DataTypes.STRING, allowNull: false },
+  nickname: DataTypes.STRING,
+  avatar_url: DataTypes.TEXT,
+  follower_count: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  source: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'unknown' },
+  refreshed_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_creator_profiles',
+  timestamps: false,
+  indexes: [
+    { unique: true, fields: ['shop_id', 'username'] },
+    { fields: ['shop_id', 'creator_open_id'] },
+  ],
+});
+
 const ScheduledJob = sequelize.define('ScheduledJob', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   job_key: { type: DataTypes.STRING(100), allowNull: false, unique: true },
@@ -857,6 +877,8 @@ TikTokShop.hasMany(TikTokCreatorPerformanceSnapshot, { foreignKey: 'shop_id', as
 TikTokCreatorPerformanceSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokCreatorPerformanceExport.hasMany(TikTokCreatorPerformanceSnapshot, { foreignKey: 'export_id', as: 'creators' });
 TikTokCreatorPerformanceSnapshot.belongsTo(TikTokCreatorPerformanceExport, { foreignKey: 'export_id', as: 'export' });
+TikTokShop.hasMany(TikTokCreatorProfile, { foreignKey: 'shop_id', as: 'creator_profiles' });
+TikTokCreatorProfile.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 ScheduledJob.hasMany(ScheduledJobRun, { foreignKey: 'scheduled_job_id', as: 'runs' });
 ScheduledJobRun.belongsTo(ScheduledJob, { foreignKey: 'scheduled_job_id', as: 'job' });
 
@@ -901,6 +923,7 @@ module.exports = {
   TikTokShopAnalyticsSnapshot,
   TikTokCreatorPerformanceExport,
   TikTokCreatorPerformanceSnapshot,
+  TikTokCreatorProfile,
   ScheduledJob,
   ScheduledJobRun,
   TikTokChannel,

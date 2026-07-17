@@ -137,6 +137,48 @@ body {
   font-size: 0.75rem;
 }
 
+.target-collaboration__creators {
+  display: grid;
+  gap: 8px;
+  margin-top: 0;
+  min-width: 190px;
+}
+
+.seller-affiliate__table td:has(> .target-collaboration__creators) > strong,
+.seller-affiliate__table td:has(> .target-collaboration__creators) > .row-subtitle {
+  display: none;
+}
+
+.target-collaboration__creators .creator-identity strong {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-collaboration__creators .creator-identity__avatar {
+  width: 30px;
+  height: 30px;
+}
+
+.target-collaboration__creators .creator-identity .row-subtitle {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-collaboration__more {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 @media (max-width: 820px) {
   .seller-affiliate__filter-grid,
   .seller-affiliate__summary {

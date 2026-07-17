@@ -40,6 +40,11 @@ const sellerAffiliateFixture = (namespace, shop, query = {}) => {
       products: products.slice(index % 4, index % 4 + 2),
       showcase_creator_count: 4 + index,
       content_creator_count: 2 + index,
+      creators: Array.from({ length: Math.min(3, 1 + index % 3) }, (_, creatorIndex) => ({
+        username: `demo.creator.${creatorIndex + 1}`,
+        nickname: `Demo Creator ${creatorIndex + 1}`,
+        avatar: { url: `https://api.dicebear.com/10.x/lorelei-neutral/svg?seed=demo-creator-${creatorIndex + 1}` },
+      })),
       end_time: Math.floor(Date.now() / 1000) + (index + 2) * 86400,
       status: ['ONGOING', 'VALID', 'COMPLETED'][index % 3],
     }));
