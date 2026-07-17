@@ -73,6 +73,13 @@ test('seller OAuth URL contains service id and a verifiable expiring state', (t)
   assert.ok(state.expiresAt > Date.now());
 });
 
+test('seller OAuth preserves the standalone affiliate return page', (t) => {
+  configure(t);
+  const url = new URL(buildShopAuthorizationUrl('/manage/affiliate'));
+  const state = parseShopAuthorizationState(url.searchParams.get('state'));
+  assert.equal(state.returnPath, '/manage/affiliate');
+});
+
 test('seller authorization code is exchanged through the TikTok Shop token endpoint', async (t) => {
   configure(t);
   const token = await exchangeShopAuthorizationCode('authorization-code', async (url, options) => {

@@ -79,6 +79,7 @@ const sidebarIcons = {
 
 const routeIconMap = {
   '/dashboard': 'dashboard',
+  '/manage/affiliate': 'analytics',
   '/manage/users': 'users',
   '/manage/schedules': 'schedule',
   '/manage/koc-performance': 'koc',
@@ -136,6 +137,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
   const isAdminArea = location.pathname.startsWith('/manage/users') || location.pathname.startsWith('/manage/schedules') || location.pathname.startsWith('/chatbot/chat-setting');
   const isFacebookArea = location.pathname.startsWith('/chatbot');
   const isTikTokShopArea = [
+    '/manage/affiliate',
     '/manage/koc-performance',
     '/manage/shop-analytics',
     '/bookings',

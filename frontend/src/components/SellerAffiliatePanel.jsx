@@ -10,7 +10,6 @@ import {
   fetchTikTokCreatorPerformance,
   fetchTikTokShops,
   startTikTokShopOauth,
-  syncTikTokCreatorPerformance,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 import ShopDropdown from './ShopDropdown';
@@ -34,11 +33,6 @@ const CreatorAvatar = ({ src, name }) => {
     return <span className="creator-identity__avatar creator-identity__avatar--fallback">{String(name || 'C').charAt(0)}</span>;
   }
   return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" onError={() => setFailed(true)} />;
-};
-const yesterday = () => {
-  const date = new Date();
-  date.setDate(date.getDate() - 1);
-  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
 };
 const formatReportDate = (value) => {
   const match = String(value || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -64,8 +58,6 @@ const SellerAffiliatePanel = () => {
   const [creatorDetailLoading, setCreatorDetailLoading] = useState(false);
   const [creatorBreakdownMetric, setCreatorBreakdownMetric] = useState('gmv');
   const [performanceWindow, setPerformanceWindow] = useState('PAST_7_DAYS');
-  const [performanceEndDay, setPerformanceEndDay] = useState(yesterday);
-  const [performanceSyncing, setPerformanceSyncing] = useState(false);
   const [profileRefreshing, setProfileRefreshing] = useState(false);
 
   const selectedShop = useMemo(() => shops.find((shop) => String(shop.id) === String(shopId)), [shopId, shops]);
@@ -105,7 +97,6 @@ const SellerAffiliatePanel = () => {
         result = await fetchTikTokCreatorPerformance(shopId, {
           ...filters,
           windowType: performanceWindow,
-          endDay: performanceEndDay,
           planType: 'ALL',
           page: pageTokens.length + 1,
         });
@@ -115,12 +106,13 @@ const SellerAffiliatePanel = () => {
         result = await fetchTikTokSellerAffiliateOrders(shopId, { ...filters, programId: submittedKeyword });
       }
       setData(result || {});
+      if (section === 'performance') setProfileRefreshing(result?.profile_refresh?.status === 'PROCESSING');
     } catch (err) {
       if (err.name !== 'AbortError') setError(err.message || t('sellerAffiliate.loadError'));
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [currentPageToken, hasScope, pageTokens.length, performanceEndDay, performanceWindow, section, shopId, status, submittedKeyword, t]);
+  }, [currentPageToken, hasScope, pageTokens.length, performanceWindow, section, shopId, status, submittedKeyword, t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -135,7 +127,6 @@ const SellerAffiliatePanel = () => {
       fetchTikTokCreatorPerformance(shopId, {
         signal: controller.signal,
         windowType: performanceWindow,
-        endDay: performanceEndDay,
         planType: 'ALL',
         page: pageTokens.length + 1,
         pageSize: PAGE_SIZE,
@@ -148,7 +139,7 @@ const SellerAffiliatePanel = () => {
       controller.abort();
       window.clearInterval(interval);
     };
-  }, [data.export?.status, pageTokens.length, performanceEndDay, performanceWindow, section, shopId, submittedKeyword]);
+  }, [data.export?.status, pageTokens.length, performanceWindow, section, shopId, submittedKeyword]);
 
   useEffect(() => {
     if (!profileRefreshing || section !== 'performance' || !shopId) return undefined;
@@ -156,7 +147,6 @@ const SellerAffiliatePanel = () => {
     const refresh = () => fetchTikTokCreatorPerformance(shopId, {
       signal: controller.signal,
       windowType: performanceWindow,
-      endDay: performanceEndDay,
       planType: 'ALL',
       page: pageTokens.length + 1,
       pageSize: PAGE_SIZE,
@@ -176,7 +166,7 @@ const SellerAffiliatePanel = () => {
       window.clearInterval(interval);
       window.clearTimeout(timeout);
     };
-  }, [pageTokens.length, performanceEndDay, performanceWindow, profileRefreshing, section, shopId, submittedKeyword]);
+  }, [pageTokens.length, performanceWindow, profileRefreshing, section, shopId, submittedKeyword]);
 
   const rows = section === 'open'
     ? (data.open_collaborations || [])
@@ -246,7 +236,7 @@ const SellerAffiliatePanel = () => {
       return `${Number(money.amount).toLocaleString(locale)} ${money.currency || ''}`.trim();
     }
   };
-  const connectShop = async () => { const result = await startTikTokShopOauth('/manage/koc-performance'); window.location.assign(result.authorizeUrl); };
+  const connectShop = async () => { const result = await startTikTokShopOauth('/manage/affiliate'); window.location.assign(result.authorizeUrl); };
   const changeSection = (value) => { setSection(value); setStatus(''); setPageTokens([]); setData({}); setError(''); };
   const submitSearch = (event) => { event.preventDefault(); setPageTokens([]); setSubmittedKeyword(keyword.trim()); };
   const openCreatorDetail = async (application) => {
@@ -272,37 +262,33 @@ const SellerAffiliatePanel = () => {
     }
   };
   const closeCreatorDetail = () => { setSelectedCreatorApplication(null); setCreatorContent(null); };
-  const syncPerformance = async () => {
-    try {
-      setPerformanceSyncing(true);
-      setError('');
-      const result = await syncTikTokCreatorPerformance(shopId, {
-        windowType: performanceWindow, endDay: performanceEndDay, planType: 'ALL',
-      });
-      if (result.effective_end_day && result.effective_end_day !== result.requested_end_day) {
-        const value = String(result.effective_end_day);
-        setPerformanceEndDay(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`);
-      }
-      setData((current) => ({ ...current, export: result.export }));
-      if (result.profile_refresh_started) setProfileRefreshing(true);
-    } catch (err) {
-      setError(err.message || t('sellerAffiliate.performanceSyncError'));
-    } finally {
-      setPerformanceSyncing(false);
-    }
-  };
-
   return (
-    <div id="seller-affiliate-panel" role="tabpanel" aria-labelledby="seller-affiliate-tab" className="koc-tab-panel seller-affiliate">
-      <section className="section-card seller-affiliate__controls">
-        <div className="section-card__header">
-          <div><h2 className="section-card__title">{t('sellerAffiliate.title')}</h2><p className="section-card__meta">{t('sellerAffiliate.meta')}</p></div>
+    <div className="page seller-affiliate">
+      <section className="page__hero">
+        <div><h1 className="page__title">{t('sellerAffiliate.tab')}</h1></div>
+      </section>
+      {selectedShop && hasScope ? (
+        <div className="seller-affiliate__subtabs" role="tablist" aria-label={t('sellerAffiliate.sections')}>
+          {['open', 'target', 'performance', 'creators', 'orders'].map((value) => <button className={section === value ? 'is-active' : ''} type="button" role="tab" aria-selected={section === value} onClick={() => changeSection(value)} key={value}>{t(`sellerAffiliate.${value}Tab`)}</button>)}
         </div>
+      ) : null}
+      <section className="section-card seller-affiliate__controls">
         <div className="seller-affiliate__filter-grid">
           <div className="field"><label htmlFor="affiliate-shop">{t('sellerAffiliate.shop')}</label><ShopDropdown id="affiliate-shop" shops={shops} value={shopId} onChange={(nextShopId) => { setShopId(nextShopId); setPageTokens([]); setData({}); }} disabled={loading || !shops.length} placeholder={t('sellerAffiliate.selectShop')} unknownLabel={t('common.unknown')} /></div>
-          <form className="seller-affiliate__search" onSubmit={submitSearch}><div className="field"><label htmlFor="affiliate-search">{t(section === 'orders' ? 'sellerAffiliate.programId' : 'common.search')}</label><input id="affiliate-search" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t(`sellerAffiliate.${section}Search`)} /></div><button className="button button--ghost" type="submit">{t('common.search')}</button></form>
+          <form className="seller-affiliate__search" onSubmit={submitSearch}>
+            <div className="field seller-affiliate__search-field">
+              <label htmlFor="affiliate-search">{t(section === 'orders' ? 'sellerAffiliate.programId' : 'common.search')}</label>
+              <input id="affiliate-search" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t(`sellerAffiliate.${section}Search`)} />
+              <button className="seller-affiliate__search-button" type="submit" aria-label={t('common.search')} title={t('common.search')}>
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <circle cx="11" cy="11" r="6.5" />
+                  <path d="m16 16 4 4" />
+                </svg>
+              </button>
+            </div>
+          </form>
           {section === 'target' || section === 'creators' ? <div className="field"><label htmlFor="affiliate-status">{t('sellerAffiliate.status')}</label><select id="affiliate-status" value={status} onChange={(event) => { setStatus(event.target.value); setPageTokens([]); }}><option value="">{t('sellerAffiliate.allStatuses')}</option>{(section === 'target' ? ['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'] : ['PENDING', 'AWAITING_SHIPMENT', 'SHIPPED', 'CONTENT_PENDING', 'COMPLETED', 'REJECT_CANCELLED']).map((value) => <option value={value} key={value}>{value}</option>)}</select></div> : null}
-          {section === 'performance' ? <><div className="field"><label htmlFor="creator-performance-window">{t('sellerAffiliate.performanceWindow')}</label><select id="creator-performance-window" value={performanceWindow} onChange={(event) => { setPerformanceWindow(event.target.value); setPageTokens([]); }}><option value="PAST_24H">{t('sellerAffiliate.past24h')}</option><option value="PAST_7_DAYS">{t('sellerAffiliate.past7Days')}</option><option value="PAST_30_DAYS">{t('sellerAffiliate.past30Days')}</option></select></div><div className="field"><label htmlFor="creator-performance-end-day">{t('sellerAffiliate.endDay')}</label><input id="creator-performance-end-day" type="date" value={performanceEndDay} max={yesterday()} onChange={(event) => { setPerformanceEndDay(event.target.value); setPageTokens([]); }} /></div></> : null}
+          {section === 'performance' ? <div className="field"><label htmlFor="creator-performance-window">{t('sellerAffiliate.performanceWindow')}</label><select id="creator-performance-window" value={performanceWindow} onChange={(event) => { setPerformanceWindow(event.target.value); setPageTokens([]); }}><option value="PAST_24H">{t('sellerAffiliate.past24h')}</option><option value="PAST_7_DAYS">{t('sellerAffiliate.past7Days')}</option><option value="PAST_30_DAYS">{t('sellerAffiliate.past30Days')}</option></select></div> : null}
         </div>
       </section>
 
@@ -311,10 +297,7 @@ const SellerAffiliatePanel = () => {
       {error ? <section className="section-card empty-state empty-state--compact" role="alert">{error}</section> : null}
 
       {selectedShop && hasScope ? <>
-        <div className="seller-affiliate__subtabs" role="tablist" aria-label={t('sellerAffiliate.sections')}>
-          {['open', 'target', 'performance', 'creators', 'orders'].map((value) => <button className={section === value ? 'is-active' : ''} type="button" role="tab" aria-selected={section === value} onClick={() => changeSection(value)} key={value}>{t(`sellerAffiliate.${value}Tab`)}</button>)}
-        </div>
-        {section === 'performance' ? <section className="section-card"><div className="section-card__header"><div><h2 className="section-card__title">{t('sellerAffiliate.performanceTitle')}</h2><p className="section-card__meta">{profileRefreshing ? t('sellerAffiliate.refreshingProfiles') : data.export?.status === 'SUCCEEDED' ? `${data.export.start_date} – ${data.export.end_date}` : t(`sellerAffiliate.performanceStatus_${data.export?.status || 'EMPTY'}`)}</p></div><button className="button" type="button" disabled={performanceSyncing || profileRefreshing || data.export?.status === 'PROCESSING'} onClick={syncPerformance}>{performanceSyncing || profileRefreshing ? t('common.loading') : t('sellerAffiliate.generateReport')}</button></div>{data.totals ? <section className="seller-affiliate__summary"><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.creatorGmv')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatMoney({ amount: data.totals.affiliate_gmv, currency: rows[0]?.currency || 'MYR' })}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.affiliateOrders')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatNumber(data.totals.affiliate_orders)}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.itemsSold')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatNumber(data.totals.items_sold)}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.productImpressions')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatNumber(data.totals.product_impressions)}</p></article></section> : null}</section> : null}
+        {section === 'performance' ? <section className="section-card"><div className="section-card__header"><div><h2 className="section-card__title">{t('sellerAffiliate.performanceTitle')}</h2><p className="section-card__meta">{profileRefreshing ? t('sellerAffiliate.refreshingProfiles') : data.snapshot_export ? `${data.snapshot_export.start_date} – ${data.snapshot_export.end_date}` : t(`sellerAffiliate.performanceStatus_${data.export?.status || 'EMPTY'}`)}</p></div></div>{data.totals ? <section className="seller-affiliate__summary"><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.creatorGmv')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatMoney({ amount: data.totals.affiliate_gmv, currency: rows[0]?.currency || 'MYR' })}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.affiliateOrders')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatNumber(data.totals.affiliate_orders)}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.itemsSold')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatNumber(data.totals.items_sold)}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.productImpressions')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatNumber(data.totals.product_impressions)}</p></article></section> : null}</section> : null}
         {section === 'performance' && data.is_fallback && data.snapshot_export ? <section className="section-card empty-state empty-state--compact" role="status">{t('sellerAffiliate.staleSnapshot', { start: formatReportDate(data.snapshot_export.start_date), end: formatReportDate(data.snapshot_export.end_date) })}</section> : null}
         {section === 'performance' && !hasMarketplaceScope ? <section className="section-card empty-state empty-state--compact" role="alert"><strong>{t('sellerAffiliate.missingMarketplaceScope')}</strong><span>{t('sellerAffiliate.missingMarketplaceScopeMeta')}</span></section> : null}
         {section === 'performance' && performanceBreakdown.length ? <section className="section-card seller-creator-breakdown"><div className="section-card__header"><div><h2 className="section-card__title">{t('sellerAffiliate.performanceChartTitle')}</h2><p className="section-card__meta">{t('sellerAffiliate.performanceChartMeta')}</p></div></div><div className="seller-creator-breakdown__body"><div className="seller-creator-breakdown__chart"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={performanceBreakdown} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="82%" paddingAngle={2}>{performanceBreakdown.map((item, index) => <Cell key={item.name} fill={BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]} />)}</Pie><Tooltip formatter={(value) => formatMoney({ amount: value, currency: rows[0]?.currency || 'MYR' })} /></PieChart></ResponsiveContainer><div className="seller-creator-breakdown__center"><strong>{formatMoney({ amount: performanceBreakdownTotal, currency: rows[0]?.currency || 'MYR' })}</strong><span>{t('sellerAffiliate.top10Gmv')}</span></div></div><div className="seller-creator-breakdown__legend">{performanceBreakdown.map((item, index) => <div key={item.name}><i style={{ background: BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length] }} /><span>{item.name}</span><strong>{formatMoney({ amount: item.value, currency: rows[0]?.currency || 'MYR' })}</strong></div>)}</div></div></section> : null}

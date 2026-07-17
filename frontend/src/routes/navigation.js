@@ -1,5 +1,5 @@
 export const topNavItems = [
-  { to: '/manage/koc-performance', label: 'TikTok Shop' },
+  { to: '/manage/affiliate', label: 'TikTok Shop' },
   { to: '/dashboard', label: 'TikTok' },
   { to: '/chatbot', label: 'Facebook' },
   { to: '/manage/users', label: 'Admin', adminOnly: true },
@@ -17,6 +17,7 @@ export const sidebarSections = [
   {
     title: 'TikTok Shop',
     items: [
+      { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
       { to: '/manage/koc-performance', labelKey: 'navigation.kocPerformance' },
       { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
       { to: '/bookings', labelKey: 'navigation.bookings' },
@@ -67,6 +68,11 @@ export const protectedRouteCards = [
       heroTitle: 'Schedule management',
       heroSubtitle: 'Manage automated data synchronization jobs.',
     },
+  },
+  {
+    path: '/manage/affiliate',
+    component: 'SellerAffiliatePanel',
+    props: {},
   },
   {
     path: '/manage/koc-performance',

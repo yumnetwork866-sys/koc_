@@ -165,7 +165,7 @@ export function syncTikTokCreatorPerformance(shopId, payload) {
     method: 'POST',
     body: {
       window_type: payload.windowType,
-      end_day: payload.endDay.replaceAll('-', ''),
+      ...(payload.endDay ? { end_day: payload.endDay.replaceAll('-', '') } : {}),
       plan_type: payload.planType || 'ALL',
     },
   });

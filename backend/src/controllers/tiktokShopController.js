@@ -37,7 +37,7 @@ const creatorProfileRefreshKey = (shopId, exportId) => `${shopId}:${exportId}`;
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3005';
 const redirectUrl = (status, message, returnPath = '/manage/shop-analytics') => {
-  const safeReturnPath = ['/manage/shop-analytics', '/manage/koc-performance'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
+  const safeReturnPath = ['/manage/shop-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
   const url = new URL(safeReturnPath, FRONTEND_URL());
   url.searchParams.set('shop_oauth_status', status);
   if (message) url.searchParams.set('shop_oauth_message', message);
@@ -113,7 +113,7 @@ const handleShopOauthCallback = async (req, res) => {
       });
     });
     sellerAffiliateCache.clear();
-    const requestedAffiliate = oauthState.returnPath === '/manage/koc-performance';
+    const requestedAffiliate = ['/manage/koc-performance', '/manage/affiliate'].includes(oauthState.returnPath);
     const requiredScope = requestedAffiliate ? 'seller.affiliate_collaboration.read' : 'data.shop_analytics.public.read';
     const hasRequiredScope = normalizedScopes.includes(requiredScope);
     return res.redirect(redirectUrl(

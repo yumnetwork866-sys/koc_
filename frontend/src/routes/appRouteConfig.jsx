@@ -9,6 +9,7 @@ const BookingManagement = lazy(() => import('../components/BookingManagement'));
 const Dashboard = lazy(() => import('../components/Dashboard'));
 const EmployeeTable = lazy(() => import('../components/EmployeeTable'));
 const KOCPerformance = lazy(() => import('../components/KOCPerformance'));
+const SellerAffiliatePanel = lazy(() => import('../components/SellerAffiliatePanel'));
 const ShopAnalytics = lazy(() => import('../components/ShopAnalytics'));
 const ScheduleManagement = lazy(() => import('../components/ScheduleManagement'));
 const HomePage = lazy(() => import('../components/HomePage'));
@@ -23,6 +24,7 @@ const componentMap = {
   Dashboard,
   EmployeeTable,
   KOCPerformance,
+  SellerAffiliatePanel,
   ShopAnalytics,
   ScheduleManagement,
   BookingManagement,

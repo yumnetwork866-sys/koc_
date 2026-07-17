@@ -159,7 +159,7 @@ const Header = () => {
 
   const navLabels = {
     '/dashboard': t('nav.tiktok'),
-    '/manage/koc-performance': t('nav.tiktokShop'),
+    '/manage/affiliate': t('nav.tiktokShop'),
     '/chatbot': t('nav.facebook'),
   };
   const currentLanguage = language;
@@ -187,8 +187,9 @@ const Header = () => {
         '/videos',
       ].some((prefix) => location.pathname.startsWith(prefix));
     }
-    if (to === '/manage/koc-performance') {
+    if (to === '/manage/affiliate') {
       return [
+        '/manage/affiliate',
         '/manage/koc-performance',
         '/manage/shop-analytics',
         '/bookings',

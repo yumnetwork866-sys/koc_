@@ -45,7 +45,7 @@ const buildShopAuthorizationUrl = (returnPath = '/manage/shop-analytics') => {
   assertConfigured(config, { oauth: true });
   const payload = Buffer.from(JSON.stringify({
     oauthType: 'shop',
-    returnPath: ['/manage/shop-analytics', '/manage/koc-performance'].includes(returnPath) ? returnPath : '/manage/shop-analytics',
+    returnPath: ['/manage/shop-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics',
     nonce: crypto.randomBytes(16).toString('hex'),
     expiresAt: Date.now() + STATE_TTL_MS,
   })).toString('base64url');

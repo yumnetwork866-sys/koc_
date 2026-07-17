@@ -353,7 +353,7 @@ const createCreatorPerformanceExport = async (shop, {
 };
 
 const createCreatorPerformanceExportWithFallback = async (shop, options = {}, {
-  maxFallbackDays = 2,
+  maxFallbackDays = 7,
   createExport = createCreatorPerformanceExport,
 } = {}) => {
   const requestedEndDay = Number(options.endDay || yesterdayEndDay(shop.region));
