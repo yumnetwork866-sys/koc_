@@ -35,7 +35,7 @@ const Login = () => {
       const previousLocation = location.state?.from;
       const destination = previousLocation
         ? `${previousLocation.pathname}${previousLocation.search || ''}${previousLocation.hash || ''}`
-        : '/dashboard';
+        : '/manage/affiliate';
       navigate(destination, { replace: true });
     } catch (err) {
       setError(err.message || t('login.error'));

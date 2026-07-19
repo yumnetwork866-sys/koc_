@@ -17,7 +17,7 @@ export function RequireSession({ children }) {
 export function LoginRoute({ children }) {
   const location = useLocation();
   const session = useSession();
-  const destination = location.state?.from?.pathname || '/dashboard';
+  const destination = location.state?.from?.pathname || '/manage/affiliate';
 
   if (session) {
     return <Navigate to={destination} replace />;
