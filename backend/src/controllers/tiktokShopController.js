@@ -189,21 +189,10 @@ const getShopAnalytics = async (req, res) => {
     if (startDate) where.start_date = startDate;
     if (endDate) where.end_date = endDate;
     if (['LOCAL', 'USD'].includes(req.query.currency)) where.currency = req.query.currency;
-    let snapshots = await TikTokShopAnalyticsSnapshot.findAll({ where, order: [['synced_at', 'DESC']], limit: 30 });
-    let isFallback = false;
-    if (!snapshots.length && (startDate || endDate)) {
-      const fallbackWhere = { shop_id: shop.id };
-      if (['LOCAL', 'USD'].includes(req.query.currency)) fallbackWhere.currency = req.query.currency;
-      snapshots = await TikTokShopAnalyticsSnapshot.findAll({
-        where: fallbackWhere,
-        order: [['end_date', 'DESC'], ['synced_at', 'DESC']],
-        limit: 1,
-      });
-      isFallback = snapshots.length > 0;
-    }
+    const snapshots = await TikTokShopAnalyticsSnapshot.findAll({ where, order: [['synced_at', 'DESC']], limit: 30 });
     res.json({
       shop,
-      is_fallback: isFallback,
+      is_fallback: false,
       requested_range: { start_date: startDate, end_date: endDate },
       snapshots: snapshots.map((snapshot) => {
         const value = snapshot.toJSON();

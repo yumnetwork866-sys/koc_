@@ -244,25 +244,38 @@ const ShopAnalytics = ({ managementOnly = false }) => {
     const controller = new AbortController();
     setAnalyticsLoading(true);
     setError('');
-    fetchTikTokShopAnalytics(selectedShopId, {
-      signal: controller.signal,
-      startDate,
-      endDate,
-      currency,
-    }).then((payload) => {
-      const nextSnapshot = payload?.snapshots?.[0];
-      setSnapshot(nextSnapshot ? {
-        ...nextSnapshot,
-        is_fallback: Boolean(payload.is_fallback),
-        requested_range: payload.requested_range || null,
-      } : null);
-    }).catch((requestError) => {
-      if (requestError.name !== 'AbortError') {
-        setError(requestError.message || t('shopAnalytics.loadError'));
+    const loadRange = async () => {
+      try {
+        const payload = await fetchTikTokShopAnalytics(selectedShopId, {
+          signal: controller.signal,
+          startDate,
+          endDate,
+          currency,
+        });
+        let nextSnapshot = payload?.snapshots?.[0] || null;
+        if (!nextSnapshot) {
+          setSyncing(true);
+          const syncPayload = await syncTikTokShopAnalytics(selectedShopId, {
+            start_date: startDate,
+            end_date: endDate,
+            currency,
+          }, controller.signal);
+          nextSnapshot = syncPayload?.snapshot || null;
+        }
+        if (!controller.signal.aborted) setSnapshot(nextSnapshot);
+      } catch (requestError) {
+        if (requestError.name !== 'AbortError') {
+          setSnapshot(null);
+          setError(requestError.message || t('shopAnalytics.loadError'));
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setAnalyticsLoading(false);
+          setSyncing(false);
+        }
       }
-    }).finally(() => {
-      if (!controller.signal.aborted) setAnalyticsLoading(false);
-    });
+    };
+    loadRange();
     return () => controller.abort();
   }, [currency, endDate, invalidRange, managementOnly, selectedShopId, startDate, t]);
 

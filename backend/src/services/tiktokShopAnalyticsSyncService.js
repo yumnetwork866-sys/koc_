@@ -10,7 +10,7 @@ const isoDay = (endDay) => {
 };
 
 const scheduledAnalyticsRange = (shop, now = new Date()) => {
-  const endDay = yesterdayEndDay(shop.region, now);
+  const endDay = shiftEndDay(yesterdayEndDay(shop.region, now), 1);
   return {
     startDate: isoDay(shiftEndDay(endDay, -30)),
     endDate: isoDay(endDay),

@@ -112,8 +112,8 @@ export function fetchTikTokShopAnalytics(shopId, { signal, startDate, endDate, c
   return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/analytics${query ? `?${query}` : ''}`, { signal });
 }
 
-export function syncTikTokShopAnalytics(shopId, payload) {
-  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/analytics/sync`, { method: 'POST', body: payload });
+export function syncTikTokShopAnalytics(shopId, payload, signal) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/analytics/sync`, { method: 'POST', body: payload, signal });
 }
 
 export function fetchSchedules(signal) {

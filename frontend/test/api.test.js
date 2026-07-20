@@ -82,7 +82,7 @@ test('a current admin 401 clears the session while a platform 428 does not', asy
   });
 });
 
-test('TikTok Shop API helpers preserve analytics filters and sync payload', async () => {
+test('TikTok Shop API helpers preserve analytics filters, sync payload and abort signal', async () => {
   await withBrowser(async () => {
     saveStoredSession(createSession('shop-admin'));
     const calls = [];
@@ -96,12 +96,14 @@ test('TikTok Shop API helpers preserve analytics filters and sync payload', asyn
 
     await startTikTokShopOauth();
     await fetchTikTokShopAnalytics(7, { startDate: '2026-06-01', endDate: '2026-07-01', currency: 'LOCAL' });
-    await syncTikTokShopAnalytics(7, { start_date: '2026-06-01', end_date: '2026-07-01', currency: 'LOCAL' });
+    const controller = new AbortController();
+    await syncTikTokShopAnalytics(7, { start_date: '2026-06-01', end_date: '2026-07-01', currency: 'LOCAL' }, controller.signal);
 
     assert.equal(calls[0].url, '/api/tiktok-shop/oauth/start');
     assert.equal(calls[1].url, '/api/tiktok-shop/shops/7/analytics?start_date=2026-06-01&end_date=2026-07-01&currency=LOCAL');
     assert.equal(calls[2].url, '/api/tiktok-shop/shops/7/analytics/sync');
     assert.equal(calls[2].options.method, 'POST');
+    assert.equal(calls[2].options.signal, controller.signal);
     assert.deepEqual(JSON.parse(calls[2].options.body), {
       start_date: '2026-06-01', end_date: '2026-07-01', currency: 'LOCAL',
     });
