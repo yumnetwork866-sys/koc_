@@ -32,7 +32,7 @@ const HomePage = () => {
           </h1>
           <p className="home-page__hero-description">{t('home.heroDescription')}</p>
           <div className="home-page__actions">
-            <Link to="/manage/affiliate" className="home-page__cta home-page__cta--primary">
+            <Link to="/manage/shop-analytics" className="home-page__cta home-page__cta--primary">
               {t('home.startNow')}
               <span aria-hidden="true">→</span>
             </Link>

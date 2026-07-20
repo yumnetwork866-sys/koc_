@@ -160,7 +160,7 @@ const Header = () => {
 
   const navLabels = {
     '/dashboard': t('nav.tiktok'),
-    '/manage/affiliate': t('nav.tiktokShop'),
+    '/manage/shop-analytics': t('nav.tiktokShop'),
     '/chatbot': t('nav.facebook'),
     '/whatsapp': t('nav.whatsapp'),
   };
@@ -195,7 +195,7 @@ const Header = () => {
         '/videos',
       ].some((prefix) => location.pathname.startsWith(prefix));
     }
-    if (to === '/manage/affiliate') {
+    if (to === '/manage/shop-analytics') {
       return [
         '/manage/affiliate',
         '/manage/koc-performance',
