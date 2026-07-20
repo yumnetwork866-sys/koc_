@@ -144,13 +144,13 @@ const boundedPercentage = (value) => Math.min(100, Math.max(0, value));
 const ShopAnalytics = ({ managementOnly = false }) => {
   const { t, language } = useI18n();
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
-  const initialRange = useMemo(() => rangeForDays(30), []);
+  const initialRange = useMemo(() => rangeForDays(7), []);
   const [shops, setShops] = useState([]);
   const [connections, setConnections] = useState([]);
   const [selectedShopId, setSelectedShopId] = useState('');
   const [startDate, setStartDate] = useState(initialRange.startDate);
   const [endDate, setEndDate] = useState(initialRange.endDate);
-  const [periodPreset, setPeriodPreset] = useState('30d');
+  const [periodPreset, setPeriodPreset] = useState('7d');
   const currency = 'LOCAL';
   const [chartMetric, setChartMetric] = useState('gmv');
   const [snapshot, setSnapshot] = useState(null);
@@ -253,7 +253,7 @@ const ShopAnalytics = ({ managementOnly = false }) => {
           currency,
         });
         let nextSnapshot = payload?.snapshots?.[0] || null;
-        if (!nextSnapshot) {
+        if (!nextSnapshot || !Array.isArray(nextSnapshot?.metrics?.comparison_intervals)) {
           setSyncing(true);
           const syncPayload = await syncTikTokShopAnalytics(selectedShopId, {
             start_date: startDate,

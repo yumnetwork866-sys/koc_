@@ -10,7 +10,6 @@ const {
   exchangeShopAuthorizationCode,
   shopTokenFields,
   getAuthorizedShops,
-  getShopPerformance,
   searchOpenCollaborations,
   searchTargetCollaborations,
   getTargetCollaboration,
@@ -21,6 +20,7 @@ const {
   getSellerCreatorContentDetails,
   normalizeShopPerformance,
 } = require('../services/tiktokShopService');
+const { loadShopAnalyticsPerformance } = require('../services/tiktokShopAnalyticsSyncService');
 const {
   createCreatorPerformanceExportWithFallback,
   createBasePerformanceExportWithFallback,
@@ -218,7 +218,7 @@ const syncShopAnalytics = async (req, res) => {
     if (!grantedScopes.includes('data.shop_analytics.public.read')) {
       return res.status(403).json({ message: 'Reconnect TikTok Shop and grant data.shop_analytics.public.read.' });
     }
-    const payload = await getShopPerformance({ authorization: shop.authorization, shopCipher: shop.cipher, startDate, endDate, currency });
+    const payload = await loadShopAnalyticsPerformance(shop, { startDate, endDate, currency });
     const performance = payload.data?.performance;
     if (!performance || !Array.isArray(performance.intervals)) throw new Error('TikTok Shop returned an invalid Shop Analytics response.');
     await TikTokShopAnalyticsSnapshot.upsert({
