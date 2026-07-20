@@ -164,7 +164,7 @@ const WhatsAppManagement = () => {
   return (
     <div className="page whatsapp-page">
       <section className="whatsapp-hero">
-        <div><span className="whatsapp-hero__eyebrow">WhatsApp Business</span><h1 className="page__title">{t('whatsapp.dashboardTitle')}</h1><p className="page__subtitle">{t('whatsapp.dashboardMeta')}</p><div className="whatsapp-hero__actions"><button className="button" type="button" onClick={() => navigate('/whatsapp/chat')}>{t('whatsapp.openInbox')}</button><button className="button button--ghost" type="button" onClick={() => navigate('/whatsapp/orders')}>{t('whatsapp.viewOrders')}</button></div></div>
+        <div><span className="whatsapp-hero__eyebrow">WhatsApp Business</span><h1 className="page__title">{t('whatsapp.dashboardTitle')}</h1><div className="whatsapp-hero__actions"><button className="button" type="button" onClick={() => navigate('/whatsapp/chat')}>{t('whatsapp.openInbox')}</button><button className="button button--ghost" type="button" onClick={() => navigate('/whatsapp/orders')}>{t('whatsapp.viewOrders')}</button></div></div>
         <div className="whatsapp-status"><span className={overview.configured ? 'is-connected' : ''} aria-hidden="true" /><div><small>{t('whatsapp.connection')}</small><strong>{overview.configured ? t('whatsapp.connected') : t('whatsapp.notConfigured')}</strong><p>{overview.account?.phoneNumberId || t('whatsapp.configureHint')}</p></div></div>
       </section>
       {error ? <div className="section-card empty-state empty-state--compact" role="alert">{error}</div> : null}

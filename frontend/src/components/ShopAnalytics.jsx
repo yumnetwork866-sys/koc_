@@ -500,7 +500,7 @@ const ShopAnalytics = ({ managementOnly = false }) => {
 
   return (
     <div className={`page shop-analytics${managementOnly ? ' shop-analytics--management' : ''}`}>
-      <section className="page__hero shop-analytics__hero">
+      <section className={`page__hero shop-analytics__hero${managementOnly ? ' admin-page__hero' : ''}`}>
         <div className="shop-analytics__hero-row">
           <div className="shop-analytics__hero-copy">
             <h1 className="page__title">

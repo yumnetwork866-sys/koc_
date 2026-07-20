@@ -156,10 +156,9 @@ const ScheduleManagement = () => {
 
   return (
     <div className="page schedule-page schedule-page--operations">
-      <section className="page__hero schedule-page__hero">
+      <section className="page__hero admin-page__hero schedule-page__hero">
         <div>
-          <p className="page__eyebrow">Admin</p>
-          <h1>{t('schedule.title')}</h1>
+          <h1 className="page__title">{t('schedule.title')}</h1>
         </div>
       </section>
 
@@ -189,13 +188,14 @@ const ScheduleManagement = () => {
           {schedules.map((schedule) => {
             const latest = schedule.runs?.[0];
             const isRunning = runningKey === schedule.job_key || latest?.status === 'PROCESSING';
+            const description = t(`schedule.jobs.${schedule.job_key}.description`);
             return (
               <article className="section-card schedule-card schedule-card--compact" key={schedule.job_key}>
                 <header className="schedule-card__header">
                   <span className="schedule-card__icon" aria-hidden="true"><CalendarClock /></span>
                   <div className="schedule-card__heading">
                     <h2>{t(`schedule.jobs.${schedule.job_key}.name`)}</h2>
-                    <p>{t(`schedule.jobs.${schedule.job_key}.description`)}</p>
+                    {description ? <p>{description}</p> : null}
                   </div>
                   <label className="schedule-switch">
                     <input

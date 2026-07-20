@@ -1041,7 +1041,6 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
             <div className="facebook-dashboard-hero__heading">
               <span className="facebook-dashboard-hero__eyebrow">Facebook Messenger</span>
               <h1 className="page__title">{t('chatbot.dashboardTitle')}</h1>
-              <p className="page__subtitle">{t('chatbot.dashboardMeta')}</p>
               <div className="facebook-dashboard-hero__actions">
                 <button className="button" type="button" onClick={() => navigate('/chatbot/chat')}>
                   {t('chatbot.openInbox')}
@@ -1075,7 +1074,7 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
             </div>
           </section>
         ) : (
-          <section className="page__hero">
+          <section className={`page__hero${activeSection === 'chat-setting' ? ' admin-page__hero' : ''}`}>
             <h1 className="page__title">{{
               'chat-setting': t('chatbot.settingsTitle'),
               orders: t('chatbot.ordersTitle'),

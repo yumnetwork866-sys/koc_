@@ -1243,8 +1243,7 @@
 
 .page__eyebrow,
 .dashboard-hero__eyebrow,
-.shop-analytics__eyebrow,
-.employee-table__eyebrow {
+.shop-analytics__eyebrow {
   border-radius: var(--radius-default);
   background: var(--color-accent-soft);
   color: var(--color-social-cyan-strong);
@@ -1655,8 +1654,7 @@
 
 .page__eyebrow,
 .dashboard-hero__eyebrow,
-.shop-analytics__eyebrow,
-.employee-table__eyebrow {
+.shop-analytics__eyebrow {
   border-radius: 8px;
   background: #edf4ff;
   color: #2f6fe4;

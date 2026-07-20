@@ -1,4 +1,28 @@
 /* pages / admin */
+.page__hero.admin-page__hero {
+  min-height: 0;
+  padding: 22px 24px;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.admin-page__hero .page__title,
+.admin-page__hero h1 {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: clamp(1.5rem, 2.2vw, 1.9rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.admin-page__hero .page__subtitle {
+  max-width: 720px;
+  margin: 6px 0 0;
+  color: var(--color-muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
 .employee-table__hero {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -8,23 +32,8 @@
 
 .employee-table__hero-copy {
   display: grid;
-  gap: 8px;
+  gap: 0;
   min-width: 0;
-}
-
-
-.employee-table__eyebrow {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  padding: 5px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 

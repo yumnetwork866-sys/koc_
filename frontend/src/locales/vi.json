@@ -264,7 +264,6 @@
   },
   "users": {
     "heroTitle": "Quản lý người dùng",
-    "eyebrow": "Quản trị hệ thống",
     "manageRoles": "Quản lý vai trò",
     "create": "Tạo người dùng",
     "summaryLabel": "Thống kê người dùng",
@@ -320,7 +319,6 @@
   },
   "chatbot": {
     "dashboardTitle": "Quản lý Facebook",
-    "dashboardMeta": "Theo dõi kết nối Page, hội thoại và đơn hàng cần xử lý trong một nơi.",
     "dashboardSummary": "Tổng quan vận hành Facebook",
     "openInbox": "Mở hộp thư",
     "viewOrders": "Xem đơn hàng",
@@ -397,7 +395,6 @@
   },
   "whatsapp": {
     "dashboardTitle": "Quản lý WhatsApp",
-    "dashboardMeta": "Theo dõi kết nối, hội thoại và đơn hàng WhatsApp trong một nơi.",
     "connection": "Kết nối WhatsApp",
     "connected": "Đã cấu hình",
     "notConfigured": "Chưa cấu hình",
@@ -938,7 +935,6 @@
   },
   "schedule": {
     "title": "Quản lý lịch chạy",
-    "subtitle": "Cấu hình các tác vụ tự động đồng bộ dữ liệu trong hệ thống.",
     "overview": "Tổng quan vận hành lịch chạy",
     "totalJobs": "Tổng tác vụ",
     "activeJobs": "Lịch đang bật",
@@ -966,7 +962,7 @@
     "runNumber": "Lần {{number}}",
     "addRunTime": "Thêm giờ chạy",
     "removeRunTime": "Xóa giờ chạy lần {{number}}",
-    "save": "Lưu lịch chạy",
+    "save": "Lưu",
     "runNow": "Chạy ngay",
     "running": "Đang chạy",
     "latestRun": "Lần chạy gần nhất",
@@ -996,7 +992,7 @@
     "jobs": {
       "tiktok_creator_performance": {
         "name": "TikTok Creator Performance",
-        "description": "Tạo Compass Offline Export, đồng bộ hiệu suất và hồ sơ creator cho tất cả Shop."
+        "description": ""
       },
       "tiktok_shop_analytics": {
         "name": "TikTok Shop Analytics",
@@ -1004,7 +1000,7 @@
       },
       "tiktok_channel_metrics": {
         "name": "TikTok Channel Metrics",
-        "description": "Đồng bộ hồ sơ, video và chỉ số video hằng ngày cho tất cả TikTok Channel."
+        "description": ""
       }
     }
   }

@@ -264,7 +264,6 @@
   },
   "users": {
     "heroTitle": "User management",
-    "eyebrow": "System administration",
     "manageRoles": "Manage roles",
     "create": "Create user",
     "summaryLabel": "User statistics",
@@ -320,7 +319,6 @@
   },
   "chatbot": {
     "dashboardTitle": "Facebook management",
-    "dashboardMeta": "Track Page connections, conversations, and orders that need attention in one place.",
     "dashboardSummary": "Facebook operations overview",
     "openInbox": "Open inbox",
     "viewOrders": "View orders",
@@ -397,7 +395,6 @@
   },
   "whatsapp": {
     "dashboardTitle": "WhatsApp management",
-    "dashboardMeta": "Track WhatsApp connections, conversations, and orders in one place.",
     "connection": "WhatsApp connection",
     "connected": "Configured",
     "notConfigured": "Not configured",
@@ -938,7 +935,6 @@
   },
   "schedule": {
     "title": "Schedule management",
-    "subtitle": "Configure automated data synchronization jobs.",
     "overview": "Schedule operations overview",
     "totalJobs": "Total jobs",
     "activeJobs": "Active schedules",
@@ -966,7 +962,7 @@
     "runNumber": "Run {{number}}",
     "addRunTime": "Add run time",
     "removeRunTime": "Remove run time {{number}}",
-    "save": "Save schedule",
+    "save": "Save",
     "runNow": "Run now",
     "running": "Running",
     "latestRun": "Latest run",
@@ -996,7 +992,7 @@
     "jobs": {
       "tiktok_creator_performance": {
         "name": "TikTok Creator Performance",
-        "description": "Create Compass Offline Export and sync creator performance and profiles for every Shop."
+        "description": ""
       },
       "tiktok_shop_analytics": {
         "name": "TikTok Shop Analytics",
@@ -1004,7 +1000,7 @@
       },
       "tiktok_channel_metrics": {
         "name": "TikTok Channel Metrics",
-        "description": "Sync profiles, videos and daily video metrics for every TikTok Channel."
+        "description": ""
       }
     }
   }

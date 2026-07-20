@@ -315,9 +315,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
 
   return (
     <div className="page employee-table-page">
-      <section className="page__hero employee-table__hero">
+      <section className="page__hero admin-page__hero employee-table__hero">
         <div className="employee-table__hero-copy">
-          <div className="employee-table__eyebrow">{t('users.eyebrow')}</div>
           <h1 className="page__title">{t('users.heroTitle') || heroTitle}</h1>
           {heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
         </div>
