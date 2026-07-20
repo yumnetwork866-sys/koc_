@@ -20,7 +20,6 @@ export const sidebarSections = [
     items: [
       { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
       { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
-      { to: '/manage/koc-performance', labelKey: 'navigation.kocPerformance' },
       { to: '/bookings', labelKey: 'navigation.bookings' },
       { to: '/reports', labelKey: 'navigation.reports' },
     ],

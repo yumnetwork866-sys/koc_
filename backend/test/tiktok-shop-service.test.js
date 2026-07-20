@@ -23,6 +23,7 @@ const {
   searchTargetCollaborations,
   getTargetCollaboration,
   searchAffiliateOrders,
+  attachAffiliateOrderMetadata,
   searchSellerSampleApplications,
   searchMarketplaceCreators,
   getSellerCreatorContentDetails,
@@ -304,6 +305,30 @@ test('search affiliate orders sends the time window and program id', async (t) =
     assert.deepEqual(JSON.parse(options.body), { create_time_ge: 1700000000, create_time_lt: 1700100000, program_id: 'program-1' });
     return successResponse({ orders: [] });
   });
+});
+
+test('affiliate orders are enriched with product and collaboration metadata', () => {
+  const orders = [{
+    id: 'order-1',
+    skus: [
+      { product_id: 'product-1', open_collaboration_id: 'open-1' },
+      { product_id: 'product-2', target_collaboration_id: 'target-1' },
+      { product_id: 'product-1', open_collaboration_id: 'open-1' },
+    ],
+  }];
+  const [order] = attachAffiliateOrderMetadata(orders, {
+    openCollaborations: [{ id: 'open-1', product: { id: 'product-1', title: 'Serum', main_image_url: 'image-1' } }],
+    targetCollaborations: [{ id: 'target-1', name: 'Creator invitation' }],
+  });
+
+  assert.deepEqual(order.products, [
+    { id: 'product-1', title: 'Serum', main_image_url: 'image-1' },
+    { id: 'product-2' },
+  ]);
+  assert.deepEqual(order.programs, [
+    { id: 'open-1', type: 'OPEN' },
+    { id: 'target-1', name: 'Creator invitation', type: 'TARGET' },
+  ]);
 });
 
 test('search Seller sample applications uses the existing Seller Affiliate read scope', async (t) => {

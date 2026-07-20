@@ -115,6 +115,8 @@ const sellerAffiliateFixture = (namespace, shop, query = {}) => {
     order_id: `${DEMO_PREFIX}order_${String(index + 1).padStart(3, '0')}`,
     product_id: products[index % products.length].id,
     program_id: `${DEMO_PREFIX}program_${index % 3 + 1}`,
+    products: [products[index % products.length]],
+    programs: [{ id: `${DEMO_PREFIX}program_${index % 3 + 1}`, name: `Demo Program ${index % 3 + 1}`, type: 'TARGET' }],
     create_time: Math.floor(Date.now() / 1000) - index * 21600,
   }));
   return {

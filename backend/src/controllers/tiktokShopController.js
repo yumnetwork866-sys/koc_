@@ -15,6 +15,7 @@ const {
   searchTargetCollaborations,
   getTargetCollaboration,
   searchAffiliateOrders,
+  attachAffiliateOrderMetadata,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
   getSellerCreatorContentDetails,
@@ -376,15 +377,60 @@ const listTargetCollaborations = affiliateResponse('target-collaborations', asyn
   return { ...payload, data: { ...payload.data, target_collaborations: sharedProfileRows } };
 });
 
-const listAffiliateOrders = affiliateResponse('orders', (shop, req) => searchAffiliateOrders({
-  authorization: shop.authorization,
-  shopCipher: shop.cipher,
-  pageToken: req.query.page_token,
-  pageSize: pageSizeValue(req.query.page_size),
-  startTime: unixTimeValue(req.query.create_time_ge),
-  endTime: unixTimeValue(req.query.create_time_lt),
-  programId: req.query.program_id,
-}));
+const loadTargetCollaborationSummaries = async (shop, targetIds) => {
+  if (!targetIds.size) return [];
+  const rows = [];
+  let pageToken;
+  for (let page = 0; page < 5; page += 1) {
+    const payload = await searchTargetCollaborations({
+      authorization: shop.authorization,
+      shopCipher: shop.cipher,
+      pageToken,
+      pageSize: 100,
+      status: 'ONGOING',
+    });
+    const pageRows = Array.isArray(payload.data?.target_collaborations) ? payload.data.target_collaborations : [];
+    rows.push(...pageRows.filter((row) => targetIds.has(String(row.id))));
+    if (rows.length >= targetIds.size || !payload.data?.next_page_token) break;
+    pageToken = payload.data.next_page_token;
+  }
+  return rows;
+};
+
+const listAffiliateOrders = affiliateResponse('orders', async (shop, req) => {
+  const payload = await searchAffiliateOrders({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    pageToken: req.query.page_token,
+    pageSize: pageSizeValue(req.query.page_size),
+    startTime: unixTimeValue(req.query.create_time_ge),
+    endTime: unixTimeValue(req.query.create_time_lt),
+    programId: req.query.program_id,
+  });
+  const orders = Array.isArray(payload.data?.orders) ? payload.data.orders : [];
+  const skus = orders.flatMap((order) => Array.isArray(order.skus) ? order.skus : []);
+  const targetIds = new Set(skus.map((sku) => sku?.target_collaboration_id).filter(Boolean).map(String));
+  const [openResult, targetResult] = await Promise.allSettled([
+    searchOpenCollaborations({
+      authorization: shop.authorization,
+      shopCipher: shop.cipher,
+      pageSize: 100,
+    }),
+    loadTargetCollaborationSummaries(shop, targetIds),
+  ]);
+  const openCollaborations = openResult.status === 'fulfilled'
+    && Array.isArray(openResult.value.data?.open_collaborations)
+    ? openResult.value.data.open_collaborations
+    : [];
+  const targetCollaborations = targetResult.status === 'fulfilled' ? targetResult.value : [];
+  return {
+    ...payload,
+    data: {
+      ...payload.data,
+      orders: attachAffiliateOrderMetadata(orders, { openCollaborations, targetCollaborations }),
+    },
+  };
+});
 
 const sampleApplicationStatuses = new Set([
   'PENDING', 'AWAITING_SHIPMENT', 'SHIPPED', 'CONTENT_PENDING', 'REJECT_CANCELLED',

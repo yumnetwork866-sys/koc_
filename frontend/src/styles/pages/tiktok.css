@@ -1394,6 +1394,16 @@
   display: none;
 }
 
+.seller-affiliate__order-products,
+.seller-affiliate__order-programs {
+  display: grid;
+  gap: 10px;
+}
+
+.seller-affiliate__order-products .seller-affiliate__product {
+  min-width: 280px;
+}
+
 
 @media (max-width: 820px) {
 .seller-affiliate__filter-grid,

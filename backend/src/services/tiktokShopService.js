@@ -288,6 +288,32 @@ const searchAffiliateOrders = ({ authorization, shopCipher, pageToken, pageSize 
   },
 }, fetchImpl);
 
+const attachAffiliateOrderMetadata = (orders = [], { openCollaborations = [], targetCollaborations = [] } = {}) => {
+  const productsById = new Map(openCollaborations
+    .filter((row) => row?.product?.id)
+    .map((row) => [String(row.product.id), row.product]));
+  const openProgramsById = new Map(openCollaborations
+    .filter((row) => row?.id)
+    .map((row) => [String(row.id), { id: String(row.id), type: 'OPEN' }]));
+  const targetProgramsById = new Map(targetCollaborations
+    .filter((row) => row?.id)
+    .map((row) => [String(row.id), { id: String(row.id), name: row.name || null, type: 'TARGET' }]));
+
+  return orders.map((order) => {
+    const skus = Array.isArray(order?.skus) ? order.skus : [];
+    const productIds = [...new Set(skus.map((sku) => sku?.product_id).filter(Boolean).map(String))];
+    const programIds = [...new Set(skus
+      .flatMap((sku) => [sku?.target_collaboration_id, sku?.open_collaboration_id])
+      .filter(Boolean)
+      .map(String))];
+    return {
+      ...order,
+      products: productIds.map((id) => productsById.get(id) || { id }),
+      programs: programIds.map((id) => targetProgramsById.get(id) || openProgramsById.get(id) || { id }),
+    };
+  });
+};
+
 const getOpenCollaborationSettings = ({ authorization, shopCipher } = {}, fetchImpl) => sellerAffiliateRequest({
   authorization,
   shopCipher,
@@ -455,6 +481,7 @@ module.exports = {
   searchTargetCollaborations,
   getTargetCollaboration,
   searchAffiliateOrders,
+  attachAffiliateOrderMetadata,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
   searchMarketplaceCreators,
