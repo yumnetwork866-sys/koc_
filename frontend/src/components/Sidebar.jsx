@@ -81,6 +81,12 @@ const sidebarIcons = {
     'M6 9v11h12V9',
     'M9 20v-6h6v6',
   ],
+  shopAnalytics: [
+    'M4 9h16',
+    'M5 9l1-5h12l1 5',
+    'M6 9v11h12V9',
+    'M8.5 16.5 11 14l2 1.5 3-4',
+  ],
 };
 
 const routeIconMap = {
@@ -90,7 +96,7 @@ const routeIconMap = {
   '/manage/shops': 'shop',
   '/manage/schedules': 'schedule',
   '/manage/koc-performance': 'koc',
-  '/manage/shop-analytics': 'analytics',
+  '/manage/shop-analytics': 'shopAnalytics',
   '/bookings': 'bookings',
   '/manage/channels': 'channels',
   '/videos': 'videos',

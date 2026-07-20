@@ -739,13 +739,6 @@
 }
 
 
-.shop-analytics__request-chip {
-  max-width: min(360px, 40vw);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-
 .shop-analytics .table-wrap.shop-analytics__table-wrap {
   background: var(--color-surface);
 }
@@ -1078,11 +1071,6 @@
 
   .shop-analytics__connections-card > .section-card__header .button {
     width: 100%;
-  }
-
-
-  .shop-analytics__request-chip {
-    max-width: 100%;
   }
 
 

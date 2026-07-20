@@ -846,14 +846,6 @@ const ShopAnalytics = ({ managementOnly = false }) => {
               </section>
 
               <section className="section-card shop-analytics__daily-card">
-                {snapshot?.is_fallback ? (
-                  <div className="empty-state empty-state--compact" role="status">
-                    {t('shopAnalytics.staleSnapshot', {
-                      start: formatDate(snapshot.start_date),
-                      end: formatDate(snapshot.end_date),
-                    })}
-                  </div>
-                ) : null}
                 <div className="section-card__header">
                   <div>
                     <h2 className="section-card__title">{t('shopAnalytics.dailyValues')}</h2>
@@ -863,11 +855,6 @@ const ShopAnalytics = ({ managementOnly = false }) => {
                         : t('shopAnalytics.noData')}
                     </p>
                   </div>
-                  {snapshot?.request_id ? (
-                    <span className="chip shop-analytics__request-chip">
-                      {t('shopAnalytics.requestId')}: {snapshot.request_id}
-                    </span>
-                  ) : null}
                 </div>
                 <div className="table-wrap shop-analytics__table-wrap">
                   <table className="data-table shop-analytics__table">
