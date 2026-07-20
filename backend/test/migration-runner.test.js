@@ -33,6 +33,7 @@ const defaultMigrationNames = [
   '024_create_scheduled_jobs',
   '025_create_tiktok_creator_profiles',
   '026_create_tiktok_base_performance_snapshots',
+  '027_create_whatsapp_tables',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

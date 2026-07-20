@@ -34,6 +34,7 @@ const migrations = [
   require('./024_create_scheduled_jobs'),
   require('./025_create_tiktok_creator_profiles'),
   require('./026_create_tiktok_base_performance_snapshots'),
+  require('./027_create_whatsapp_tables'),
 ];
 
 const createMigrationRunner = ({

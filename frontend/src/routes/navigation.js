@@ -2,6 +2,7 @@ export const topNavItems = [
   { to: '/manage/affiliate', label: 'TikTok Shop' },
   { to: '/dashboard', label: 'TikTok' },
   { to: '/chatbot', label: 'Facebook' },
+  { to: '/whatsapp', label: 'WhatsApp' },
   { to: '/manage/users', label: 'Admin', adminOnly: true },
 ];
 
@@ -30,6 +31,14 @@ export const sidebarSections = [
       { to: '/chatbot/dashboard', labelKey: 'navigation.dashboard' },
       { to: '/chatbot/chat', labelKey: 'navigation.chat' },
       { to: '/chatbot/orders', labelKey: 'navigation.orders' },
+    ],
+  },
+  {
+    title: 'WhatsApp',
+    items: [
+      { to: '/whatsapp/dashboard', labelKey: 'navigation.dashboard' },
+      { to: '/whatsapp/chat', labelKey: 'navigation.chat' },
+      { to: '/whatsapp/orders', labelKey: 'navigation.orders' },
     ],
   },
   {
@@ -135,6 +144,21 @@ export const protectedRouteCards = [
     },
   },
   {
+    path: '/whatsapp/dashboard',
+    component: 'WhatsAppManagement',
+    props: {},
+  },
+  {
+    path: '/whatsapp/chat',
+    component: 'WhatsAppManagement',
+    props: {},
+  },
+  {
+    path: '/whatsapp/orders',
+    component: 'WhatsAppManagement',
+    props: {},
+  },
+  {
     path: '/chatbot/chat',
     component: 'ChatbotManagement',
     props: {
@@ -164,5 +188,6 @@ export const redirectRoutes = [
   { path: '/manage', to: '/manage/users' },
   { path: '/manage/koc', to: '/manage/koc-performance' },
   { path: '/chatbot', to: '/chatbot/dashboard' },
+  { path: '/whatsapp', to: '/whatsapp/dashboard' },
   { path: '/chatbot/rag', to: '/chatbot/chat-setting' },
 ];

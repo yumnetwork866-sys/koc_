@@ -218,6 +218,11 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
     })).sort((a, b) => a.ownerName.localeCompare(b.ownerName));
   }, [facebookMe.avatarUrl, facebookMe.name, facebookMe.userId, managedPages]);
 
+  const connectedPagesCount = useMemo(
+    () => managedPages.filter((page) => page.connected).length,
+    [managedPages],
+  );
+
   const loadOverview = useCallback(async (signal) => {
     const [
       me,
@@ -978,6 +983,10 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
                           </span>
                           <div className="mini-card__content">
                             <h3>{page.name}</h3>
+                            <p className={`facebook-page-status${page.connected ? ' facebook-page-status--connected' : ''}`}>
+                              <span aria-hidden="true" />
+                              {page.connected ? t('chatbot.pageConnected') : t('chatbot.pageNotConnected')}
+                            </p>
                           </div>
                           <div className="mini-card__action mini-card__action--stack">
                             {page.connected ? (
@@ -1027,14 +1036,53 @@ const ChatbotManagement = ({ heroTitle, heroSubtitle }) => {
       {toastNode}
 
       {activeSection !== 'chat' ? (
-        <section className="page__hero" id="dashboard">
-          <h1 className="page__title">{{
-            dashboard: t('chatbot.dashboardTitle'),
-            'chat-setting': t('chatbot.settingsTitle'),
-            orders: t('chatbot.ordersTitle'),
-          }[activeSection] || heroTitle}</h1>
-          {activeSection !== 'dashboard' && heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
-        </section>
+        activeSection === 'dashboard' ? (
+          <section className="facebook-dashboard-hero" id="dashboard">
+            <div className="facebook-dashboard-hero__heading">
+              <span className="facebook-dashboard-hero__eyebrow">Facebook Messenger</span>
+              <h1 className="page__title">{t('chatbot.dashboardTitle')}</h1>
+              <p className="page__subtitle">{t('chatbot.dashboardMeta')}</p>
+              <div className="facebook-dashboard-hero__actions">
+                <button className="button" type="button" onClick={() => navigate('/chatbot/chat')}>
+                  {t('chatbot.openInbox')}
+                </button>
+                <button className="button button--ghost" type="button" onClick={() => navigate('/chatbot/orders')}>
+                  {t('chatbot.viewOrders')}
+                </button>
+              </div>
+            </div>
+            <div className="facebook-dashboard-hero__stats" aria-label={t('chatbot.dashboardSummary')}>
+              <article className="facebook-dashboard-stat facebook-dashboard-stat--status">
+                <p>{t('chatbot.facebookConnection')}</p>
+                <strong>{facebookMe.loggedIn ? t('chatbot.connected') : t('chatbot.notConnected')}</strong>
+                <span className={facebookMe.loggedIn ? 'is-connected' : ''} aria-hidden="true" />
+              </article>
+              <article className="facebook-dashboard-stat">
+                <p>{t('chatbot.connectedPages')}</p>
+                <strong>{connectedPagesCount}</strong>
+                <small>{t('chatbot.ofPages', { count: managedPages.length })}</small>
+              </article>
+              <article className="facebook-dashboard-stat">
+                <p>{t('chatbot.conversations')}</p>
+                <strong>{conversations.length}</strong>
+                <small>{t('chatbot.readyToReply')}</small>
+              </article>
+              <article className="facebook-dashboard-stat">
+                <p>{t('chatbot.newOrders')}</p>
+                <strong>{stats.newOrders || 0}</strong>
+                <small>{t('chatbot.needsFollowUp')}</small>
+              </article>
+            </div>
+          </section>
+        ) : (
+          <section className="page__hero">
+            <h1 className="page__title">{{
+              'chat-setting': t('chatbot.settingsTitle'),
+              orders: t('chatbot.ordersTitle'),
+            }[activeSection] || heroTitle}</h1>
+            {heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
+          </section>
+        )
       ) : null}
       {renderSection()}
     </div>

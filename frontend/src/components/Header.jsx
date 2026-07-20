@@ -162,6 +162,7 @@ const Header = () => {
     '/dashboard': t('nav.tiktok'),
     '/manage/affiliate': t('nav.tiktokShop'),
     '/chatbot': t('nav.facebook'),
+    '/whatsapp': t('nav.whatsapp'),
   };
   const currentLanguage = language;
   const connectionOptions = [
@@ -183,6 +184,9 @@ const Header = () => {
     }
     if (to === '/chatbot') {
       return location.pathname.startsWith('/chatbot') && !location.pathname.startsWith('/chatbot/chat-setting');
+    }
+    if (to === '/whatsapp') {
+      return location.pathname.startsWith('/whatsapp');
     }
     if (to === '/dashboard') {
       return [

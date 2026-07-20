@@ -19,6 +19,7 @@ const importRoutes = require('./routes/importRoutes');
 const authRoutes = require('./routes/authRoutes');
 const assistantRoutes = require('./routes/assistantRoutes');
 const chatbotRoutes = require('./routes/chatbotRoutes');
+const whatsappRoutes = require('./routes/whatsappRoutes');
 const tiktokPartnerPublicRoutes = require('./routes/tiktokPartnerPublicRoutes');
 const tiktokShopRoutes = require('./routes/tiktokShopRoutes');
 const scheduleRoutes = require('./routes/scheduleRoutes');
@@ -39,8 +40,14 @@ const createApp = () => {
     credentials: true,
   }));
   app.use(morgan(httpLogFormat));
-  app.use(express.json({ limit: '256kb' }));
+  app.use(express.json({
+    limit: '256kb',
+    verify: (req, _res, buffer) => {
+      req.rawBody = buffer;
+    },
+  }));
   app.use(chatbotRoutes.publicRouter);
+  app.use(whatsappRoutes.publicRouter);
   app.use('/api/bookings/tiktok-partner', tiktokPartnerPublicRoutes);
 
   app.get('/', (req, res) => {
@@ -59,6 +66,7 @@ const createApp = () => {
   app.use('/api/auth', authRoutes);
   app.use('/api/assistant', assistantRoutes);
   app.use('/api/chatbot', requireAdmin, chatbotRoutes.adminRouter);
+  app.use('/api/whatsapp', requireAdmin, whatsappRoutes.adminRouter);
   app.use('/api/tiktok-shop', requireAdmin, tiktokShopRoutes.adminRouter);
   app.use('/api/schedules', requireAdmin, scheduleRoutes);
 

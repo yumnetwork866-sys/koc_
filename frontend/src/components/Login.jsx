@@ -63,7 +63,6 @@ const Login = () => {
       <section className="login-card" aria-labelledby="login-form-title">
         <div className="login-card__header">
           <h2 id="login-form-title">{t('login.formTitle')}</h2>
-          <p>{t('login.formSubtitle')}</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>

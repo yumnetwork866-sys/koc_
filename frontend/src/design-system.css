@@ -1115,18 +1115,6 @@ body {
   background: var(--color-surface-muted);
 }
 
-.stat-card::after {
-  content: '';
-  position: absolute;
-  right: 12px;
-  bottom: 10px;
-  width: 18px;
-  height: 2px;
-  border-radius: var(--radius-pill);
-  background: var(--color-social-cyan);
-  opacity: 0.55;
-}
-
 .stat-card__label {
   margin-bottom: 8px;
   color: var(--color-muted);
@@ -4074,10 +4062,6 @@ body,
 
 .stat-card {
   background: #f8faff;
-}
-
-.stat-card::after {
-  background: #4f7cff;
 }
 
 .button {
