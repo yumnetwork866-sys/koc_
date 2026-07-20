@@ -94,7 +94,7 @@ const Booking = sequelize.define('Booking', {
   },
   deadline: {
     type: DataTypes.DATEONLY,
-    allowNull: false,
+    allowNull: true,
   },
   note: {
     type: DataTypes.TEXT,

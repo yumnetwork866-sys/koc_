@@ -11,7 +11,6 @@ const initialForm = {
   staff_id: '',
   creator_id: '',
   booking_cost: '',
-  deadline: '',
 };
 
 const normalizeBookingVideo = (video) => ({
@@ -154,7 +153,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
         staff_id: Number(form.staff_id),
         creator_id: Number(form.creator_id),
         booking_cost: Number(form.booking_cost),
-        deadline: form.deadline,
       });
       resetForm();
       await loadData();
@@ -252,10 +250,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
               required
             />
           </div>
-          <div className="field">
-            <label htmlFor="deadline">{t('booking.deadline')}</label>
-            <input id="deadline" name="deadline" type="date" value={form.deadline} onChange={handleChange} required />
-          </div>
           <div className="actions">
             <button className="button" type="submit" disabled={saving}>
               {saving ? t('booking.submitting') : t('booking.submit')}
@@ -278,7 +272,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                 <th className="cell-number">ID</th>
                 <th>{t('booking.kocColumn')}</th>
                 <th className="cell-number">{t('booking.costColumn')}</th>
-                <th>{t('booking.deadlineColumn')}</th>
                 <th className="cell-number">{t('booking.viewsColumn')}</th>
                 <th className="cell-number">{t('booking.likesColumn')}</th>
                 <th className="cell-number">{t('booking.sharesColumn')}</th>
@@ -289,7 +282,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={9}>
+                  <td className="table-state-cell" colSpan={8}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('booking.loading')}</div>
@@ -311,7 +304,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                       <td className="cell-number"><span className="row-title">#{booking.id}</span></td>
                       <td>{getKocDisplayName(booking.creator?.name || userNameById.get(String(booking.creator_id)) || booking.creator_id)}</td>
                       <td className="cell-number">{localizedFormatMoney(booking.booking_cost)}</td>
-                      <td>{booking.deadline || '-'}</td>
                       <td className="cell-number">{localizedFormatMoney(bookingVideoStats.views)}</td>
                       <td className="cell-number">{localizedFormatMoney(bookingVideoStats.likes)}</td>
                       <td className="cell-number">{localizedFormatMoney(bookingVideoStats.shares)}</td>
@@ -354,7 +346,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
                 })
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={9}>
+                  <td className="table-state-cell" colSpan={8}>
                     <div className="empty-state empty-state--compact table-empty-state">{t('booking.noData')}</div>
                   </td>
                 </tr>
