@@ -1,10 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   createBooking,
   deleteBooking,
   fetchBookings,
-  fetchTikTokPartnerCreatorOverview,
-  fetchVideos,
   fetchUsers,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
@@ -55,15 +53,6 @@ const parseBookingVideos = (value) => {
   return [];
 };
 
-const getChannelAvatarText = (channel) => {
-  const source = String(channel?.display_name || channel?.username || `Channel ${channel?.id || ''}` || 'CH').trim();
-  const parts = source.split(/\s+/).filter(Boolean);
-  const initials = parts.length >= 2
-    ? `${parts[0][0] || ''}${parts[parts.length - 1][0] || ''}`
-    : source.slice(0, 2);
-  return initials.toUpperCase();
-};
-
 const getKocDisplayName = (user) => {
   const rawName = String(user?.name || user || '').trim();
   if (!rawName) return '-';
@@ -77,21 +66,11 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
   const { t, language } = useI18n();
   const [bookings, setBookings] = useState([]);
   const [users, setUsers] = useState([]);
-  const [videos, setVideos] = useState([]);
   const [form, setForm] = useState(initialForm);
-  const [selectedVideoIds, setSelectedVideoIds] = useState([]);
-  const [selectedChannelId, setSelectedChannelId] = useState('all');
-  const [videoSearch, setVideoSearch] = useState('');
-  const [isChannelDropdownOpen, setIsChannelDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [isVideoPickerOpen, setIsVideoPickerOpen] = useState(false);
   const [error, setError] = useState('');
-  const [partnerOverview, setPartnerOverview] = useState(null);
-  const [partnerLoading, setPartnerLoading] = useState(false);
-  const [partnerError, setPartnerError] = useState('');
-  const [selectedPartnerProductId, setSelectedPartnerProductId] = useState('');
 
   const loadData = async (signal) => {
     const [loadedBookings, loadedUsers] = await Promise.all([
@@ -101,15 +80,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
 
     setBookings(loadedBookings);
     setUsers(loadedUsers);
-
-    try {
-      const loadedVideos = await fetchVideos(signal);
-      setVideos(loadedVideos);
-    } catch (videoError) {
-      if (videoError.name !== 'AbortError') {
-        console.error('Failed to load videos for booking picker:', videoError);
-      }
-    }
   };
 
   useEffect(() => {
@@ -151,110 +121,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
     return new Map(users.map((user) => [String(user.id), user.name]));
   }, [users]);
 
-  const selectedVideos = useMemo(
-    () => videos.filter((video) => selectedVideoIds.includes(String(video.id))),
-    [selectedVideoIds, videos],
-  );
-
-  const partnerCollaborations = useMemo(() => partnerOverview?.collaborations || [], [partnerOverview]);
-  const partnerProducts = useMemo(() => {
-    const collaborationProducts = partnerCollaborations.flatMap((collaboration) => (
-      (collaboration.products || []).map((product) => ({
-        ...product,
-        collaborationId: collaboration.id,
-        collaborationName: collaboration.name || collaboration.id,
-        collaborationStatus: collaboration.status,
-      }))
-    ));
-
-    if (collaborationProducts.length) {
-      return collaborationProducts;
-    }
-
-    return (partnerOverview?.showcase?.products || []).map((product) => ({
-      ...product,
-      collaborationId: 'showcase',
-      collaborationName: t('booking.affiliateProducts'),
-      collaborationStatus: 'showcase',
-    }));
-  }, [partnerCollaborations, partnerOverview, t]);
-
-  const selectedPartnerProduct = useMemo(
-    () => partnerProducts.find((product) => String(product.id) === String(selectedPartnerProductId)) || null,
-    [partnerProducts, selectedPartnerProductId],
-  );
-
-  const channelOptions = useMemo(() => {
-    const map = new Map();
-
-    for (const video of videos) {
-      const channelId = String(video.channel?.id || video.channel_id || '');
-      if (!channelId) continue;
-      if (!map.has(channelId)) {
-        map.set(channelId, {
-          id: channelId,
-          label: video.channel?.display_name || video.channel?.username || `Channel ${channelId}`,
-          username: video.channel?.username || '',
-          avatarUrl: video.channel?.avatar_url || '',
-          avatarText: getChannelAvatarText(video.channel || { id: channelId }),
-        });
-      }
-    }
-
-    return Array.from(map.values());
-  }, [videos]);
-
-  const filteredPickerVideos = useMemo(() => {
-    const query = videoSearch.trim().toLowerCase();
-
-    return videos.filter((video) => {
-      const channelId = String(video.channel?.id || video.channel_id || '');
-      const matchesChannel = selectedChannelId === 'all' || channelId === selectedChannelId;
-      if (!matchesChannel) return false;
-
-      if (!query) return true;
-
-      const haystack = [
-        video.title,
-        video.platform_video_id,
-        video.video_url,
-        video.channel?.display_name,
-        video.channel?.username,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
-      return haystack.includes(query);
-    });
-  }, [selectedChannelId, videoSearch, videos]);
-
-  const filteredPickerVideoIds = useMemo(
-    () => filteredPickerVideos.map((video) => String(video.id)),
-    [filteredPickerVideos],
-  );
-
-  const filteredPickerSelectedCount = useMemo(
-    () => filteredPickerVideoIds.filter((id) => selectedVideoIds.includes(id)).length,
-    [filteredPickerVideoIds, selectedVideoIds],
-  );
-
-  const isAllFilteredSelected = filteredPickerVideoIds.length > 0
-    && filteredPickerSelectedCount === filteredPickerVideoIds.length;
-
-  const isSomeFilteredSelected = filteredPickerSelectedCount > 0 && !isAllFilteredSelected;
-
-  const selectedVideoLabel = selectedVideos.length
-    ? `${t('booking.selectedVideos')} (${selectedVideos.length})`
-    : t('booking.chooseVideos');
-
-  const selectedChannel = useMemo(
-    () => channelOptions.find((channel) => String(channel.id) === String(selectedChannelId)) || null,
-    [channelOptions, selectedChannelId],
-  );
-
-  const channelDropdownRef = useRef(null);
-
   const stats = useMemo(() => {
     return bookings.reduce(
       (acc, booking) => {
@@ -268,11 +134,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-    if (name === 'creator_id') {
-      setPartnerOverview(null);
-      setSelectedPartnerProductId('');
-      setPartnerError('');
-    }
     setForm((current) => ({
       ...current,
       [name]: value,
@@ -281,42 +142,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
 
   const resetForm = () => {
     setForm(initialForm);
-    setSelectedVideoIds([]);
-    setSelectedPartnerProductId('');
-    setPartnerOverview(null);
   };
-
-  useEffect(() => {
-    if (!form.creator_id) {
-      setPartnerOverview(null);
-      setSelectedPartnerProductId('');
-      setPartnerLoading(false);
-      return undefined;
-    }
-    const controller = new AbortController();
-    const loadPartnerOverview = async () => {
-      try {
-        setPartnerLoading(true);
-        setPartnerError('');
-        const overview = await fetchTikTokPartnerCreatorOverview(form.creator_id, controller.signal);
-        if (!controller.signal.aborted) {
-          setPartnerOverview(overview);
-        }
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        if (err.status !== 409) {
-          setPartnerError(err.message || t('booking.partnerError'));
-        }
-        setPartnerOverview(null);
-      } finally {
-        if (!controller.signal.aborted) {
-          setPartnerLoading(false);
-        }
-      }
-    };
-    loadPartnerOverview();
-    return () => controller.abort();
-  }, [form.creator_id, t]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -324,22 +150,11 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
     try {
       setSaving(true);
       setError('');
-      const partnerVideo = selectedPartnerProduct ? {
-        id: `tiktok-partner-${selectedPartnerProduct.id}`,
-        title: `${selectedPartnerProduct.collaborationName} · ${selectedPartnerProduct.title || selectedPartnerProduct.id}`,
-        thumbnail_url: selectedPartnerProduct.main_image_url || '',
-        platform: 'tiktok_shop',
-        platform_video_id: selectedPartnerProduct.id,
-      } : null;
-      const bookingVideos = [...selectedVideos, ...(partnerVideo ? [partnerVideo] : [])];
-
       await createBooking({
         staff_id: Number(form.staff_id),
         creator_id: Number(form.creator_id),
         booking_cost: Number(form.booking_cost),
         deadline: form.deadline,
-        video_platform_id: selectedPartnerProduct?.id || null,
-        video_url: bookingVideos.length ? bookingVideos : null,
       });
       resetForm();
       await loadData();
@@ -367,63 +182,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
       setDeletingId(null);
     }
   };
-
-  const handleVideoToggle = (videoId) => {
-    setSelectedVideoIds((current) => {
-      const nextId = String(videoId);
-      if (current.includes(nextId)) {
-        return current.filter((id) => id !== nextId);
-      }
-      return [...current, nextId];
-    });
-  };
-
-  const handleToggleAllFilteredVideos = () => {
-    setSelectedVideoIds((current) => {
-      if (!filteredPickerVideoIds.length) return current;
-      const currentSet = new Set(current);
-
-      if (filteredPickerVideoIds.every((id) => currentSet.has(id))) {
-        const filteredSet = new Set(filteredPickerVideoIds);
-        return current.filter((id) => !filteredSet.has(id));
-      }
-
-      return Array.from(new Set([...current, ...filteredPickerVideoIds]));
-    });
-  };
-
-  const handleCloseVideoPicker = () => {
-    setIsVideoPickerOpen(false);
-  };
-
-  const handleSelectChannel = (channelId) => {
-    setSelectedChannelId(channelId);
-    setIsChannelDropdownOpen(false);
-  };
-
-  useEffect(() => {
-    if (!isChannelDropdownOpen) return undefined;
-
-    const handlePointerDown = (event) => {
-      if (channelDropdownRef.current && !channelDropdownRef.current.contains(event.target)) {
-        setIsChannelDropdownOpen(false);
-      }
-    };
-
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setIsChannelDropdownOpen(false);
-      }
-    };
-
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isChannelDropdownOpen]);
 
   return (
     <div className="page">
@@ -482,38 +240,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
             </select>
           </div>
           <div className="field">
-            <label htmlFor="partner_product">{t('booking.affiliateProduct')}</label>
-            <select
-              id="partner_product"
-              name="partner_product"
-              value={selectedPartnerProductId}
-              onChange={(event) => setSelectedPartnerProductId(event.target.value)}
-              disabled={!form.creator_id || partnerLoading || !partnerProducts.length}
-            >
-              <option value="">
-                {partnerLoading
-                  ? t('booking.partnerLoading')
-                  : t('booking.selectAffiliateProduct')}
-              </option>
-              {partnerProducts.map((product) => (
-                <option key={`${product.collaborationId}-${product.id}`} value={String(product.id)}>
-                  {product.collaborationName} · {product.title || product.id}
-                </option>
-              ))}
-            </select>
-            {partnerLoading ? (
-              <span className="row-subtitle">{t('booking.partnerLoading')}</span>
-            ) : partnerOverview ? (
-              <span className="row-subtitle">
-                {t('booking.partnerOverviewSummary', {
-                  collaborations: partnerCollaborations.length,
-                  products: partnerProducts.length,
-                })}
-              </span>
-            ) : null}
-            {partnerError ? <span className="row-subtitle">{partnerError}</span> : null}
-          </div>
-          <div className="field">
             <label htmlFor="booking_cost">{t('booking.bookingCost')}</label>
             <input
               id="booking_cost"
@@ -529,19 +255,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
           <div className="field">
             <label htmlFor="deadline">{t('booking.deadline')}</label>
             <input id="deadline" name="deadline" type="date" value={form.deadline} onChange={handleChange} required />
-          </div>
-          <div className="field">
-            <label>{t('booking.videoLink')}</label>
-            <button
-              type="button"
-              className="button button--ghost booking-video-button"
-              aria-haspopup="dialog"
-              aria-expanded={isVideoPickerOpen}
-              onClick={() => setIsVideoPickerOpen(true)}
-            >
-              {selectedVideoLabel}
-            </button>
-            {selectedPartnerProduct ? <span className="row-subtitle">{selectedPartnerProduct.title || selectedPartnerProduct.id}</span> : null}
           </div>
           <div className="actions">
             <button className="button" type="submit" disabled={saving}>
@@ -651,175 +364,6 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
         </div>
       </section>
 
-      {isVideoPickerOpen ? (
-        <div className="modal-backdrop" role="presentation" onClick={handleCloseVideoPicker}>
-          <div
-            className="modal-card booking-video-picker"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="booking-video-picker-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="section-card__header">
-              <div>
-                <h2 className="section-card__title" id="booking-video-picker-title">
-                  {t('booking.videoModalTitle')}
-                </h2>
-              </div>
-              <label className="booking-video-picker__select-all-inline">
-                <input
-                  type="checkbox"
-                  checked={isAllFilteredSelected}
-                  ref={(input) => {
-                    if (input) input.indeterminate = isSomeFilteredSelected;
-                  }}
-                  onChange={handleToggleAllFilteredVideos}
-                  disabled={!filteredPickerVideoIds.length}
-                />
-                <span>
-                  {isAllFilteredSelected
-                    ? t('booking.videoModalDeselectAll')
-                    : t('booking.videoModalSelectAll')}
-                </span>
-              </label>
-            </div>
-
-            <div className="booking-video-picker__filters">
-              <div className="field" ref={channelDropdownRef}>
-                <label htmlFor="booking-video-channel-filter">{t('booking.channelFilter')}</label>
-                <div className="booking-video-channel-picker">
-                  <button
-                    type="button"
-                    className="booking-video-channel-picker__trigger"
-                    aria-haspopup="listbox"
-                    aria-expanded={isChannelDropdownOpen}
-                    onClick={() => setIsChannelDropdownOpen((current) => !current)}
-                  >
-                    <span className="booking-video-channel-picker__current">
-                      <span className="booking-video-channel-picker__avatar" aria-hidden="true">
-                        {selectedChannel?.avatarUrl ? (
-                          <img src={selectedChannel.avatarUrl} alt="" loading="lazy" />
-                        ) : (
-                          selectedChannel?.avatarText || getChannelAvatarText(null)
-                        )}
-                      </span>
-                      <span className="booking-video-channel-picker__name">
-                        {selectedChannel?.label || t('booking.allChannels')}
-                      </span>
-                    </span>
-                    <span className={`sidebar__chevron booking-video-channel-picker__chevron ${isChannelDropdownOpen ? 'sidebar__chevron--open' : ''}`} aria-hidden="true" />
-                  </button>
-
-                  {isChannelDropdownOpen ? (
-                    <div className="booking-video-channel-picker__menu" role="listbox">
-                      <button
-                        type="button"
-                        className={`booking-video-channel-picker__option${selectedChannelId === 'all' ? ' booking-video-channel-picker__option--active' : ''}`}
-                        role="option"
-                        aria-selected={selectedChannelId === 'all'}
-                        onClick={() => handleSelectChannel('all')}
-                      >
-                        <span className="booking-video-channel-picker__avatar booking-video-channel-picker__avatar--empty" aria-hidden="true">
-                          {getChannelAvatarText({ id: 'all', display_name: t('booking.allChannels') })}
-                        </span>
-                        <span className="booking-video-channel-picker__name">{t('booking.allChannels')}</span>
-                      </button>
-
-                      {channelOptions.map((channel) => (
-                        <button
-                          key={channel.id}
-                          type="button"
-                          className={`booking-video-channel-picker__option${String(channel.id) === String(selectedChannelId) ? ' booking-video-channel-picker__option--active' : ''}`}
-                          role="option"
-                          aria-selected={String(channel.id) === String(selectedChannelId)}
-                          onClick={() => handleSelectChannel(String(channel.id))}
-                        >
-                          <span className="booking-video-channel-picker__avatar" aria-hidden="true">
-                            {channel.avatarUrl ? (
-                              <img src={channel.avatarUrl} alt="" loading="lazy" />
-                            ) : (
-                              channel.avatarText
-                            )}
-                          </span>
-                          <span className="booking-video-channel-picker__name">{channel.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-              <div className="field">
-                <label htmlFor="booking-video-search">{t('booking.searchVideos')}</label>
-                <input
-                  id="booking-video-search"
-                  type="search"
-                  value={videoSearch}
-                  onChange={(event) => setVideoSearch(event.target.value)}
-                  placeholder={t('booking.searchVideosPlaceholder')}
-                />
-              </div>
-            </div>
-
-            <div className="booking-video-picker__list" role="list" aria-label={t('booking.videoModalTitle')}>
-              {filteredPickerVideos.length ? (
-                filteredPickerVideos.map((video) => {
-                  const isSelected = selectedVideoIds.includes(String(video.id));
-                  return (
-                    <label
-                      key={video.id}
-                      className={`booking-video-picker__item${isSelected ? ' booking-video-picker__item--selected' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleVideoToggle(video.id)}
-                      />
-                      {video.thumbnail_url ? (
-                        <img
-                          className="booking-video-picker__thumb"
-                          src={video.thumbnail_url}
-                          alt=""
-                          loading="lazy"
-                        />
-                      ) : (
-                        <span className="booking-video-picker__thumb booking-video-picker__thumb--empty" aria-hidden="true">
-                          Video
-                        </span>
-                      )}
-                      <span className="booking-video-picker__avatar" aria-hidden="true">
-                        {video.channel?.avatar_url ? (
-                          <img src={video.channel.avatar_url} alt="" loading="lazy" />
-                        ) : (
-                          getChannelAvatarText(video.channel || { id: video.channel_id })
-                        )}
-                      </span>
-                      <span className="booking-video-picker__meta">
-                        <strong>{video.title || video.platform_video_id || video.video_url}</strong>
-                        <span className="booking-video-picker__channel">
-                          {video.channel?.display_name || video.channel?.username || `Channel ${video.channel_id || ''}`}
-                        </span>
-                      </span>
-                    </label>
-                  );
-                })
-              ) : (
-                <div className="empty-state empty-state--compact table-empty-state">
-                  {videos.length ? t('booking.noVideosMatch') : t('booking.noVideosAvailable')}
-                </div>
-              )}
-            </div>
-
-            <div className="modal-card__actions">
-              <button type="button" className="button button--ghost" onClick={handleCloseVideoPicker}>
-                {t('common.cancel')}
-              </button>
-              <button type="button" className="button" onClick={handleCloseVideoPicker}>
-                {t('booking.videoModalDone')}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 };
