@@ -1,0 +1,17 @@
+/* Canonical stylesheet entry. Import order defines the cascade. */
+@import './tokens.css';
+@import './base.css';
+@import './layout.css';
+@import './components/navigation.css';
+@import './components/buttons.css';
+@import './components/forms.css';
+@import './components/cards.css';
+@import './components/tables.css';
+@import './components/feedback.css';
+@import './pages/facebook.css';
+@import './pages/whatsapp.css';
+@import './pages/shop-analytics.css';
+@import './pages/auth-public.css';
+@import './pages/tiktok.css';
+@import './pages/admin.css';
+@import './pages/other.css';

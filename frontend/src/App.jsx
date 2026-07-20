@@ -4,8 +4,6 @@ import AppErrorBoundary from './components/AppErrorBoundary';
 import RootLayout from './layouts/RootLayout';
 import ProtectedLayout from './layouts/ProtectedLayout';
 import { protectedRedirectConfig, protectedRouteConfig, publicRouteConfig } from './routes/appRouteConfig';
-import './App.css';
-import './design-system.css';
 import { useI18n } from './lib/language';
 
 const renderRoutes = (routeConfig) => routeConfig.map((route) => (
