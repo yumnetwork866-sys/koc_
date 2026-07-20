@@ -15,12 +15,10 @@ export function RequireSession({ children }) {
 }
 
 export function LoginRoute({ children }) {
-  const location = useLocation();
   const session = useSession();
-  const destination = location.state?.from?.pathname || '/manage/shop-analytics';
 
   if (session) {
-    return <Navigate to={destination} replace />;
+    return <Navigate to="/manage/shop-analytics" replace />;
   }
 
   return children;
