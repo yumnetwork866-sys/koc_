@@ -5,6 +5,7 @@ const {
   TikTokCreatorPerformanceExport,
   TikTokCreatorPerformanceSnapshot,
   TikTokBasePerformanceSnapshot,
+  TikTokApiCooldown,
 } = require('../models');
 const {
   createCompassExportTask,
@@ -27,6 +28,45 @@ const REGION_CURRENCY = { MY: 'MYR', VN: 'VND', SG: 'SGD', TH: 'THB', PH: 'PHP',
 const REGION_TIMEZONE = { MY: 'Asia/Kuala_Lumpur', VN: 'Asia/Ho_Chi_Minh', SG: 'Asia/Singapore', TH: 'Asia/Bangkok', PH: 'Asia/Manila', ID: 'Asia/Jakarta' };
 const marketplaceProfileCooldowns = new Map();
 const marketplaceShopCooldowns = new Map();
+const MARKETPLACE_PROFILE_COOLDOWN_NAMESPACE = 'creator_marketplace_profile';
+
+const loadPersistedMarketplaceCooldown = async (shopId, model = TikTokApiCooldown) => {
+  const row = await model.findOne({
+    where: { shop_id: shopId, namespace: MARKETPLACE_PROFILE_COOLDOWN_NAMESPACE },
+  });
+  return row?.cooldown_until ? new Date(row.cooldown_until).getTime() : 0;
+};
+
+const persistMarketplaceCooldown = async ({ shopId, cooldownUntil, reason }, model = TikTokApiCooldown) => {
+  await model.upsert({
+    shop_id: shopId,
+    namespace: MARKETPLACE_PROFILE_COOLDOWN_NAMESPACE,
+    cooldown_until: new Date(cooldownUntil),
+    reason: String(reason || '').slice(0, 2000) || null,
+    updated_at: new Date(),
+  });
+};
+
+const prepareMarketplaceOptions = async (shop, searchMarketplace, options = {}) => {
+  if (searchMarketplace !== searchMarketplaceCreators) return { coolingDown: false, options };
+  const cooldownUntil = await loadPersistedMarketplaceCooldown(shop.id).catch(() => 0);
+  if (cooldownUntil > Date.now()) return { coolingDown: true, options };
+  return {
+    coolingDown: false,
+    options: {
+      ...options,
+      onRateLimit: async (details) => {
+        await options.onRateLimit?.(details);
+        await persistMarketplaceCooldown(details).catch((error) => {
+          console.warn('[Creator Performance] Could not persist Marketplace cooldown', {
+            shopId: shop.id,
+            message: error.message,
+          });
+        });
+      },
+    },
+  };
+};
 
 const isoFromEndDay = (endDay) => {
   const value = String(endDay || '');
@@ -211,6 +251,7 @@ const loadMarketplaceCreatorProfiles = async (
     shopCooldowns = marketplaceShopCooldowns,
     now = () => Date.now(),
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    onRateLimit = async () => {},
   } = {},
 ) => {
   const scopes = Array.isArray(shop.authorization?.granted_scopes) ? shop.authorization.granted_scopes : [];
@@ -283,9 +324,17 @@ const loadMarketplaceCreatorProfiles = async (
         } catch (error) {
           const rateLimited = [36009002, 36009037].includes(Number(error.tiktokCode));
           if (rateLimited) {
+            const cooldownUntil = now() + cooldownMs;
             setCooldown(username);
             setShopCooldown();
             stopAllRequests = true;
+            await onRateLimit({
+              shopId: shop.id,
+              username,
+              cooldownUntil,
+              reason: error.message,
+              code: Number(error.tiktokCode),
+            });
             console.warn('[Creator Performance] Marketplace profile lookup rate-limited', {
               shopId: shop.id,
               username,
@@ -338,11 +387,13 @@ const enrichCreatorRows = async (shop, rows, {
     .filter((row) => creatorProfileNeedsRefresh(row)
       && (!row.avatar_url || Number(row.followers) <= 0 || refreshMarketplace))
     .map((row) => row.username);
+  const preparedMarketplace = await prepareMarketplaceOptions(shop, searchMarketplace, marketplaceOptions);
+  if (preparedMarketplace.coolingDown) return rows;
   const marketplaceProfiles = await loadMarketplaceCreatorProfiles(
     shop,
     missingUsernames,
     searchMarketplace,
-    marketplaceOptions,
+    preparedMarketplace.options,
   );
   for (const row of rows) applyCreatorProfile(row, marketplaceProfiles.get(normalizeUsername(row.username)));
   return rows;
@@ -386,6 +437,8 @@ const refreshCreatorPerformanceProfiles = async (shop, exportRecord, dependencie
   await persistRows(sampleRows);
 
   const candidates = rows.filter(creatorProfileNeedsRefresh);
+  const preparedMarketplace = await prepareMarketplaceOptions(shop, searchMarketplace, marketplaceOptions);
+  if (preparedMarketplace.coolingDown) return refreshed.size;
   const batchSize = Math.max(1, Math.min(50, Number(process.env.TIKTOK_CREATOR_PROFILE_BATCH_SIZE || 20)));
   for (let index = 0; index < candidates.length; index += batchSize) {
     const batch = candidates.slice(index, index + batchSize);
@@ -393,7 +446,7 @@ const refreshCreatorPerformanceProfiles = async (shop, exportRecord, dependencie
       shop,
       batch.map((row) => row.username),
       searchMarketplace,
-      marketplaceOptions,
+      preparedMarketplace.options,
     );
     const enrichedRows = [];
     for (const row of batch) {
@@ -636,6 +689,8 @@ module.exports = {
   processBasePerformanceExport,
   loadCreatorProfiles,
   loadMarketplaceCreatorProfiles,
+  loadPersistedMarketplaceCooldown,
+  persistMarketplaceCooldown,
   enrichCreatorRows,
   refreshCreatorPerformanceProfiles,
 };

@@ -611,9 +611,6 @@ const listCreatorPerformance = async (req, res) => {
       shop.id,
       rows.map((row) => row.toJSON()),
     );
-    if (sharedCreatorRows.some((row) => !row.avatar_url || Number(row.followers) <= 0)) {
-      startCreatorProfileRefresh(shop, snapshotExport);
-    }
     res.json({
       export: exportRecord,
       snapshot_export: snapshotExport,

@@ -11,6 +11,8 @@ const {
   parseBasePerformanceWorkbook,
   enrichCreatorRows,
   loadMarketplaceCreatorProfiles,
+  loadPersistedMarketplaceCooldown,
+  persistMarketplaceCooldown,
   createCreatorPerformanceExportWithFallback,
 } = require('../src/services/tiktokCreatorPerformanceService');
 
@@ -332,4 +334,23 @@ test('Marketplace creator lookup skips the whole shop during cooldown', async ()
 
   assert.equal(calls, 0);
   assert.equal(profiles.size, 0);
+});
+
+test('Marketplace cooldown survives process memory through the persistent store', async () => {
+  let stored;
+  const model = {
+    async upsert(value) { stored = value; },
+    async findOne() { return stored; },
+  };
+  const cooldownUntil = Date.now() + 60_000;
+
+  await persistMarketplaceCooldown({
+    shopId: 7,
+    cooldownUntil,
+    reason: 'Too many requests for downstream.',
+  }, model);
+
+  assert.equal(await loadPersistedMarketplaceCooldown(7, model), cooldownUntil);
+  assert.equal(stored.shop_id, 7);
+  assert.equal(stored.namespace, 'creator_marketplace_profile');
 });

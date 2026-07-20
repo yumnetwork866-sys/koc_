@@ -275,6 +275,17 @@ const TikTokCreatorProfile = sequelize.define('TikTokCreatorProfile', {
   ],
 });
 
+const TikTokApiCooldown = sequelize.define('TikTokApiCooldown', {
+  shop_id: { type: DataTypes.INTEGER, primaryKey: true },
+  namespace: { type: DataTypes.STRING(100), primaryKey: true },
+  cooldown_until: { type: DataTypes.DATE, allowNull: false },
+  reason: DataTypes.TEXT,
+  updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_api_cooldowns',
+  timestamps: false,
+});
+
 const TikTokBasePerformanceSnapshot = sequelize.define('TikTokBasePerformanceSnapshot', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   export_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -928,6 +939,8 @@ TikTokCreatorPerformanceExport.hasMany(TikTokCreatorPerformanceSnapshot, { forei
 TikTokCreatorPerformanceSnapshot.belongsTo(TikTokCreatorPerformanceExport, { foreignKey: 'export_id', as: 'export' });
 TikTokShop.hasMany(TikTokCreatorProfile, { foreignKey: 'shop_id', as: 'creator_profiles' });
 TikTokCreatorProfile.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(TikTokApiCooldown, { foreignKey: 'shop_id', as: 'api_cooldowns' });
+TikTokApiCooldown.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokShop.hasMany(TikTokBasePerformanceSnapshot, { foreignKey: 'shop_id', as: 'base_performance_snapshots' });
 TikTokBasePerformanceSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokCreatorPerformanceExport.hasOne(TikTokBasePerformanceSnapshot, { foreignKey: 'export_id', as: 'base_snapshot' });
@@ -977,6 +990,7 @@ module.exports = {
   TikTokCreatorPerformanceExport,
   TikTokCreatorPerformanceSnapshot,
   TikTokCreatorProfile,
+  TikTokApiCooldown,
   TikTokBasePerformanceSnapshot,
   ScheduledJob,
   ScheduledJobRun,

@@ -485,7 +485,6 @@ const AiChatBubble = () => {
           >
             {isWelcome ? (
               <div className="ai-chat-welcome">
-                <span className="ai-chat-welcome__icon" aria-hidden="true"><Bot size={22} /></span>
                 <div>
                   <strong>{t('ai.greeting')}</strong>
                   <p>{t('ai.welcomeDescription')}</p>

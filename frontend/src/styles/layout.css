@@ -1025,18 +1025,6 @@ body,
 }
 
 
-.ai-chat-welcome__icon {
-  display: inline-grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border: 1px solid #dbe6f4;
-  border-radius: 15px;
-  background: #f0f5ff;
-  color: #426ed1;
-}
-
-
 .ai-chat-panel__quick-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
