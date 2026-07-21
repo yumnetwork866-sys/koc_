@@ -7,6 +7,8 @@ const AUTHORIZED_SHOPS_PATH = '/authorization/202309/shops';
 const SHOP_PERFORMANCE_PATH = '/analytics/202509/shop/performance';
 const SELLER_AFFILIATE_SCOPE = 'seller.affiliate_collaboration.read';
 const SELLER_CREATOR_MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
+const SELLER_PRODUCT_BASIC_SCOPE = 'seller.product.basic';
+const PRODUCT_CATEGORIES_PATH = '/product/202309/categories';
 const OPEN_COLLABORATIONS_PATH = '/affiliate_seller/202412/open_collaborations/search';
 const TARGET_COLLABORATIONS_PATH = '/affiliate_seller/202409/target_collaborations/search';
 const TARGET_COLLABORATION_DETAIL_PATH = '/affiliate_seller/202409/target_collaborations';
@@ -375,6 +377,20 @@ const getMarketplaceCreatorPerformance = ({
   }, fetchImpl);
 };
 
+const getProductCategories = ({ authorization, shopCipher, locale = 'en-US' } = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: PRODUCT_CATEGORIES_PATH,
+  method: 'GET',
+  requiredScope: SELLER_PRODUCT_BASIC_SCOPE,
+  query: {
+    locale,
+    category_version: 'v2',
+    listing_platform: 'TIKTOK_SHOP',
+    include_prohibited_categories: false,
+  },
+}, fetchImpl);
+
 const getSellerCreatorContentDetails = ({
   authorization, shopCipher, productId, pageToken, pageSize = 50,
 } = {}, fetchImpl) => {
@@ -474,6 +490,8 @@ module.exports = {
   SHOP_PERFORMANCE_PATH,
   SELLER_AFFILIATE_SCOPE,
   SELLER_CREATOR_MARKETPLACE_SCOPE,
+  SELLER_PRODUCT_BASIC_SCOPE,
+  PRODUCT_CATEGORIES_PATH,
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
   TARGET_COLLABORATION_DETAIL_PATH,
@@ -501,6 +519,7 @@ module.exports = {
   searchSellerSampleApplications,
   searchMarketplaceCreators,
   getMarketplaceCreatorPerformance,
+  getProductCategories,
   getSellerCreatorContentDetails,
   createCompassExportTask,
   listCompassExportTasks,

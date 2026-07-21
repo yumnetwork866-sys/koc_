@@ -693,6 +693,8 @@
     "noShopMeta": "Kết nối tài khoản nhà bán hàng trước khi tải dữ liệu tiếp thị liên kết.",
     "missingScope": "Cửa hàng chưa có quyền đọc dữ liệu tiếp thị liên kết",
     "missingScopeMeta": "Cấp lại quyền cho ứng dụng trong Trung tâm đối tác TikTok Shop rồi kết nối lại tài khoản nhà bán hàng.",
+    "missingProductScope": "Cửa hàng chưa có quyền đọc tên ngành hàng",
+    "missingProductScopeMeta": "Bật seller.product.basic trong Trung tâm đối tác TikTok Shop và kết nối lại tài khoản nhà bán hàng để hiển thị tên ngành hàng của creator.",
     "loadError": "Không tải được dữ liệu tiếp thị liên kết.",
     "autoAdd": "Tự động thêm sản phẩm",
     "defaultCommission": "Hoa hồng mặc định",

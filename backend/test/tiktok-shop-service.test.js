@@ -13,6 +13,7 @@ const {
   CREATOR_CONTENT_DETAILS_PATH,
   MARKETPLACE_CREATORS_PATH,
   MARKETPLACE_CREATOR_DETAIL_PATH,
+  PRODUCT_CATEGORIES_PATH,
   buildShopAuthorizationUrl,
   parseShopAuthorizationState,
   exchangeShopAuthorizationCode,
@@ -28,6 +29,7 @@ const {
   searchSellerSampleApplications,
   searchMarketplaceCreators,
   getMarketplaceCreatorPerformance,
+  getProductCategories,
   getSellerCreatorContentDetails,
   createCompassExportTask,
   listCompassExportTasks,
@@ -428,6 +430,31 @@ test('get Marketplace creator performance uses creator id and marketplace scope'
     assert.equal(options.method, 'GET');
     return successResponse({ creator: { units_sold: 234, ec_video_count: 12 } });
   });
+});
+
+test('get product categories uses seller product scope and the SEA v2 category tree', async (t) => {
+  configure(t);
+  const authorization = sellerAuthorization();
+  authorization.granted_scopes.push('seller.product.basic');
+  const payload = await getProductCategories({
+    authorization,
+    shopCipher: 'cipher-1',
+    locale: 'en-US',
+  }, async (url, options) => {
+    assert.equal(url.pathname, PRODUCT_CATEGORIES_PATH);
+    assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
+    assert.equal(url.searchParams.get('locale'), 'en-US');
+    assert.equal(url.searchParams.get('category_version'), 'v2');
+    assert.equal(url.searchParams.get('listing_platform'), 'TIKTOK_SHOP');
+    assert.equal(url.searchParams.get('include_prohibited_categories'), 'false');
+    assert.equal(options.method, 'GET');
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ code: 0, data: { categories: [{ id: '601450', local_name: 'Beauty & Personal Care' }] } }),
+    };
+  });
+  assert.equal(payload.data.categories[0].local_name, 'Beauty & Personal Care');
 });
 
 test('get Seller creator content details uses product filters and Seller token', async (t) => {

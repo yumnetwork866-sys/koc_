@@ -693,6 +693,8 @@
     "noShopMeta": "Connect a Seller before loading affiliate data.",
     "missingScope": "Seller affiliate read permission is missing",
     "missingScopeMeta": "Grant the scope to the app in TikTok Shop Partner Center, then reconnect the Seller.",
+    "missingProductScope": "Product category permission is missing",
+    "missingProductScopeMeta": "Enable seller.product.basic in TikTok Shop Partner Center and reconnect the Seller to display creator category names.",
     "loadError": "Unable to load Seller affiliate data.",
     "autoAdd": "Auto-add products",
     "defaultCommission": "Default commission",

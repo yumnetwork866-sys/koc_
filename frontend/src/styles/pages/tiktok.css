@@ -1394,6 +1394,50 @@
   display: none;
 }
 
+.seller-affiliate__table tbody:has(.marketplace-creator-row) > tr:not(.marketplace-creator-row) {
+  display: none;
+}
+
+.marketplace-creator-cell {
+  min-width: 290px;
+}
+
+.marketplace-creator {
+  align-items: flex-start;
+}
+
+.marketplace-creator__details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.marketplace-creator__username {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.marketplace-creator__level {
+  display: inline-flex;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fff1cc;
+  color: #9a5b00;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.marketplace-creator__category,
+.marketplace-creator__audience {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .seller-affiliate__order-products,
 .seller-affiliate__order-programs {
   display: grid;

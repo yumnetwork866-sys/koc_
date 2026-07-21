@@ -19,6 +19,8 @@ const {
   searchSellerSampleApplications,
   searchMarketplaceCreators,
   getMarketplaceCreatorPerformance,
+  getProductCategories,
+  SELLER_PRODUCT_BASIC_SCOPE,
   getSellerCreatorContentDetails,
   normalizeShopPerformance,
 } = require('../services/tiktokShopService');
@@ -44,6 +46,34 @@ const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
   ? 0
   : Math.min(300000, Math.max(60000, affiliateCacheTtlValue || 120000));
 const sellerAffiliateCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs, maxEntries: 1000 });
+const marketplaceCategoryCache = createTtlPromiseCache({ ttlMs: 6 * 60 * 60 * 1000, maxEntries: 100 });
+const flattenCategories = (categories = []) => categories.flatMap((category) => [
+  category,
+  ...flattenCategories(category?.children || category?.sub_categories || []),
+]);
+const addMarketplaceCategoryNames = async (payload, shop) => {
+  const scopes = Array.isArray(shop.authorization?.granted_scopes) ? shop.authorization.granted_scopes : [];
+  if (!scopes.includes(SELLER_PRODUCT_BASIC_SCOPE) || !payload?.data) return payload;
+  const { value: categoryPayload } = await marketplaceCategoryCache.getOrLoad(String(shop.id), () => getProductCategories({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    locale: 'en-US',
+  }));
+  const categoryMap = new Map(flattenCategories(categoryPayload.data?.categories || []).map((category) => [String(category.id), category]));
+  const addCategories = (creator) => {
+    if (!creator) return creator;
+    const categories = (creator.category_ids || []).map((id) => categoryMap.get(String(id))).filter(Boolean);
+    return categories.length ? { ...creator, categories } : creator;
+  };
+  return {
+    ...payload,
+    data: {
+      ...payload.data,
+      ...(Array.isArray(payload.data.creators) ? { creators: payload.data.creators.map(addCategories) } : {}),
+      ...(payload.data.creator ? { creator: addCategories(payload.data.creator) } : {}),
+    },
+  };
+};
 const creatorProfileRefreshJobs = new Map();
 const creatorProfileRefreshKey = (shopId, exportId) => `${shopId}:${exportId}`;
 const startCreatorProfileRefresh = (shop, exportRecord, { force = false } = {}) => {
@@ -443,7 +473,7 @@ const listAffiliateCreators = affiliateResponse('creators', (shop, req) => searc
 }));
 
 const listMarketplaceCreators = affiliateResponse('marketplace-creators', async (shop, req) => {
-  const payload = await searchMarketplaceCreators({
+  let payload = await searchMarketplaceCreators({
     authorization: shop.authorization,
     shopCipher: shop.cipher,
     pageToken: req.query.page_token,
@@ -452,25 +482,35 @@ const listMarketplaceCreators = affiliateResponse('marketplace-creators', async 
     searchKey: req.query.search_key,
   });
   try {
-    return await addMarketplaceLocalCurrency(payload, shop.region);
+    payload = await addMarketplaceLocalCurrency(payload, shop.region);
   } catch (error) {
     console.error('[Exchange Rate] Marketplace conversion failed', { shopId: shop.id, message: error.message });
-    return payload;
   }
+  try {
+    payload = await addMarketplaceCategoryNames(payload, shop);
+  } catch (error) {
+    console.error('[Categories] Marketplace enrichment failed', { shopId: shop.id, message: error.message });
+  }
+  return payload;
 });
 
 const showMarketplaceCreator = affiliateResponse('marketplace-creator-detail', async (shop, req) => {
-  const payload = await getMarketplaceCreatorPerformance({
+  let payload = await getMarketplaceCreatorPerformance({
     authorization: shop.authorization,
     shopCipher: shop.cipher,
     creatorId: req.params.creatorId,
   });
   try {
-    return await addMarketplaceLocalCurrency(payload, shop.region);
+    payload = await addMarketplaceLocalCurrency(payload, shop.region);
   } catch (error) {
     console.error('[Exchange Rate] Marketplace detail conversion failed', { shopId: shop.id, message: error.message });
-    return payload;
   }
+  try {
+    payload = await addMarketplaceCategoryNames(payload, shop);
+  } catch (error) {
+    console.error('[Categories] Marketplace detail enrichment failed', { shopId: shop.id, message: error.message });
+  }
+  return payload;
 });
 
 const listCreatorContentDetails = affiliateResponse('creator-content-details', (shop, req) => getSellerCreatorContentDetails({
