@@ -346,7 +346,7 @@ const searchSellerSampleApplications = ({
 const searchMarketplaceCreators = ({
   authorization, shopCipher, pageToken, pageSize = 20, keyword, searchKey,
 } = {}, fetchImpl) => {
-  const normalizedKeyword = String(keyword || '').trim();
+  const normalizedKeyword = String(keyword || '').trim().replace(/^@+/, '');
   return sellerAffiliateRequest({
     authorization,
     shopCipher,

@@ -365,7 +365,7 @@ test('search Marketplace creators uses creator marketplace scope and username ke
     assert.equal(url.pathname, MARKETPLACE_CREATORS_PATH);
     assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
     assert.equal(url.searchParams.get('page_size'), '20');
-    assert.deepEqual(JSON.parse(options.body), { keyword: '@demo.creator' });
+    assert.deepEqual(JSON.parse(options.body), { keyword: 'demo.creator' });
     return successResponse({
       creators: [{
         username: 'demo.creator',

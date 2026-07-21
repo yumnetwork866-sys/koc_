@@ -30,9 +30,10 @@ async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
+    let payload = null;
 
     try {
-      const payload = await response.json();
+      payload = await response.json();
       if (payload?.message) {
         message = payload.message;
       }
@@ -46,6 +47,8 @@ async function apiRequest(path, options = {}) {
 
     const error = new Error(message);
     error.status = response.status;
+    error.tiktokCode = payload?.tiktok_code ?? null;
+    error.requestId = payload?.request_id ?? null;
     throw error;
   }
 

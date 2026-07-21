@@ -319,7 +319,12 @@ const affiliateResponse = (namespace, operation) => async (req, res) => {
     res.json({ ...payload.data, request_id: payload.request_id || null });
   } catch (error) {
     const permissionError = /grant seller\.(affiliate_collaboration|creator_marketplace)\.read/i.test(error.message);
-    res.status(permissionError ? 403 : 502).json({ message: error.message });
+    const rateLimited = Number(error.tiktokCode) === 36009002;
+    res.status(permissionError ? 403 : rateLimited ? 429 : 502).json({
+      message: error.message,
+      ...(error.tiktokCode !== undefined && error.tiktokCode !== null ? { tiktok_code: Number(error.tiktokCode) } : {}),
+      ...(error.requestId ? { request_id: error.requestId } : {}),
+    });
   }
 };
 

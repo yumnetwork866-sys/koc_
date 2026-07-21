@@ -20,7 +20,8 @@ const REQUIRED_SCOPE = 'seller.affiliate_collaboration.read';
 const MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
 const PRODUCT_SCOPE = 'seller.product.basic';
 const PAGE_SIZE = 20;
-const CREATOR_DETAIL_CONCURRENCY = 4;
+const SEARCH_DETAIL_LIMIT = 5;
+const normalizeCreatorSearchKeyword = (value) => String(value || '').trim().replace(/^@+/, '');
 const BREAKDOWN_COLORS = ['#00a89d', '#2563eb', '#f59e0b', '#e11d48', '#7c3aed', '#0f766e', '#64748b', '#db2777'];
 const LOCALIZED_STATUSES = new Set([
   'ACTIVE', 'INACTIVE', 'ONGOING', 'VALID', 'COMPLETED', 'PENDING', 'AWAITING_SHIPMENT',
@@ -126,24 +127,33 @@ const AffiliateOrderPrograms = ({ row, t }) => {
   return <div className="seller-affiliate__order-programs">{programs.map((program) => <div key={program.id}><strong>{program.name || (program.type === 'OPEN' ? t('sellerAffiliate.openTab') : program.id)}</strong>{program.name || program.type === 'OPEN' ? <span className="row-subtitle">{program.id}</span> : null}</div>)}</div>;
 };
 
-const allSettledWithConcurrency = async (items, concurrency, task, signal) => {
-  const results = new Array(items.length);
-  let nextIndex = 0;
-  const worker = async () => {
-    while (!signal?.aborted) {
-      const index = nextIndex;
-      nextIndex += 1;
-      if (index >= items.length) return;
-      try {
-        results[index] = { status: 'fulfilled', value: await task(items[index], index) };
-      } catch (reason) {
-        results[index] = { status: 'rejected', reason };
-      }
-    }
+const waitForSearchDetailRetry = (milliseconds, signal) => new Promise((resolve, reject) => {
+  if (signal?.aborted) {
+    reject(new DOMException('The operation was aborted.', 'AbortError'));
+    return;
+  }
+  const onAbort = () => {
+    window.clearTimeout(timeout);
+    reject(new DOMException('The operation was aborted.', 'AbortError'));
   };
-  const workerCount = Math.min(Math.max(1, concurrency), items.length);
-  await Promise.all(Array.from({ length: workerCount }, worker));
-  return results;
+  const timeout = window.setTimeout(() => {
+    signal?.removeEventListener('abort', onAbort);
+    resolve();
+  }, milliseconds);
+  signal?.addEventListener('abort', onAbort, { once: true });
+});
+
+const fetchSearchCreatorDetail = async (shopId, creatorId, signal) => {
+  try {
+    return await fetchTikTokSellerMarketplaceCreator(shopId, creatorId, signal);
+  } catch (error) {
+    const rateLimited = error?.status === 429
+      || Number(error?.tiktokCode) === 36009002
+      || /too many requests/i.test(error?.message || '');
+    if (!rateLimited || signal?.aborted) throw error;
+    await waitForSearchDetailRetry(2000, signal);
+    return fetchTikTokSellerMarketplaceCreator(shopId, creatorId, signal);
+  }
 };
 
 const SellerAffiliatePanel = () => {
@@ -154,6 +164,7 @@ const SellerAffiliatePanel = () => {
   const [section, setSection] = useState('open');
   const [keyword, setKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
+  const [searchVersion, setSearchVersion] = useState(0);
   const [status, setStatus] = useState('ONGOING');
   const [data, setData] = useState({});
   const [settings, setSettings] = useState(null);
@@ -222,30 +233,61 @@ const SellerAffiliatePanel = () => {
       } else if (section === 'discover') {
         result = await fetchTikTokSellerMarketplaceCreators(shopId, filters);
         if (result?.search_key) marketplaceSearchKey.current = result.search_key;
-        const creators = Array.isArray(result?.creators) ? result.creators : [];
-        const details = await allSettledWithConcurrency(creators, CREATOR_DETAIL_CONCURRENCY, (creator) => (
-          creator.creator_open_id
-            ? fetchTikTokSellerMarketplaceCreator(shopId, creator.creator_open_id, signal)
-            : Promise.resolve(null)
-        ), signal);
-        result = {
-          ...result,
-          creators: creators.map((creator, index) => {
-            const detail = details[index]?.status === 'fulfilled' ? details[index].value?.creator : null;
-            return detail ? { ...creator, ...detail } : creator;
-          }),
-        };
+        if (submittedKeyword && Array.isArray(result?.creators)) {
+          const normalizedKeyword = normalizeCreatorSearchKeyword(submittedKeyword).toLocaleLowerCase();
+          const matchingCreators = result.creators.filter((creator) => (
+            [creator.username, creator.nickname].some((value) => (
+              String(value || '').toLocaleLowerCase().replace(/^@/, '').includes(normalizedKeyword)
+            ))
+          ));
+          const exactMatches = matchingCreators.filter((creator) => (
+            [creator.username, creator.nickname].some((value) => (
+              String(value || '').toLocaleLowerCase().replace(/^@/, '') === normalizedKeyword
+            ))
+          ));
+          const displayedCreators = exactMatches.length ? exactMatches : matchingCreators;
+          result = {
+            ...result,
+            creators: displayedCreators,
+            total_count: displayedCreators.length,
+            next_page_token: '',
+          };
+          if (!signal?.aborted) {
+            setData(result);
+            setLoading(false);
+          }
+          for (const [detailIndex, creator] of displayedCreators.slice(0, SEARCH_DETAIL_LIMIT).entries()) {
+            if (signal?.aborted || !creator.creator_open_id) break;
+            try {
+              if (detailIndex > 0) await waitForSearchDetailRetry(600, signal);
+              const detailPayload = await fetchSearchCreatorDetail(shopId, creator.creator_open_id, signal);
+              if (detailPayload?.creator && !signal?.aborted) {
+                setData((current) => ({
+                  ...current,
+                  creators: (current.creators || []).map((currentCreator) => (
+                    currentCreator.creator_open_id === creator.creator_open_id
+                      ? { ...currentCreator, ...detailPayload.creator }
+                      : currentCreator
+                  )),
+                }));
+              }
+            } catch (error) {
+              if (error?.name === 'AbortError') throw error;
+            }
+          }
+          return;
+        }
       } else {
         result = await fetchTikTokSellerAffiliateOrders(shopId, { ...filters, programId: submittedKeyword });
       }
-      setData(result || {});
+      if (!signal?.aborted) setData(result || {});
       if (section === 'performance') setProfileRefreshing(result?.profile_refresh?.status === 'PROCESSING');
     } catch (err) {
       if (err.name !== 'AbortError') setError(err.message || t('sellerAffiliate.loadError'));
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [currentPageToken, hasMarketplaceScope, hasScope, pageTokens.length, performanceWindow, section, shopId, status, submittedKeyword, t]);
+  }, [currentPageToken, hasMarketplaceScope, hasScope, pageTokens.length, performanceWindow, searchVersion, section, shopId, status, submittedKeyword, t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -395,8 +437,9 @@ const SellerAffiliatePanel = () => {
       : '—';
   };
   const formatUnitsSold = (creator) => {
-    if (creator.units_sold !== undefined && creator.units_sold !== null) return formatCompactNumber(creator.units_sold);
-    const range = creator.units_sold_range;
+    const exactValue = creator.units_sold ?? creator.items_sold;
+    if (exactValue !== undefined && exactValue !== null) return formatCompactNumber(exactValue);
+    const range = creator.units_sold_range || creator.items_sold_range;
     if (!range) return '—';
     if (range.formatted_range) return range.formatted_range;
     if (range.minimum_amount !== undefined && range.maximum_amount !== undefined) {
@@ -404,18 +447,33 @@ const SellerAffiliatePanel = () => {
     }
     return range.minimum_amount !== undefined ? `${formatNumber(range.minimum_amount)}+` : '—';
   };
+  const formatAvgVideoViews = (creator) => {
+    const views = creator.avg_ec_video_play_count
+      ?? creator.avg_ec_video_view_count
+      ?? creator.avg_video_view_count
+      ?? creator.avg_video_views;
+    return views === undefined || views === null ? '—' : formatCompactNumber(views);
+  };
   const creatorEngagementRate = (creator) => {
-    if (creator.ec_video_engagement_rate !== undefined && creator.ec_video_engagement_rate !== null) {
-      const raw = String(creator.ec_video_engagement_rate);
+    const providedRate = creator.ec_video_engagement_rate
+      ?? creator.video_engagement_rate
+      ?? creator.engagement_rate;
+    if (providedRate !== undefined && providedRate !== null) {
+      const raw = String(providedRate);
       const direct = Number(raw.replace('%', ''));
       if (!Number.isFinite(direct)) return null;
       return raw.includes('%') ? direct : direct / 100;
     }
-    const views = Number(creator.avg_ec_video_play_count ?? creator.avg_ec_video_view_count);
+    const views = Number(creator.avg_ec_video_play_count
+      ?? creator.avg_ec_video_view_count
+      ?? creator.avg_video_view_count
+      ?? creator.avg_video_views);
     if (!views) return null;
-    const engagements = Number(creator.avg_ec_video_like_count || 0)
-      + Number(creator.avg_ec_video_comment_count || 0)
-      + Number(creator.avg_ec_video_share_count || 0);
+    const likes = creator.avg_ec_video_like_count ?? creator.avg_video_like_count;
+    const comments = creator.avg_ec_video_comment_count ?? creator.avg_video_comment_count;
+    const shares = creator.avg_ec_video_share_count ?? creator.avg_video_share_count;
+    if (likes === undefined && comments === undefined && shares === undefined) return null;
+    const engagements = Number(likes || 0) + Number(comments || 0) + Number(shares || 0);
     return (engagements / views) * 100;
   };
   const formatEngagementRate = (creator) => {
@@ -437,7 +495,13 @@ const SellerAffiliatePanel = () => {
   ] : [];
   const resetMarketplaceSearch = () => { marketplaceSearchKey.current = ''; };
   const changeSection = (value) => { resetMarketplaceSearch(); setSection(value); setStatus(value === 'target' ? 'ONGOING' : ''); setKeyword(''); setSubmittedKeyword(''); setPageTokens([]); setData({}); setError(''); };
-  const submitSearch = (event) => { event.preventDefault(); resetMarketplaceSearch(); setPageTokens([]); setSubmittedKeyword(keyword.trim()); };
+  const submitSearch = (event) => {
+    event.preventDefault();
+    resetMarketplaceSearch();
+    setPageTokens([]);
+    setSubmittedKeyword(section === 'discover' ? normalizeCreatorSearchKeyword(keyword) : keyword.trim());
+    setSearchVersion((version) => version + 1);
+  };
   const openCreatorDetail = async (application) => {
     setSelectedCreatorApplication({
       ...application,
@@ -507,7 +571,7 @@ const SellerAffiliatePanel = () => {
           <div className="section-card__header"><div><h2 className="section-card__title">{t(`sellerAffiliate.${section}Title`)}</h2>{section !== 'target' ? <p className="section-card__meta">{t(`sellerAffiliate.${section}Meta`)}</p> : null}</div><span className="chip">{formatNumber(data.total_count ?? rows.length)}</span></div>
           <div className="table-wrap"><table className="data-table seller-affiliate__table"><thead><tr>{section === 'open' ? <><th>{t('sellerAffiliate.product')}</th><th>{t('sellerAffiliate.commission')}</th><th>{t('sellerAffiliate.creators')}</th><th>{t('sellerAffiliate.status')}</th></> : section === 'target' ? <><th>{t('sellerAffiliate.invitation')}</th><th>{t('sellerAffiliate.products')}</th><th>{t('sellerAffiliate.creators')}</th><th>{t('sellerAffiliate.validity')}</th><th>{t('sellerAffiliate.status')}</th></> : section === 'discover' ? <><th>{t('sellerAffiliate.creator')}</th><th>{t('sellerAffiliate.followers')}</th><th>{t('sellerAffiliate.videos')}</th><th>{t('sellerAffiliate.creatorGmv30')}</th><th>{t('sellerAffiliate.itemsSold')}</th><th>{t('sellerAffiliate.avgVideoViews')}</th><th>{t('sellerAffiliate.engagementRate')}</th></> : section === 'performance' ? <><th>{t('sellerAffiliate.creator')}</th><th>{t('sellerAffiliate.creatorGmv')}</th><th>{t('sellerAffiliate.affiliateOrders')}</th><th>{t('sellerAffiliate.itemsSold')}</th><th>{t('sellerAffiliate.productImpressions')}</th><th>{t('sellerAffiliate.refundedGmv')}</th><th>{t('sellerAffiliate.followers')}</th></> : section === 'creators' ? <><th>{t('sellerAffiliate.creator')}</th><th>{t('sellerAffiliate.followers')}</th><th>{t('sellerAffiliate.creatorGmv30')}</th><th>{t('sellerAffiliate.content')}</th><th>{t('sellerAffiliate.fulfillment')}</th><th>{t('sellerAffiliate.status')}</th><th>{t('sellerAffiliate.actions')}</th></> : <><th>{t('sellerAffiliate.order')}</th><th>{t('sellerAffiliate.product')}</th><th>{t('sellerAffiliate.program')}</th><th>{t('sellerAffiliate.createdAt')}</th></>}</tr></thead><tbody>
             {loading ? <tr><td colSpan={7}><div className="empty-state"><span className="loading-dot" />{t('common.loading')}</div></td></tr> : rows.length ? rows.map((row, index) => section === 'open' ? <tr key={row.id || index}><td><div className="seller-affiliate__product">{row.product?.main_image_url ? <img src={row.product.main_image_url} alt="" loading="lazy" /> : null}<div><strong>{row.product?.title || row.product?.id || row.id}</strong><span>{row.product?.id}</span></div></div></td><td>{formatRate(row.current_commission?.rate ?? row.commission_rate)}</td><td>{formatNumber(row.showcase_creator_count)} / {formatNumber(row.content_creator_count)}</td><td><span className="chip">{formatStatus(row.status, t)}</span></td></tr> : section === 'target' ? <tr key={row.id || index}><td><strong>{row.name || row.id}</strong><span className="row-subtitle">{row.id}</span><div className="target-collaboration__creators">{(row.creators || []).slice(0, 3).map((creator, creatorIndex) => <div className="creator-identity" key={creator.creator_open_id || creator.user_id || creator.username || creatorIndex}><CreatorAvatar src={creator.avatar?.url || creator.avatar_url} name={creator.nickname || creator.username} /><span><strong>{creator.nickname || creator.username || '—'}</strong><span className="row-subtitle">{creator.username ? `@${creator.username.replace(/^@/, '')}` : '—'}</span></span></div>)}{row.creators?.length > 3 ? <span className="target-collaboration__more">+{formatNumber(row.creators.length - 3)}</span> : null}</div></td><td>{formatNumber(row.products?.length ?? row.product_count)}</td><td>{formatNumber(row.showcase_creator_count)} / {formatNumber(row.content_creator_count)}</td><td>{formatTime(row.end_time)}</td><td><span className="chip">{formatStatus(row.status || row.collaboration_status, t)}</span></td></tr> : section === 'discover' ? <tr key={row.creator_open_id || row.username || index}><td><div className="creator-identity"><CreatorAvatar src={row.avatar?.url || row.avatar_url} name={row.nickname || row.username} /><span><strong>{row.nickname || row.username || '—'}</strong><span className="row-subtitle">{row.username ? `@${row.username.replace(/^@/, '')}` : '—'}</span></span></div></td><td>{formatCompactNumber(row.follower_count ?? row.followers)}</td><td>{row.ec_video_count === undefined || row.ec_video_count === null ? '—' : formatCompactNumber(row.ec_video_count)}</td><td>{formatCreatorGmv(row)}</td><td>{formatUnitsSold(row)}</td><td>{row.avg_ec_video_play_count === undefined && row.avg_ec_video_view_count === undefined ? '—' : formatCompactNumber(row.avg_ec_video_play_count ?? row.avg_ec_video_view_count)}</td><td>{formatEngagementRate(row)}</td></tr> : section === 'performance' ? <tr key={row.id || index}>{performanceCreatorCell(row)}<td>{formatMoney({ amount: row.affiliate_gmv, currency: row.currency })}</td><td>{formatNumber(row.affiliate_orders)}</td><td>{formatNumber(row.items_sold)}</td><td>{formatNumber(row.product_impressions)}</td><td>{formatMoney({ amount: row.refunded_gmv, currency: row.currency })}</td><td>{formatNumber(row.followers)}</td></tr> : section === 'creators' ? <tr key={row.id || index}><td><div className="creator-identity"><CreatorAvatar src={row.creator?.avatar_url} name={row.creator?.nickname || row.creator?.username} /><span><strong>{row.creator?.nickname || row.creator?.username || '—'}</strong><span className="row-subtitle">{row.creator?.username ? `@${row.creator.username.replace(/^@/, '')}` : row.creator?.user_id}</span></span></div></td><td>{formatNumber(row.creator?.follower_count)}</td><td>{formatMoney(row.creator?.gmv)}</td><td>{formatNumber(row.creator?.content_count)}<span className="row-subtitle">{formatNumber(row.creator?.ec_video_view)} {t('common.views')}</span></td><td>{row.creator?.fulfillment_percentage ? `${row.creator.fulfillment_percentage}%` : formatStatus(row.fulfillment_status, t)}</td><td><span className="chip">{formatStatus(row.status, t)}</span></td><td><button className="button button--small button--ghost" type="button" onClick={() => openCreatorDetail(row)}>{t('sellerAffiliate.view')}</button></td></tr> : <tr key={row.order_id || row.id || index}><td><strong>{row.order_id || row.id}</strong></td><td><AffiliateOrderProducts row={row} /></td><td><AffiliateOrderPrograms row={row} t={t} /></td><td>{formatTime(row.create_time || row.created_time)}</td></tr>) : <tr><td colSpan={7}><div className="empty-state">{t('sellerAffiliate.noData')}</div></td></tr>}
-            {section === 'discover' && !loading ? rows.map((row, index) => <tr className="marketplace-creator-row" key={`marketplace-${row.creator_open_id || row.username || index}`}><MarketplaceCreatorCell creator={row} formatCompactNumber={formatCompactNumber} /><td>{formatCompactNumber(row.follower_count ?? row.followers)}</td><td>{row.ec_video_count === undefined || row.ec_video_count === null ? '—' : formatCompactNumber(row.ec_video_count)}</td><td>{formatCreatorGmv(row)}</td><td>{formatUnitsSold(row)}</td><td>{row.avg_ec_video_play_count === undefined && row.avg_ec_video_view_count === undefined ? '—' : formatCompactNumber(row.avg_ec_video_play_count ?? row.avg_ec_video_view_count)}</td><td>{formatEngagementRate(row)}</td></tr>) : null}
+            {section === 'discover' && !loading ? rows.map((row, index) => <tr className="marketplace-creator-row" key={`marketplace-${row.creator_open_id || row.username || index}`}><MarketplaceCreatorCell creator={row} formatCompactNumber={formatCompactNumber} /><td>{formatCompactNumber(row.follower_count ?? row.followers)}</td><td>{row.ec_video_count === undefined || row.ec_video_count === null ? '—' : formatCompactNumber(row.ec_video_count)}</td><td>{formatCreatorGmv(row)}</td><td>{formatUnitsSold(row)}</td><td>{formatAvgVideoViews(row)}</td><td>{formatEngagementRate(row)}</td></tr>) : null}
           </tbody></table></div>
           <nav className="seller-affiliate__pagination" aria-label={t('sellerAffiliate.page', { page: pageTokens.length + 1 })}>
             <button
