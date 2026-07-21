@@ -20,6 +20,7 @@ const REQUIRED_SCOPE = 'seller.affiliate_collaboration.read';
 const MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
 const PRODUCT_SCOPE = 'seller.product.basic';
 const PAGE_SIZE = 20;
+const CREATOR_DETAIL_CONCURRENCY = 4;
 const BREAKDOWN_COLORS = ['#00a89d', '#2563eb', '#f59e0b', '#e11d48', '#7c3aed', '#0f766e', '#64748b', '#db2777'];
 const LOCALIZED_STATUSES = new Set([
   'ACTIVE', 'INACTIVE', 'ONGOING', 'VALID', 'COMPLETED', 'PENDING', 'AWAITING_SHIPMENT',
@@ -125,6 +126,26 @@ const AffiliateOrderPrograms = ({ row, t }) => {
   return <div className="seller-affiliate__order-programs">{programs.map((program) => <div key={program.id}><strong>{program.name || (program.type === 'OPEN' ? t('sellerAffiliate.openTab') : program.id)}</strong>{program.name || program.type === 'OPEN' ? <span className="row-subtitle">{program.id}</span> : null}</div>)}</div>;
 };
 
+const allSettledWithConcurrency = async (items, concurrency, task, signal) => {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (!signal?.aborted) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      try {
+        results[index] = { status: 'fulfilled', value: await task(items[index], index) };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  };
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
+};
+
 const SellerAffiliatePanel = () => {
   const { t, language } = useI18n();
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
@@ -202,11 +223,11 @@ const SellerAffiliatePanel = () => {
         result = await fetchTikTokSellerMarketplaceCreators(shopId, filters);
         if (result?.search_key) marketplaceSearchKey.current = result.search_key;
         const creators = Array.isArray(result?.creators) ? result.creators : [];
-        const details = await Promise.allSettled(creators.map((creator) => (
+        const details = await allSettledWithConcurrency(creators, CREATOR_DETAIL_CONCURRENCY, (creator) => (
           creator.creator_open_id
             ? fetchTikTokSellerMarketplaceCreator(shopId, creator.creator_open_id, signal)
             : Promise.resolve(null)
-        )));
+        ), signal);
         result = {
           ...result,
           creators: creators.map((creator, index) => {
