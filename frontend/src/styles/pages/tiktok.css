@@ -1438,6 +1438,45 @@
   line-height: 1.35;
 }
 
+.marketplace-creator-video-cell {
+  min-width: 84px;
+}
+
+.marketplace-creator-video-cell > a {
+  display: inline-flex;
+}
+
+.marketplace-creator-video {
+  position: relative;
+  display: inline-flex;
+  width: 54px;
+  height: 72px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #e8edf4;
+}
+
+.marketplace-creator-video > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.marketplace-creator-video__play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 55%));
+}
+
+.marketplace-creator-video__play svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+}
+
 .seller-affiliate__order-products,
 .seller-affiliate__order-programs {
   display: grid;

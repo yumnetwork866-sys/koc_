@@ -32,25 +32,45 @@ test('affiliate order fields retain support for legacy top-level values', () => 
   assert.deepEqual(getAffiliateOrderProgramIds(), []);
 });
 
-test('engagement percentage normalization uses explicit units instead of magnitude guessing', () => {
-  assert.equal(normalizeEngagementPercentage(0.4), 0.4);
+test('engagement percentage normalization handles TikTok basis-point rates and explicit units', () => {
+  assert.equal(normalizeEngagementPercentage(581), 5.81);
+  assert.equal(normalizeEngagementPercentage(0.4), 0.004);
   assert.equal(normalizeEngagementPercentage('0.4%'), 0.4);
   assert.equal(normalizeEngagementPercentage({ percentage: 4.8 }), 4.8);
   assert.equal(normalizeEngagementPercentage({ ratio: 0.048 }), 4.8);
   assert.equal(normalizeEngagementPercentage({ value: 480, unit: 'BPS' }), 4.8);
+  assert.equal(normalizeEngagementPercentage({ value: 4.8, unit: 'PERCENT' }), 4.8);
+  assert.equal(normalizeEngagementPercentage({ value: 480 }), 4.8);
   assert.equal(normalizeEngagementPercentage(null), null);
 });
 
-test('creator video engagement is calculated from matching 30-day average counts', () => {
+test('all-video engagement prefers TikTok provided rate without mixing in EC counts', () => {
+  const creator = {
+    avg_ec_video_play_count: 10000,
+    avg_ec_video_like_count: 60,
+    avg_ec_video_comment_count: 8,
+    avg_ec_video_share_count: 4,
+    ec_video_engagement_rate: 72,
+    engagement_rate: 110,
+  };
+
+  assert.equal((60 + 8 + 4) / 10000 * 100, 0.72);
+  assert.equal(getCreatorVideoEngagementRate(creator), 1.1);
+});
+
+test('shoppable-video engagement derives a rate when TikTok does not provide one', () => {
   const creator = {
     avg_ec_video_play_count: 18000,
     avg_ec_video_like_count: 920,
     avg_ec_video_comment_count: 74,
     avg_ec_video_share_count: 51,
-    engagement_rate: 99,
   };
 
-  assert.equal(getCreatorVideoEngagementRate(creator), (920 + 74 + 51) / 18000 * 100);
+  assert.equal(getCreatorVideoEngagementRate(creator), null);
+  assert.equal(
+    getCreatorVideoEngagementRate(creator, { scope: 'shoppable' }),
+    (920 + 74 + 51) / 18000 * 100,
+  );
 });
 
 test('creator video engagement supports nested interaction counts and direct percentage fallback', () => {
@@ -60,6 +80,11 @@ test('creator video engagement supports nested interaction counts and direct per
       avg_video_interaction_count: 125,
     },
   }), 5);
-  assert.equal(getCreatorVideoEngagementRate({ video_engagement_rate: 0.4 }), 0.4);
+  assert.equal(getCreatorVideoEngagementRate({ video_engagement_rate: 581 }), 5.81);
+  assert.equal(getCreatorVideoEngagementRate({ ec_video_engagement_rate: 72 }), null);
+  assert.equal(getCreatorVideoEngagementRate(
+    { ec_video_engagement_rate: 72 },
+    { scope: 'shoppable' },
+  ), 0.72);
   assert.equal(getCreatorVideoEngagementRate({}), null);
 });

@@ -1,0 +1,153 @@
+const { Op } = require('sequelize');
+const { TikTokMarketplaceCreatorDetail } = require('../models');
+const { getMarketplaceCreatorPerformance } = require('./tiktokShopService');
+
+const HOUR_MS = 60 * 60 * 1000;
+const configuredTtlMs = Number(process.env.TIKTOK_MARKETPLACE_DETAIL_TTL_MS || 12 * HOUR_MS);
+const DEFAULT_TTL_MS = Math.min(24 * HOUR_MS, Math.max(6 * HOUR_MS, configuredTtlMs || 12 * HOUR_MS));
+const DEFAULT_INTERVAL_MS = Math.max(1000, Number(process.env.TIKTOK_MARKETPLACE_DETAIL_INTERVAL_MS) || 1000);
+const DEFAULT_RATE_LIMIT_COOLDOWN_MS = Math.max(
+  60 * 1000,
+  Number(process.env.TIKTOK_MARKETPLACE_DETAIL_RATE_LIMIT_COOLDOWN_MS) || 15 * 60 * 1000,
+);
+
+const plainSnapshot = (snapshot) => typeof snapshot?.toJSON === 'function' ? snapshot.toJSON() : snapshot;
+
+const createMarketplaceCreatorDetailService = ({
+  DetailModel = TikTokMarketplaceCreatorDetail,
+  fetchDetail = getMarketplaceCreatorPerformance,
+  ttlMs = DEFAULT_TTL_MS,
+  intervalMs = DEFAULT_INTERVAL_MS,
+  rateLimitCooldownMs = DEFAULT_RATE_LIMIT_COOLDOWN_MS,
+  now = () => Date.now(),
+  sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  schedule = (operation) => setImmediate(operation),
+  logger = console,
+} = {}) => {
+  const shops = new Map();
+
+  const stateFor = (shopId) => {
+    const key = String(shopId);
+    if (!shops.has(key)) {
+      shops.set(key, {
+        queue: [],
+        queuedIds: new Set(),
+        running: false,
+        nextRequestAt: 0,
+        cooldownUntil: 0,
+      });
+    }
+    return shops.get(key);
+  };
+
+  const drain = async (shop, state) => {
+    if (state.running) return;
+    state.running = true;
+    try {
+      while (state.queue.length) {
+        const waitUntil = Math.max(state.nextRequestAt, state.cooldownUntil);
+        if (waitUntil > now()) await sleep(waitUntil - now());
+        const job = state.queue.shift();
+        state.nextRequestAt = now() + intervalMs;
+        try {
+          const payload = await fetchDetail({
+            authorization: shop.authorization,
+            shopCipher: shop.cipher,
+            creatorId: job.creator_open_id,
+          });
+          const detail = payload?.data?.creator;
+          if (detail) {
+            const fetchedAt = new Date(now());
+            await DetailModel.upsert({
+              shop_id: shop.id,
+              creator_open_id: job.creator_open_id,
+              username: detail.username || job.username || null,
+              detail,
+              fetched_at: fetchedAt,
+              updated_at: fetchedAt,
+            });
+          }
+        } catch (error) {
+          if (Number(error?.tiktokCode) === 36009002) {
+            state.cooldownUntil = now() + rateLimitCooldownMs;
+            logger.warn('[Marketplace Creator Detail] Shop rate-limited', {
+              shopId: shop.id,
+              creatorId: job.creator_open_id,
+              cooldownUntil: new Date(state.cooldownUntil).toISOString(),
+            });
+          } else {
+            logger.warn('[Marketplace Creator Detail] Refresh failed', {
+              shopId: shop.id,
+              creatorId: job.creator_open_id,
+              message: error.message,
+            });
+          }
+        } finally {
+          state.queuedIds.delete(job.creator_open_id);
+        }
+      }
+    } finally {
+      state.running = false;
+      if (state.queue.length) schedule(() => drain(shop, state));
+    }
+  };
+
+  const enqueue = (shop, creators) => {
+    const state = stateFor(shop.id);
+    for (const creator of creators) {
+      const creatorId = String(creator?.creator_open_id || '').trim();
+      if (!creatorId || state.queuedIds.has(creatorId)) continue;
+      state.queuedIds.add(creatorId);
+      state.queue.push({ creator_open_id: creatorId, username: creator.username || null });
+    }
+    if (state.queue.length && !state.running) schedule(() => drain(shop, state));
+    return state.queue.length + (state.running ? 1 : 0);
+  };
+
+  const enrichAndQueue = async (shop, creators = []) => {
+    const creatorIds = [...new Set(creators.map((creator) => String(creator?.creator_open_id || '').trim()).filter(Boolean))];
+    if (!creatorIds.length) {
+      return { creators, detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 } };
+    }
+    const snapshots = await DetailModel.findAll({
+      where: { shop_id: shop.id, creator_open_id: { [Op.in]: creatorIds } },
+    });
+    const snapshotById = new Map(snapshots.map((snapshot) => {
+      const value = plainSnapshot(snapshot);
+      return [String(value.creator_open_id), value];
+    }));
+    const staleBefore = now() - ttlMs;
+    const needsRefresh = creators.filter((creator) => {
+      const snapshot = snapshotById.get(String(creator.creator_open_id));
+      return !snapshot || new Date(snapshot.fetched_at).getTime() < staleBefore;
+    });
+    enqueue(shop, needsRefresh);
+    return {
+      creators: creators.map((creator) => {
+        const snapshot = snapshotById.get(String(creator.creator_open_id));
+        if (!snapshot?.detail) return creator;
+        return {
+          ...creator,
+          ...snapshot.detail,
+          marketplace_detail_fetched_at: snapshot.fetched_at,
+        };
+      }),
+      detail_refresh: {
+        pending: needsRefresh.length > 0,
+        pending_count: needsRefresh.length,
+        poll_after_ms: needsRefresh.length ? 2000 : 0,
+      },
+    };
+  };
+
+  return { enrichAndQueue, enqueue, drain, stateFor };
+};
+
+const marketplaceCreatorDetailService = createMarketplaceCreatorDetailService();
+
+module.exports = {
+  createMarketplaceCreatorDetailService,
+  marketplaceCreatorDetailService,
+  DEFAULT_TTL_MS,
+  DEFAULT_INTERVAL_MS,
+};

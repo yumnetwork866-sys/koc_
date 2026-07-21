@@ -37,6 +37,7 @@ const migrations = [
   require('./027_create_whatsapp_tables'),
   require('./028_create_tiktok_api_cooldowns'),
   require('./029_allow_booking_deadline_null'),
+  require('./030_create_tiktok_marketplace_creator_details'),
 ];
 
 const createMigrationRunner = ({

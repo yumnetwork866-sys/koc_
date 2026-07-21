@@ -1,6 +1,4 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const test = require('node:test');
 const XLSX = require('xlsx');
 
@@ -51,9 +49,26 @@ test('Compass export falls back when TikTok has not made the requested day avail
   assert.equal(result.fallbackDays, 1);
 });
 
-test('provided Creator List workbook maps to Creator Performance fields', () => {
-  const workbookPath = path.resolve(__dirname, '../../Creator_List_20260709-20260715_20260716082822.xlsx');
-  const rows = parseCreatorPerformanceWorkbook(fs.readFileSync(workbookPath), {
+test('Creator List workbook maps to Creator Performance fields', () => {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.json_to_sheet([
+    {
+      'Creator username': '',
+      'Affiliate GMV': 'Metric description',
+      'Affiliate orders': 'Metric description',
+    },
+    {
+      'Creator username': '@my.belanjaharian',
+      'Affiliate GMV': 'RM7,988.80',
+      'Affiliate orders': '20',
+      'Items sold': '20',
+      'Product impressions': '5,037',
+      'Affiliate refunded GMV': 'RM4,853.90',
+      'Affiliate followers': '1,258',
+    },
+  ]);
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Creator List');
+  const rows = parseCreatorPerformanceWorkbook(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }), {
     exportId: 1,
     shopId: 1,
     startDate: '2026-07-09',
@@ -62,7 +77,7 @@ test('provided Creator List workbook maps to Creator Performance fields', () => 
     planType: 'ALL',
     currency: 'MYR',
   });
-  assert.equal(rows.length, 1061);
+  assert.equal(rows.length, 1);
   assert.equal(rows[0].username, 'my.belanjaharian');
   assert.equal(rows[0].affiliate_gmv, 7988.8);
   assert.equal(rows[0].affiliate_orders, 20);

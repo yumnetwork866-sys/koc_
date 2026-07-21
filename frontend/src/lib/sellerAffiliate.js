@@ -37,12 +37,16 @@ const numericPercentage = (value) => {
   return Number.isFinite(numeric) ? numeric : null;
 };
 
-// Marketplace model values are percentages unless the payload explicitly identifies
-// a ratio or basis-point unit. This avoids guessing the unit from the value itself:
-// 0.4 means 0.4%, while { ratio: 0.4 } means 40%.
+// TikTok serializes unlabelled rate fields in hundredths of a percent (basis points),
+// consistent with fields such as commission_rate and demographic percentages.
+// Values carrying an explicit percent sign/unit are already percentages.
 export const normalizeEngagementPercentage = (value) => {
   if (value === undefined || value === null || value === '') return null;
-  if (typeof value !== 'object') return numericPercentage(value);
+  if (typeof value !== 'object') {
+    const numeric = numericPercentage(value);
+    if (numeric === null) return null;
+    return String(value).includes('%') ? numeric : numeric / 100;
+  }
 
   if (value.percentage !== undefined) return numericPercentage(value.percentage);
   if (value.percentage_value !== undefined) return numericPercentage(value.percentage_value);
@@ -57,7 +61,8 @@ export const normalizeEngagementPercentage = (value) => {
   const unit = String(value.unit || value.value_unit || value.rate_unit || '').trim().toUpperCase();
   if (['RATIO', 'FRACTION', 'DECIMAL'].includes(unit)) return numeric * 100;
   if (['BASIS_POINT', 'BASIS_POINTS', 'BPS', 'HUNDREDTH_OF_PERCENT'].includes(unit)) return numeric / 100;
-  return numeric;
+  if (['PERCENT', 'PERCENTAGE', 'PCT'].includes(unit)) return numeric;
+  return numeric / 100;
 };
 
 const finiteMetric = (creator, names) => {
@@ -67,37 +72,51 @@ const finiteMetric = (creator, names) => {
   return Number.isFinite(numeric) ? numeric : null;
 };
 
-export const getCreatorVideoEngagementRate = (creator) => {
-  const views = finiteMetric(creator, [
-    'avg_ec_video_play_count',
-    'avg_ec_video_view_count',
-    'avg_ec_video_views',
-    'avg_video_view_count',
-    'avg_video_views',
-  ]);
+const engagementMetricNames = {
+  all: {
+    rates: [
+      'video_engagement_rate',
+      'avg_video_engagement_rate',
+      'video_engagement',
+      'engagement_rate',
+    ],
+    views: ['avg_video_play_count', 'avg_video_view_count', 'avg_video_views'],
+    interactions: ['avg_video_interaction_count'],
+    likes: ['avg_video_like_count'],
+    comments: ['avg_video_comment_count'],
+    shares: ['avg_video_share_count'],
+  },
+  shoppable: {
+    rates: [
+      'ec_video_engagement_rate',
+      'avg_ec_video_engagement_rate',
+      'ec_video_engagement',
+    ],
+    views: ['avg_ec_video_play_count', 'avg_ec_video_view_count', 'avg_ec_video_views'],
+    interactions: ['avg_ec_video_interaction_count'],
+    likes: ['avg_ec_video_like_count'],
+    comments: ['avg_ec_video_comment_count'],
+    shares: ['avg_ec_video_share_count'],
+  },
+};
+
+export const getCreatorVideoEngagementRate = (creator, { scope = 'all' } = {}) => {
+  const names = scope === 'shoppable' ? engagementMetricNames.shoppable : engagementMetricNames.all;
+  const providedRate = getCreatorMetric(creator, names.rates);
+  if (providedRate !== null) return normalizeEngagementPercentage(providedRate);
+
+  const views = finiteMetric(creator, names.views);
   if (views !== null && views > 0) {
-    const interactions = finiteMetric(creator, [
-      'avg_ec_video_interaction_count',
-      'avg_video_interaction_count',
-    ]);
+    const interactions = finiteMetric(creator, names.interactions);
     if (interactions !== null) return interactions / views * 100;
 
-    const likes = finiteMetric(creator, ['avg_ec_video_like_count', 'avg_video_like_count']);
-    const comments = finiteMetric(creator, ['avg_ec_video_comment_count', 'avg_video_comment_count']);
-    const shares = finiteMetric(creator, ['avg_ec_video_share_count', 'avg_video_share_count']);
+    const likes = finiteMetric(creator, names.likes);
+    const comments = finiteMetric(creator, names.comments);
+    const shares = finiteMetric(creator, names.shares);
     if (likes !== null || comments !== null || shares !== null) {
       return ((likes || 0) + (comments || 0) + (shares || 0)) / views * 100;
     }
   }
 
-  const providedRate = getCreatorMetric(creator, [
-    'ec_video_engagement_rate',
-    'avg_ec_video_engagement_rate',
-    'ec_video_engagement',
-    'video_engagement_rate',
-    'avg_video_engagement_rate',
-    'video_engagement',
-    'engagement_rate',
-  ]);
-  return normalizeEngagementPercentage(providedRate);
+  return null;
 };

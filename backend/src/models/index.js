@@ -286,6 +286,23 @@ const TikTokApiCooldown = sequelize.define('TikTokApiCooldown', {
   timestamps: false,
 });
 
+const TikTokMarketplaceCreatorDetail = sequelize.define('TikTokMarketplaceCreatorDetail', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  creator_open_id: { type: DataTypes.STRING, allowNull: false },
+  username: DataTypes.STRING,
+  detail: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+  fetched_at: { type: DataTypes.DATE, allowNull: false },
+  updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_marketplace_creator_details',
+  timestamps: false,
+  indexes: [
+    { unique: true, fields: ['shop_id', 'creator_open_id'] },
+    { fields: ['shop_id', 'fetched_at'] },
+  ],
+});
+
 const TikTokBasePerformanceSnapshot = sequelize.define('TikTokBasePerformanceSnapshot', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   export_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -941,6 +958,8 @@ TikTokShop.hasMany(TikTokCreatorProfile, { foreignKey: 'shop_id', as: 'creator_p
 TikTokCreatorProfile.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokShop.hasMany(TikTokApiCooldown, { foreignKey: 'shop_id', as: 'api_cooldowns' });
 TikTokApiCooldown.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(TikTokMarketplaceCreatorDetail, { foreignKey: 'shop_id', as: 'marketplace_creator_details' });
+TikTokMarketplaceCreatorDetail.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokShop.hasMany(TikTokBasePerformanceSnapshot, { foreignKey: 'shop_id', as: 'base_performance_snapshots' });
 TikTokBasePerformanceSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokCreatorPerformanceExport.hasOne(TikTokBasePerformanceSnapshot, { foreignKey: 'export_id', as: 'base_snapshot' });
@@ -991,6 +1010,7 @@ module.exports = {
   TikTokCreatorPerformanceSnapshot,
   TikTokCreatorProfile,
   TikTokApiCooldown,
+  TikTokMarketplaceCreatorDetail,
   TikTokBasePerformanceSnapshot,
   ScheduledJob,
   ScheduledJobRun,

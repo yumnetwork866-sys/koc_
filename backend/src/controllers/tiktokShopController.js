@@ -18,7 +18,6 @@ const {
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
   searchMarketplaceCreators,
-  getMarketplaceCreatorPerformance,
   getProductCategories,
   SELLER_PRODUCT_BASIC_SCOPE,
   getSellerCreatorContentDetails,
@@ -40,12 +39,16 @@ const {
   hydrateCreatorRows,
   syncAndHydrateCollaborationCreators,
 } = require('../services/tiktokCreatorProfileService');
+const { marketplaceCreatorDetailService } = require('../services/tiktokMarketplaceCreatorDetailService');
 
 const affiliateCacheTtlValue = Number(process.env.TIKTOK_SELLER_AFFILIATE_CACHE_TTL_MS ?? 120000);
 const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
   ? 0
   : Math.min(300000, Math.max(60000, affiliateCacheTtlValue || 120000));
 const sellerAffiliateCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs, maxEntries: 1000 });
+// Marketplace polling must only re-read database enrichment, never repeat the
+// upstream search request while creator details are being refreshed.
+const marketplaceSearchCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs || 120000, maxEntries: 500 });
 const marketplaceCategoryCache = createTtlPromiseCache({ ttlMs: 6 * 60 * 60 * 1000, maxEntries: 100 });
 const flattenCategories = (categories = []) => categories.flatMap((category) => [
   category,
@@ -477,46 +480,89 @@ const listAffiliateCreators = affiliateResponse('creators', (shop, req) => searc
   status: sampleApplicationStatuses.has(req.query.status) ? req.query.status : null,
 }));
 
-const listMarketplaceCreators = affiliateResponse('marketplace-creators', async (shop, req) => {
-  let payload = await searchMarketplaceCreators({
-    authorization: shop.authorization,
-    shopCipher: shop.cipher,
-    pageToken: req.query.page_token,
-    pageSize: pageSizeValue(req.query.page_size),
-    keyword: req.query.keyword,
-    searchKey: req.query.search_key,
-  });
+const listMarketplaceCreators = async (req, res) => {
   try {
-    payload = await addMarketplaceLocalCurrency(payload, shop.region);
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const { value: payload, hit } = await marketplaceSearchCache.getOrLoad(
+      affiliateCacheKey('marketplace-creators', shop, req),
+      async () => {
+        if (isDemoAuthorization(shop.authorization)) {
+          return sellerAffiliateFixture('marketplace-creators', shop, { ...req.query, ...req.params });
+        }
+        let result = await searchMarketplaceCreators({
+          authorization: shop.authorization,
+          shopCipher: shop.cipher,
+          pageToken: req.query.page_token,
+          pageSize: pageSizeValue(req.query.page_size),
+          keyword: req.query.keyword,
+          searchKey: req.query.search_key,
+        });
+        try {
+          result = await addMarketplaceLocalCurrency(result, shop.region);
+        } catch (error) {
+          console.error('[Exchange Rate] Marketplace conversion failed', { shopId: shop.id, message: error.message });
+        }
+        try {
+          result = await addMarketplaceCategoryNames(result, shop);
+        } catch (error) {
+          console.error('[Categories] Marketplace enrichment failed', { shopId: shop.id, message: error.message });
+        }
+        return result;
+      },
+    );
+    let enrichment;
+    if (isDemoAuthorization(shop.authorization)) {
+      enrichment = {
+        creators: (payload.data?.creators || []).map((creator) => ({
+          ...creator,
+          ...sellerAffiliateFixture('marketplace-creator-detail', shop, {
+            creatorId: creator.creator_open_id,
+          }).data.creator,
+        })),
+        detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 },
+      };
+    } else {
+      enrichment = await marketplaceCreatorDetailService.enrichAndQueue(shop, payload.data?.creators || []);
+    }
+    res.set('X-Seller-Affiliate-Cache', hit ? 'HIT' : 'MISS');
+    res.json({
+      ...payload.data,
+      creators: enrichment.creators,
+      detail_refresh: enrichment.detail_refresh,
+      request_id: payload.request_id || null,
+    });
   } catch (error) {
-    console.error('[Exchange Rate] Marketplace conversion failed', { shopId: shop.id, message: error.message });
+    const permissionError = /grant seller\.(affiliate_collaboration|creator_marketplace)\.read/i.test(error.message);
+    const rateLimited = Number(error.tiktokCode) === 36009002;
+    res.status(permissionError ? 403 : rateLimited ? 429 : 502).json({
+      message: error.message,
+      ...(error.tiktokCode !== undefined && error.tiktokCode !== null ? { tiktok_code: Number(error.tiktokCode) } : {}),
+      ...(error.requestId ? { request_id: error.requestId } : {}),
+    });
   }
-  try {
-    payload = await addMarketplaceCategoryNames(payload, shop);
-  } catch (error) {
-    console.error('[Categories] Marketplace enrichment failed', { shopId: shop.id, message: error.message });
-  }
-  return payload;
-});
+};
 
-const showMarketplaceCreator = affiliateResponse('marketplace-creator-detail', async (shop, req) => {
-  let payload = await getMarketplaceCreatorPerformance({
-    authorization: shop.authorization,
-    shopCipher: shop.cipher,
-    creatorId: req.params.creatorId,
-  });
+const showMarketplaceCreator = async (req, res) => {
   try {
-    payload = await addMarketplaceLocalCurrency(payload, shop.region);
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    if (isDemoAuthorization(shop.authorization)) {
+      const payload = sellerAffiliateFixture('marketplace-creator-detail', shop, { ...req.query, ...req.params });
+      res.json({ ...payload.data, detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 } });
+      return;
+    }
+    const enrichment = await marketplaceCreatorDetailService.enrichAndQueue(shop, [{
+      creator_open_id: req.params.creatorId,
+    }]);
+    res.status(enrichment.detail_refresh.pending ? 202 : 200).json({
+      creator: enrichment.creators[0],
+      detail_refresh: enrichment.detail_refresh,
+    });
   } catch (error) {
-    console.error('[Exchange Rate] Marketplace detail conversion failed', { shopId: shop.id, message: error.message });
+    res.status(502).json({ message: error.message });
   }
-  try {
-    payload = await addMarketplaceCategoryNames(payload, shop);
-  } catch (error) {
-    console.error('[Categories] Marketplace detail enrichment failed', { shopId: shop.id, message: error.message });
-  }
-  return payload;
-});
+};
 
 const listCreatorContentDetails = affiliateResponse('creator-content-details', (shop, req) => getSellerCreatorContentDetails({
   authorization: shop.authorization,
