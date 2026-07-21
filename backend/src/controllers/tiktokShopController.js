@@ -18,10 +18,12 @@ const {
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
   searchMarketplaceCreators,
+  getMarketplaceCreatorPerformance,
   getSellerCreatorContentDetails,
   normalizeShopPerformance,
 } = require('../services/tiktokShopService');
 const { loadShopAnalyticsPerformance } = require('../services/tiktokShopAnalyticsSyncService');
+const { addMarketplaceLocalCurrency } = require('../services/exchangeRateService');
 const {
   createCreatorPerformanceExportWithFallback,
   createBasePerformanceExportWithFallback,
@@ -265,10 +267,12 @@ const loadAffiliateShop = async (req, res) => {
 const affiliateCacheKey = (namespace, shop, req) => {
   const normalizedQuery = Object.entries(req.query || {})
     .sort(([left], [right]) => left.localeCompare(right));
+  const normalizedParams = Object.entries(req.params || {})
+    .sort(([left], [right]) => left.localeCompare(right));
   const authorizationVersion = shop.authorization?.updated_at
     ? new Date(shop.authorization.updated_at).getTime()
     : 0;
-  return JSON.stringify([namespace, shop.id, shop.authorization_id, authorizationVersion, normalizedQuery]);
+  return JSON.stringify([namespace, shop.id, shop.authorization_id, authorizationVersion, normalizedParams, normalizedQuery]);
 };
 
 const affiliateResponse = (namespace, operation) => async (req, res) => {
@@ -278,7 +282,7 @@ const affiliateResponse = (namespace, operation) => async (req, res) => {
     const { value: payload, hit } = await sellerAffiliateCache.getOrLoad(
       affiliateCacheKey(namespace, shop, req),
       () => isDemoAuthorization(shop.authorization)
-        ? sellerAffiliateFixture(namespace, shop, req.query)
+        ? sellerAffiliateFixture(namespace, shop, { ...req.query, ...req.params })
         : operation(shop, req),
     );
     res.set('X-Seller-Affiliate-Cache', hit ? 'HIT' : 'MISS');
@@ -438,13 +442,36 @@ const listAffiliateCreators = affiliateResponse('creators', (shop, req) => searc
   status: sampleApplicationStatuses.has(req.query.status) ? req.query.status : null,
 }));
 
-const listMarketplaceCreators = affiliateResponse('marketplace-creators', (shop, req) => searchMarketplaceCreators({
-  authorization: shop.authorization,
-  shopCipher: shop.cipher,
-  pageToken: req.query.page_token,
-  pageSize: pageSizeValue(req.query.page_size),
-  keyword: req.query.keyword,
-}));
+const listMarketplaceCreators = affiliateResponse('marketplace-creators', async (shop, req) => {
+  const payload = await searchMarketplaceCreators({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    pageToken: req.query.page_token,
+    pageSize: pageSizeValue(req.query.page_size),
+    keyword: req.query.keyword,
+    searchKey: req.query.search_key,
+  });
+  try {
+    return await addMarketplaceLocalCurrency(payload, shop.region);
+  } catch (error) {
+    console.error('[Exchange Rate] Marketplace conversion failed', { shopId: shop.id, message: error.message });
+    return payload;
+  }
+});
+
+const showMarketplaceCreator = affiliateResponse('marketplace-creator-detail', async (shop, req) => {
+  const payload = await getMarketplaceCreatorPerformance({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    creatorId: req.params.creatorId,
+  });
+  try {
+    return await addMarketplaceLocalCurrency(payload, shop.region);
+  } catch (error) {
+    console.error('[Exchange Rate] Marketplace detail conversion failed', { shopId: shop.id, message: error.message });
+    return payload;
+  }
+});
 
 const listCreatorContentDetails = affiliateResponse('creator-content-details', (shop, req) => getSellerCreatorContentDetails({
   authorization: shop.authorization,
@@ -674,7 +701,7 @@ module.exports = {
   startShopOauth, handleShopOauthCallback, listShopConnections, listShops,
   getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization, disconnectShop,
   listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
-  listAffiliateCreators, listMarketplaceCreators,
+  listAffiliateCreators, listMarketplaceCreators, showMarketplaceCreator,
   listCreatorContentDetails,
   listCreatorPerformance,
   syncCreatorPerformance,

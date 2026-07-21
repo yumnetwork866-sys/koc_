@@ -106,6 +106,27 @@ const sellerAffiliateFixture = (namespace, shop, query = {}) => {
       request_id: requestId,
     };
   }
+  if (namespace === 'marketplace-creator-detail') {
+    const match = String(query.creatorId || '').match(/(\d+)$/);
+    const index = Math.max(0, Number(match?.[1] || 1) - 1);
+    return {
+      data: {
+        creator: {
+          creator_open_id: query.creatorId,
+          username: `demo.creator.${index + 1}`,
+          nickname: `Demo Creator ${index + 1}`,
+          ec_video_count: 18 + index * 3,
+          units_sold: 42 + index * 11,
+          avg_ec_video_play_count: 18000 + index * 4200,
+          avg_ec_video_like_count: 920 + index * 130,
+          avg_ec_video_comment_count: 74 + index * 9,
+          avg_ec_video_share_count: 51 + index * 7,
+          gmv: { amount: String(640 + index * 275), currency: 'USD' },
+        },
+      },
+      request_id: requestId,
+    };
+  }
   if (namespace === 'creator-content-details') {
     return {
       data: {

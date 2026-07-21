@@ -133,6 +133,7 @@ function fetchTikTokSellerAffiliate(shopId, resource, filters = {}) {
   if (filters.pageToken) params.set('page_token', filters.pageToken);
   if (filters.pageSize) params.set('page_size', filters.pageSize);
   if (filters.keyword) params.set('keyword', filters.keyword);
+  if (filters.searchKey) params.set('search_key', filters.searchKey);
   if (filters.status) params.set('status', filters.status);
   if (filters.startTime) params.set('create_time_ge', filters.startTime);
   if (filters.endTime) params.set('create_time_lt', filters.endTime);
@@ -147,6 +148,9 @@ export const fetchTikTokSellerTargetCollaborations = (shopId, filters) => fetchT
 export const fetchTikTokSellerAffiliateOrders = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'orders', filters);
 export const fetchTikTokSellerAffiliateCreators = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'creators', filters);
 export const fetchTikTokSellerMarketplaceCreators = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'marketplace-creators', filters);
+export function fetchTikTokSellerMarketplaceCreator(shopId, creatorId, signal) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/affiliate/marketplace-creators/${encodeURIComponent(creatorId)}`, { signal });
+}
 export const fetchTikTokSellerCreatorContentDetails = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'creator-content-details', filters);
 export const fetchTikTokSellerOpenCollaborationSettings = (shopId, signal) => fetchTikTokSellerAffiliate(shopId, 'open-collaboration-settings', { signal });
 

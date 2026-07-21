@@ -15,6 +15,7 @@ const OPEN_COLLABORATION_SETTINGS_PATH = '/affiliate_seller/202409/open_collabor
 const SAMPLE_APPLICATIONS_PATH = '/affiliate_seller/202508/sample_applications/search';
 const CREATOR_CONTENT_DETAILS_PATH = '/affiliate_seller/202508/open_collaborations/creator_content_details';
 const MARKETPLACE_CREATORS_PATH = '/affiliate_seller/202508/marketplace_creators/search';
+const MARKETPLACE_CREATOR_DETAIL_PATH = '/affiliate_seller/202508/marketplace_creators';
 const COMPASS_CREATE_TASK_PATH = '/affiliate_seller/202603/compass/offline_task';
 const COMPASS_TASK_LIST_PATH = '/affiliate_seller/202603/compass/offline_tasks';
 
@@ -344,7 +345,6 @@ const searchMarketplaceCreators = ({
   authorization, shopCipher, pageToken, pageSize = 20, keyword, searchKey,
 } = {}, fetchImpl) => {
   const normalizedKeyword = String(keyword || '').trim();
-  if (!normalizedKeyword) throw new Error('Marketplace creator keyword is required.');
   return sellerAffiliateRequest({
     authorization,
     shopCipher,
@@ -355,9 +355,23 @@ const searchMarketplaceCreators = ({
       ...(pageToken ? { page_token: pageToken } : {}),
     },
     body: {
-      keyword: normalizedKeyword,
+      ...(normalizedKeyword ? { keyword: normalizedKeyword } : {}),
       ...(searchKey ? { search_key: searchKey } : {}),
     },
+  }, fetchImpl);
+};
+
+const getMarketplaceCreatorPerformance = ({
+  authorization, shopCipher, creatorId,
+} = {}, fetchImpl) => {
+  const normalizedCreatorId = String(creatorId || '').trim();
+  if (!normalizedCreatorId) throw new Error('Marketplace creator id is required.');
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: `${MARKETPLACE_CREATOR_DETAIL_PATH}/${encodeURIComponent(normalizedCreatorId)}`,
+    method: 'GET',
+    requiredScope: SELLER_CREATOR_MARKETPLACE_SCOPE,
   }, fetchImpl);
 };
 
@@ -467,6 +481,7 @@ module.exports = {
   SAMPLE_APPLICATIONS_PATH,
   CREATOR_CONTENT_DETAILS_PATH,
   MARKETPLACE_CREATORS_PATH,
+  MARKETPLACE_CREATOR_DETAIL_PATH,
   COMPASS_CREATE_TASK_PATH,
   COMPASS_TASK_LIST_PATH,
   buildShopAuthorizationUrl,
@@ -485,6 +500,7 @@ module.exports = {
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
   searchMarketplaceCreators,
+  getMarketplaceCreatorPerformance,
   getSellerCreatorContentDetails,
   createCompassExportTask,
   listCompassExportTasks,

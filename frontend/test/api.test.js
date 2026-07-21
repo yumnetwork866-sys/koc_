@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
+  fetchTikTokSellerMarketplaceCreator, fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
 } from '../src/lib/api.js';
 import { getStoredSession, saveStoredSession } from '../src/lib/session.js';
 
@@ -144,10 +144,28 @@ test('Creator Marketplace helper sends the discovery keyword and pagination', as
 
     const controller = new AbortController();
     await fetchTikTokSellerMarketplaceCreators(7, {
-      keyword: '@demo.creator', pageToken: 'next-page', pageSize: 20, signal: controller.signal,
+      keyword: '@demo.creator', pageToken: 'next-page', pageSize: 20, searchKey: 'stable-search', signal: controller.signal,
     });
 
-    assert.equal(request.url, '/api/tiktok-shop/shops/7/affiliate/marketplace-creators?page_token=next-page&page_size=20&keyword=%40demo.creator');
+    assert.equal(request.url, '/api/tiktok-shop/shops/7/affiliate/marketplace-creators?page_token=next-page&page_size=20&keyword=%40demo.creator&search_key=stable-search');
     assert.equal(request.options.signal, controller.signal);
+  });
+});
+
+test('Creator Marketplace detail helper encodes the creator id', async () => {
+  await withBrowser(async () => {
+    saveStoredSession(createSession('marketplace-detail-admin'));
+    let requestUrl;
+    globalThis.fetch = async (url) => {
+      requestUrl = url;
+      return new Response(JSON.stringify({ creator: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    await fetchTikTokSellerMarketplaceCreator(7, 'creator/open id');
+
+    assert.equal(requestUrl, '/api/tiktok-shop/shops/7/affiliate/marketplace-creators/creator%2Fopen%20id');
   });
 });

@@ -12,6 +12,7 @@ const {
   SAMPLE_APPLICATIONS_PATH,
   CREATOR_CONTENT_DETAILS_PATH,
   MARKETPLACE_CREATORS_PATH,
+  MARKETPLACE_CREATOR_DETAIL_PATH,
   buildShopAuthorizationUrl,
   parseShopAuthorizationState,
   exchangeShopAuthorizationCode,
@@ -26,6 +27,7 @@ const {
   attachAffiliateOrderMetadata,
   searchSellerSampleApplications,
   searchMarketplaceCreators,
+  getMarketplaceCreatorPerformance,
   getSellerCreatorContentDetails,
   createCompassExportTask,
   listCompassExportTasks,
@@ -373,6 +375,33 @@ test('search Marketplace creators uses creator marketplace scope and username ke
   });
 });
 
+test('search Marketplace creators supports an unfiltered first page and stable pagination', async (t) => {
+  configure(t);
+  const authorization = sellerAuthorization();
+  authorization.granted_scopes.push('seller.creator_marketplace.read');
+  await searchMarketplaceCreators({
+    authorization,
+    shopCipher: 'cipher-1',
+    pageSize: 20,
+  }, async (url, options) => {
+    assert.equal(url.searchParams.has('page_token'), false);
+    assert.equal(options.body, undefined);
+    return successResponse({ creators: [], search_key: 'stable-search' });
+  });
+  await searchMarketplaceCreators({
+    authorization,
+    shopCipher: 'cipher-1',
+    pageSize: 12,
+    pageToken: 'next-page',
+    searchKey: 'stable-search',
+  }, async (url, options) => {
+    assert.equal(url.searchParams.get('page_token'), 'next-page');
+    assert.equal(url.searchParams.get('page_size'), '12');
+    assert.deepEqual(JSON.parse(options.body), { search_key: 'stable-search' });
+    return successResponse({ creators: [], search_key: 'stable-search' });
+  });
+});
+
 test('search Marketplace creators requires seller creator marketplace scope', async (t) => {
   configure(t);
   await assert.rejects(
@@ -383,6 +412,22 @@ test('search Marketplace creators requires seller creator marketplace scope', as
     }),
     /seller\.creator_marketplace\.read/,
   );
+});
+
+test('get Marketplace creator performance uses creator id and marketplace scope', async (t) => {
+  configure(t);
+  const authorization = sellerAuthorization();
+  authorization.granted_scopes.push('seller.creator_marketplace.read');
+  await getMarketplaceCreatorPerformance({
+    authorization,
+    shopCipher: 'cipher-1',
+    creatorId: 'creator/open id',
+  }, async (url, options) => {
+    assert.equal(url.pathname, `${MARKETPLACE_CREATOR_DETAIL_PATH}/creator%2Fopen%20id`);
+    assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
+    assert.equal(options.method, 'GET');
+    return successResponse({ creator: { units_sold: 234, ec_video_count: 12 } });
+  });
 });
 
 test('get Seller creator content details uses product filters and Seller token', async (t) => {

@@ -729,6 +729,8 @@
     "creatorGmv30": "30-day GMV",
     "affiliateOrders": "Affiliate orders",
     "itemsSold": "Items sold",
+    "avgVideoViews": "Avg. video views",
+    "engagementRate": "Engagement rate",
     "productImpressions": "Product impressions",
     "refundedGmv": "Refunded GMV",
     "performanceWindow": "Report window",
