@@ -13,14 +13,19 @@ import {
   fetchTikTokShops,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
-import { getAffiliateOrderProductIds, getAffiliateOrderProgramIds } from '../lib/sellerAffiliate';
+import {
+  getAffiliateOrderProductIds,
+  getAffiliateOrderProgramIds,
+  getCreatorMetric,
+  getCreatorVideoEngagementRate,
+  normalizeEngagementPercentage,
+} from '../lib/sellerAffiliate';
 import ShopDropdown from './ShopDropdown';
 
 const REQUIRED_SCOPE = 'seller.affiliate_collaboration.read';
 const MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
 const PRODUCT_SCOPE = 'seller.product.basic';
 const PAGE_SIZE = 20;
-const SEARCH_DETAIL_LIMIT = 5;
 const normalizeCreatorSearchKeyword = (value) => String(value || '').trim().replace(/^@+/, '');
 const BREAKDOWN_COLORS = ['#00a89d', '#2563eb', '#f59e0b', '#e11d48', '#7c3aed', '#0f766e', '#64748b', '#db2777'];
 const LOCALIZED_STATUSES = new Set([
@@ -144,16 +149,21 @@ const waitForSearchDetailRetry = (milliseconds, signal) => new Promise((resolve,
 });
 
 const fetchSearchCreatorDetail = async (shopId, creatorId, signal) => {
-  try {
-    return await fetchTikTokSellerMarketplaceCreator(shopId, creatorId, signal);
-  } catch (error) {
-    const rateLimited = error?.status === 429
-      || Number(error?.tiktokCode) === 36009002
-      || /too many requests/i.test(error?.message || '');
-    if (!rateLimited || signal?.aborted) throw error;
-    await waitForSearchDetailRetry(2000, signal);
-    return fetchTikTokSellerMarketplaceCreator(shopId, creatorId, signal);
+  const maxAttempts = 4;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return await fetchTikTokSellerMarketplaceCreator(shopId, creatorId, signal);
+    } catch (error) {
+      const rateLimited = error?.status === 429
+        || Number(error?.tiktokCode) === 36009002
+        || /too many requests/i.test(error?.message || '');
+      if (!rateLimited || signal?.aborted || attempt === maxAttempts - 1) throw error;
+      const exponentialDelay = 1000 * (2 ** attempt);
+      const jitter = Math.floor(Math.random() * 500);
+      await waitForSearchDetailRetry(exponentialDelay + jitter, signal);
+    }
   }
+  return null;
 };
 
 const SellerAffiliatePanel = () => {
@@ -200,6 +210,9 @@ const SellerAffiliatePanel = () => {
   }, []);
 
   const load = useCallback(async (signal) => {
+    // searchVersion intentionally participates in this request so submitting the
+    // same keyword again refreshes Marketplace data and creator details.
+    void searchVersion;
     if (!shopId || !hasScope || (section === 'discover' && !hasMarketplaceScope)) { setData({}); setSettings(null); return; }
     setLoading(true);
     setError('');
@@ -252,31 +265,34 @@ const SellerAffiliatePanel = () => {
             total_count: displayedCreators.length,
             next_page_token: '',
           };
-          if (!signal?.aborted) {
-            setData(result);
-            setLoading(false);
-          }
-          for (const [detailIndex, creator] of displayedCreators.slice(0, SEARCH_DETAIL_LIMIT).entries()) {
-            if (signal?.aborted || !creator.creator_open_id) break;
-            try {
-              if (detailIndex > 0) await waitForSearchDetailRetry(600, signal);
-              const detailPayload = await fetchSearchCreatorDetail(shopId, creator.creator_open_id, signal);
-              if (detailPayload?.creator && !signal?.aborted) {
-                setData((current) => ({
-                  ...current,
-                  creators: (current.creators || []).map((currentCreator) => (
-                    currentCreator.creator_open_id === creator.creator_open_id
-                      ? { ...currentCreator, ...detailPayload.creator }
-                      : currentCreator
-                  )),
-                }));
-              }
-            } catch (error) {
-              if (error?.name === 'AbortError') throw error;
-            }
-          }
-          return;
         }
+        const displayedCreators = Array.isArray(result?.creators) ? result.creators : [];
+        if (!signal?.aborted) {
+          setData(result || {});
+          setLoading(false);
+        }
+        for (const [detailIndex, creator] of displayedCreators.entries()) {
+          const creatorId = creator.creator_open_id;
+          if (signal?.aborted) break;
+          if (!creatorId) continue;
+          try {
+            if (detailIndex > 0) await waitForSearchDetailRetry(600, signal);
+            const detailPayload = await fetchSearchCreatorDetail(shopId, creatorId, signal);
+            if (detailPayload?.creator && !signal?.aborted) {
+              setData((current) => ({
+                ...current,
+                creators: (current.creators || []).map((currentCreator) => (
+                  currentCreator.creator_open_id === creatorId
+                    ? { ...currentCreator, ...detailPayload.creator }
+                    : currentCreator
+                )),
+              }));
+            }
+          } catch (error) {
+            if (error?.name === 'AbortError') throw error;
+          }
+        }
+        return;
       } else {
         result = await fetchTikTokSellerAffiliateOrders(shopId, { ...filters, programId: submittedKeyword });
       }
@@ -436,69 +452,10 @@ const SellerAffiliatePanel = () => {
       ? creator.gmv_range.formatted_range.replace(/US\$|USD|\$/g, 'RM')
       : '—';
   };
-  const creatorMetric = (creator, names) => {
-    const sources = [creator, creator.content_performance, creator.video_performance, creator.performance];
-    for (const source of sources) {
-      if (!source) continue;
-      for (const name of names) {
-        if (source[name] !== undefined && source[name] !== null && source[name] !== '') return source[name];
-      }
-    }
-    return null;
-  };
-  const normalizePercentage = (value) => {
-    const candidate = value && typeof value === 'object'
-      ? value.rate ?? value.value ?? value.amount ?? value.percentage
-      : value;
-    if (candidate === undefined || candidate === null || candidate === '') return null;
-    const raw = String(candidate).trim();
-    const number = Number(raw.replace('%', '').replaceAll(',', ''));
-    if (!Number.isFinite(number)) return null;
-    if (raw.includes('%')) return number;
-    if (Math.abs(number) <= 1) return number * 100;
-    if (Math.abs(number) <= 100) return number;
-    return number / 100;
-  };
-  const creatorEngagementRate = (creator) => {
-    const providedRate = creatorMetric(creator, [
-      'ec_video_engagement_rate',
-      'avg_ec_video_engagement_rate',
-      'ec_video_engagement',
-      'video_engagement_rate',
-      'avg_video_engagement_rate',
-      'video_engagement',
-      'engagement_rate',
-    ]);
-    const normalizedRate = normalizePercentage(providedRate);
-    if (normalizedRate !== null) return normalizedRate;
-
-    const views = Number(creatorMetric(creator, [
-      'avg_ec_video_play_count',
-      'avg_ec_video_view_count',
-      'avg_ec_video_views',
-      'avg_video_view_count',
-      'avg_video_views',
-    ]));
-    if (!Number.isFinite(views) || views <= 0) return null;
-    const interactionCount = creatorMetric(creator, [
-      'avg_ec_video_interaction_count',
-      'avg_video_interaction_count',
-    ]);
-    if (interactionCount !== null) {
-      const interactions = Number(interactionCount);
-      if (Number.isFinite(interactions)) return (interactions / views) * 100;
-    }
-
-    const likes = creatorMetric(creator, ['avg_ec_video_like_count', 'avg_video_like_count']);
-    const comments = creatorMetric(creator, ['avg_ec_video_comment_count', 'avg_video_comment_count']);
-    const shares = creatorMetric(creator, ['avg_ec_video_share_count', 'avg_video_share_count']);
-    if (likes === null && comments === null && shares === null) return null;
-    return (Number(likes || 0) + Number(comments || 0) + Number(shares || 0)) / views * 100;
-  };
   const formatEngagementRate = (creator) => {
-    const rate = creatorEngagementRate(creator);
+    const rate = getCreatorVideoEngagementRate(creator);
     if (Number.isFinite(rate)) return `${rate.toLocaleString(locale, { maximumFractionDigits: 2 })}%`;
-    const range = creatorMetric(creator, [
+    const range = getCreatorMetric(creator, [
       'ec_video_engagement_rate_range',
       'video_engagement_rate_range',
       'engagement_rate_range',
@@ -506,8 +463,8 @@ const SellerAffiliatePanel = () => {
     if (!range) return '—';
     if (typeof range === 'string') return range.includes('%') ? range : `${range}%`;
     if (range.formatted_range) return range.formatted_range;
-    const minimum = normalizePercentage(range.minimum_rate ?? range.minimum_amount ?? range.minimum);
-    const maximum = normalizePercentage(range.maximum_rate ?? range.maximum_amount ?? range.maximum);
+    const minimum = normalizeEngagementPercentage(range.minimum_rate ?? range.minimum_amount ?? range.minimum);
+    const maximum = normalizeEngagementPercentage(range.maximum_rate ?? range.maximum_amount ?? range.maximum);
     if (minimum === null && maximum === null) return '—';
     if (maximum === null || minimum === maximum) return `${minimum.toLocaleString(locale, { maximumFractionDigits: 2 })}%`;
     if (minimum === null) return `${maximum.toLocaleString(locale, { maximumFractionDigits: 2 })}%`;
