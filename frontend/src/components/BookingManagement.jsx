@@ -61,7 +61,7 @@ const getKocDisplayName = (user) => {
     .trim() || rawName;
 };
 
-const BookingManagement = ({ heroTitle, heroSubtitle }) => {
+const BookingManagement = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const [bookings, setBookings] = useState([]);
   const [users, setUsers] = useState([]);
@@ -103,7 +103,7 @@ const BookingManagement = ({ heroTitle, heroSubtitle }) => {
     load();
 
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

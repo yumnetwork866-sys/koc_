@@ -146,6 +146,7 @@ export const fetchTikTokSellerOpenCollaborations = (shopId, filters) => fetchTik
 export const fetchTikTokSellerTargetCollaborations = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'target-collaborations', filters);
 export const fetchTikTokSellerAffiliateOrders = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'orders', filters);
 export const fetchTikTokSellerAffiliateCreators = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'creators', filters);
+export const fetchTikTokSellerMarketplaceCreators = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'marketplace-creators', filters);
 export const fetchTikTokSellerCreatorContentDetails = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'creator-content-details', filters);
 export const fetchTikTokSellerOpenCollaborationSettings = (shopId, signal) => fetchTikTokSellerAffiliate(shopId, 'open-collaboration-settings', { signal });
 

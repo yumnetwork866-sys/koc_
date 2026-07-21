@@ -11,7 +11,7 @@ import {
 import { useI18n } from '../lib/language';
 import { getPlatformLabel } from '../lib/platforms';
 
-const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
+const ChannelManagement = ({ heroTitle }) => {
   const { t } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
@@ -75,7 +75,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
     load();
 
     return () => controller.abort();
-  }, [location.search]);
+  }, [location.search, t]);
 
   useEffect(() => {
     if (!oauthStatus) {
@@ -95,7 +95,7 @@ const ChannelManagement = ({ heroTitle, heroSubtitle }) => {
     navigate({ pathname: location.pathname, search: '' }, { replace: true });
 
     return () => window.clearTimeout(timeoutId);
-  }, [oauthStatus, oauthMessage, navigate, location.pathname]);
+  }, [oauthStatus, oauthMessage, navigate, location.pathname, t]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {

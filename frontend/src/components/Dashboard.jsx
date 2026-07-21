@@ -20,7 +20,7 @@ const chartTooltipStyle = {
 
 const chartTick = { fill: '#64748b', fontSize: 12 };
 
-const Dashboard = ({ heroTitle, heroSubtitle }) => {
+const Dashboard = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const [kpis, setKpis] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -51,7 +51,7 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
     load();
 
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   const topUsers = useMemo(() => {
     return [...(kpis?.users || [])]
@@ -76,7 +76,6 @@ const Dashboard = ({ heroTitle, heroSubtitle }) => {
       }));
 
   const topUser = topUsers[0] || null;
-  const topProduct = topProducts[0] || null;
   const totalViews = Number(kpis?.overview?.totalViews || 0);
   const totalVideos = Number(kpis?.overview?.totalVideos || 0);
 

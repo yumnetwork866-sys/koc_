@@ -40,3 +40,4 @@ Thumbs.db
 backend/generated/prisma/
 backend/backups/
 package-lock.json
+koc-main

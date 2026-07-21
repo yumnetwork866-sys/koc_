@@ -19,8 +19,11 @@ test('TikTok demo fixtures provide Seller Affiliate and Creator data', () => {
     showcase_count: 12,
   };
   const seller = sellerAffiliateFixture('open-collaborations', { name: 'Demo Shop' });
+  const marketplace = sellerAffiliateFixture('marketplace-creators', { name: 'Demo Shop' }, { keyword: '@demo.creator.1' });
   const creator = creatorOverviewFixture(authorization);
   assert.equal(seller.data.open_collaborations.length, 8);
+  assert.equal(marketplace.data.creators.length, 1);
+  assert.equal(marketplace.data.creators[0].username, 'demo.creator.1');
   assert.equal(creator.profile.username, 'demo.creator');
   assert.equal(creator.showcase.products.length, 8);
   assert.equal(creator.errors.profile, null);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  fetchTikTokShopAnalytics, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
+  fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
 } from '../src/lib/api.js';
 import { getStoredSession, saveStoredSession } from '../src/lib/session.js';
 
@@ -127,5 +127,27 @@ test('Creator OAuth helper sends either creator_id or the explicit create_koc in
 
     assert.equal(calls[0], '/api/bookings/tiktok-partner/oauth/start?return_path=%2Fmanage%2Fkoc-performance&creator_id=42');
     assert.equal(calls[1], '/api/bookings/tiktok-partner/oauth/start?return_path=%2Fmanage%2Fkoc-performance&create_koc=true');
+  });
+});
+
+test('Creator Marketplace helper sends the discovery keyword and pagination', async () => {
+  await withBrowser(async () => {
+    saveStoredSession(createSession('marketplace-admin'));
+    let request;
+    globalThis.fetch = async (url, options) => {
+      request = { url, options };
+      return new Response(JSON.stringify({ creators: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const controller = new AbortController();
+    await fetchTikTokSellerMarketplaceCreators(7, {
+      keyword: '@demo.creator', pageToken: 'next-page', pageSize: 20, signal: controller.signal,
+    });
+
+    assert.equal(request.url, '/api/tiktok-shop/shops/7/affiliate/marketplace-creators?page_token=next-page&page_size=20&keyword=%40demo.creator');
+    assert.equal(request.options.signal, controller.signal);
   });
 });

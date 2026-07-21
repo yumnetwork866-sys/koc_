@@ -88,6 +88,24 @@ const sellerAffiliateFixture = (namespace, shop, query = {}) => {
       request_id: requestId,
     };
   }
+  if (namespace === 'marketplace-creators') {
+    const normalizedKeyword = String(query.keyword || '').trim().replace(/^@/, '').toLowerCase();
+    const creators = Array.from({ length: 8 }, (_, index) => ({
+      creator_open_id: `${DEMO_PREFIX}marketplace_creator_${index + 1}`,
+      username: `demo.creator.${index + 1}`,
+      nickname: `Demo Creator ${index + 1}`,
+      follower_count: 18000 + index * 9400,
+      avatar: { url: `https://api.dicebear.com/10.x/lorelei-neutral/svg?seed=demo-marketplace-${index + 1}` },
+      gmv: { amount: String(640 + index * 275), currency: 'USD' },
+      register_region: index % 2 ? 'VN' : 'MY',
+    })).filter((creator) => !normalizedKeyword
+      || creator.username.includes(normalizedKeyword)
+      || creator.nickname.toLowerCase().includes(normalizedKeyword));
+    return {
+      data: { total_count: creators.length, next_page_token: null, creators },
+      request_id: requestId,
+    };
+  }
   if (namespace === 'creator-content-details') {
     return {
       data: {

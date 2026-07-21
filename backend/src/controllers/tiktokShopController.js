@@ -17,6 +17,7 @@ const {
   attachAffiliateOrderMetadata,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
+  searchMarketplaceCreators,
   getSellerCreatorContentDetails,
   normalizeShopPerformance,
 } = require('../services/tiktokShopService');
@@ -283,7 +284,7 @@ const affiliateResponse = (namespace, operation) => async (req, res) => {
     res.set('X-Seller-Affiliate-Cache', hit ? 'HIT' : 'MISS');
     res.json({ ...payload.data, request_id: payload.request_id || null });
   } catch (error) {
-    const permissionError = /grant seller\.affiliate_collaboration\.read/i.test(error.message);
+    const permissionError = /grant seller\.(affiliate_collaboration|creator_marketplace)\.read/i.test(error.message);
     res.status(permissionError ? 403 : 502).json({ message: error.message });
   }
 };
@@ -435,6 +436,14 @@ const listAffiliateCreators = affiliateResponse('creators', (shop, req) => searc
   pageSize: pageSizeValue(req.query.page_size),
   keyword: req.query.keyword,
   status: sampleApplicationStatuses.has(req.query.status) ? req.query.status : null,
+}));
+
+const listMarketplaceCreators = affiliateResponse('marketplace-creators', (shop, req) => searchMarketplaceCreators({
+  authorization: shop.authorization,
+  shopCipher: shop.cipher,
+  pageToken: req.query.page_token,
+  pageSize: pageSizeValue(req.query.page_size),
+  keyword: req.query.keyword,
 }));
 
 const listCreatorContentDetails = affiliateResponse('creator-content-details', (shop, req) => getSellerCreatorContentDetails({
@@ -665,7 +674,7 @@ module.exports = {
   startShopOauth, handleShopOauthCallback, listShopConnections, listShops,
   getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization, disconnectShop,
   listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
-  listAffiliateCreators,
+  listAffiliateCreators, listMarketplaceCreators,
   listCreatorContentDetails,
   listCreatorPerformance,
   syncCreatorPerformance,
