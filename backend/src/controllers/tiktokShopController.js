@@ -19,6 +19,8 @@ const {
   attachAffiliateOrderMetadata,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
+  getProductCategories,
+  SELLER_PRODUCT_BASIC_SCOPE,
   getSellerCreatorContentDetails,
   normalizeShopPerformance,
 } = require('../services/tiktokShopService');
@@ -45,6 +47,26 @@ const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
   ? 0
   : Math.min(300000, Math.max(60000, affiliateCacheTtlValue || 120000));
 const sellerAffiliateCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs, maxEntries: 1000 });
+const marketplaceCategoryCache = createTtlPromiseCache({ ttlMs: 6 * 60 * 60 * 1000, maxEntries: 100 });
+const flattenMarketplaceCategories = (categories = []) => categories.flatMap((category) => [
+  category,
+  ...flattenMarketplaceCategories(category?.children || category?.sub_categories || []),
+]);
+const addMarketplaceCategoryNames = async (creators, shop) => {
+  const scopes = Array.isArray(shop.authorization?.granted_scopes) ? shop.authorization.granted_scopes : [];
+  if (!creators.length || !scopes.includes(SELLER_PRODUCT_BASIC_SCOPE)) return creators;
+  const { value: categoryPayload } = await marketplaceCategoryCache.getOrLoad(String(shop.id), () => getProductCategories({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    locale: 'en-US',
+  }));
+  const categoryMap = new Map(flattenMarketplaceCategories(categoryPayload.data?.categories || [])
+    .map((category) => [String(category.id), category]));
+  return creators.map((creator) => {
+    const categories = (creator.category_ids || []).map((id) => categoryMap.get(String(id))).filter(Boolean);
+    return categories.length ? { ...creator, categories } : creator;
+  });
+};
 const creatorProfileRefreshJobs = new Map();
 const creatorProfileRefreshKey = (shopId, exportId) => `${shopId}:${exportId}`;
 const startCreatorProfileRefresh = (shop, exportRecord, { force = false } = {}) => {
@@ -545,6 +567,11 @@ const listMarketplaceCreators = async (req, res) => {
       exchangeRate = localized.data.exchange_rate || null;
     } catch (error) {
       console.error('[Exchange Rate] Marketplace conversion failed', { shopId: shop.id, message: error.message });
+    }
+    try {
+      creators = await addMarketplaceCategoryNames(creators, shop);
+    } catch (error) {
+      console.error('[Categories] Marketplace enrichment failed', { shopId: shop.id, message: error.message });
     }
     const nextOffset = offset + rows.length;
     res.set('X-Seller-Affiliate-Cache', 'DATABASE');

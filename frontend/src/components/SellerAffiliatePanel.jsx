@@ -75,7 +75,7 @@ const creatorLevelLabel = (creator) => {
   return match ? `Lv. ${match[1]}` : String(value);
 };
 const creatorCategoryLabels = (creator) => {
-  const candidates = [creator.categories, creator.category_names, creator.top_categories, creator.category_info]
+  const candidates = [creator.categories, creator.category_names, creator.top_categories, creator.category_info, creator.category_ids]
     .flatMap(arrayValue)
     .map((category) => typeof category === 'string'
       ? category
