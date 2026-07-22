@@ -118,6 +118,8 @@ const Booking = sequelize.define('Booking', {
     type: DataTypes.DATE,
     allowNull: true,
   },
+  created_at: DataTypes.DATE,
+  updated_at: DataTypes.DATE,
 }, {
   tableName: 'bookings',
   timestamps: false,

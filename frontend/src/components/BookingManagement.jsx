@@ -4,6 +4,7 @@ import {
   deleteBooking,
   fetchBookingTargetKocs,
   fetchBookings,
+  updateBooking,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 
@@ -11,45 +12,19 @@ const initialForm = {
   staff_name: '',
   creator_key: '',
   booking_cost: '',
+  deadline: '',
+  note: '',
 };
 
-const normalizeBookingVideo = (video) => ({
-  id: video?.id,
-  title: video?.title || '',
-  video_url: video?.video_url || '',
-  thumbnail_url: video?.thumbnail_url || '',
-  platform: video?.platform || '',
-  platform_video_id: video?.platform_video_id || '',
-});
-
-const parseBookingVideos = (value) => {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.map(normalizeBookingVideo).filter((video) => video.id || video.video_url || video.title);
-
-  if (typeof value === 'string') {
-    const text = value.trim();
-    if (!text) return [];
-
-    try {
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) {
-        return parsed.map(normalizeBookingVideo).filter((video) => video.id || video.video_url || video.title);
-      }
-      if (parsed && typeof parsed === 'object') {
-        return [normalizeBookingVideo(parsed)];
-      }
-    } catch {
-      // fall through and treat as a legacy single link
-    }
-
-    return [normalizeBookingVideo({ title: text, video_url: text })];
-  }
-
-  if (typeof value === 'object') {
-    return [normalizeBookingVideo(value)];
-  }
-
-  return [];
+const BOOKING_STATUSES = ['draft', 'booked', 'waiting_video', 'video_posted', 'done', 'cancelled'];
+const TERMINAL_STATUSES = new Set(['done', 'cancelled']);
+const bookingDeadlineState = (booking) => {
+  if (!booking.deadline || TERMINAL_STATUSES.has(booking.status)) return 'neutral';
+  const deadline = new Date(`${booking.deadline}T23:59:59`);
+  const days = Math.ceil((deadline.getTime() - Date.now()) / 86400000);
+  if (days < 0) return 'overdue';
+  if (days <= 3) return 'soon';
+  return 'active';
 };
 
 const getKocDisplayName = (user) => {
@@ -194,6 +169,9 @@ const BookingManagement = ({ heroTitle }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [detailForm, setDetailForm] = useState(null);
   const [error, setError] = useState('');
 
   const loadData = async (signal) => {
@@ -235,16 +213,22 @@ const BookingManagement = ({ heroTitle }) => {
   }, []);
 
   const localizedFormatMoney = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
-  const staffCount = useMemo(() => new Set(bookings.map((booking) => booking.staff_name || booking.staff?.name).filter(Boolean)).size, [bookings]);
+  const targetKocsByKey = useMemo(() => new Map(
+    targetKocs.map((creator) => [targetKocKey(creator), creator]),
+  ), [targetKocs]);
 
   const stats = useMemo(() => {
     return bookings.reduce(
       (acc, booking) => {
         acc.total += 1;
         acc.totalCost += Number(booking.booking_cost || 0);
+        if (!TERMINAL_STATUSES.has(booking.status)) acc.active += 1;
+        if (booking.status === 'waiting_video') acc.waitingVideo += 1;
+        if (booking.status === 'done') acc.done += 1;
+        if (bookingDeadlineState(booking) === 'overdue') acc.overdue += 1;
         return acc;
       },
-      { total: 0, totalCost: 0 },
+      { total: 0, active: 0, waitingVideo: 0, overdue: 0, done: 0, totalCost: 0 },
     );
   }, [bookings]);
 
@@ -272,6 +256,8 @@ const BookingManagement = ({ heroTitle }) => {
         target_shop_id: selectedKoc?.shop_id,
         creator_open_id: selectedKoc?.creator_open_id,
         booking_cost: Number(form.booking_cost),
+        deadline: form.deadline || null,
+        note: form.note.trim() || null,
       });
       resetForm();
       await loadData();
@@ -292,6 +278,10 @@ const BookingManagement = ({ heroTitle }) => {
       setDeletingId(booking.id);
       setError('');
       await deleteBooking(booking.id);
+      if (selectedBooking?.id === booking.id) {
+        setSelectedBooking(null);
+        setDetailForm(null);
+      }
       await loadData();
     } catch (err) {
       setError(err.message || t('booking.errorDelete'));
@@ -300,26 +290,114 @@ const BookingManagement = ({ heroTitle }) => {
     }
   };
 
+  const applyBooking = (updated) => {
+    setBookings((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+    setSelectedBooking((current) => (current?.id === updated.id ? updated : current));
+  };
+
+  const changeStatus = async (booking, status) => {
+    try {
+      setUpdatingId(booking.id);
+      setError('');
+      applyBooking(await updateBooking(booking.id, { status }));
+    } catch (err) {
+      setError(err.message || t('booking.errorUpdate'));
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const openDetails = (booking) => {
+    setSelectedBooking(booking);
+    setDetailForm({
+      status: booking.status || 'booked',
+      deadline: booking.deadline || '',
+      staff_name: booking.staff_name || booking.staff?.name || '',
+      note: booking.note || '',
+    });
+  };
+
+  const saveDetails = async (event) => {
+    event.preventDefault();
+    try {
+      setUpdatingId(selectedBooking.id);
+      setError('');
+      const updated = await updateBooking(selectedBooking.id, {
+        ...detailForm,
+        deadline: detailForm.deadline || null,
+        note: detailForm.note.trim() || null,
+      });
+      applyBooking(updated);
+      setDetailForm({
+        status: updated.status,
+        deadline: updated.deadline || '',
+        staff_name: updated.staff_name || '',
+        note: updated.note || '',
+      });
+    } catch (err) {
+      setError(err.message || t('booking.errorUpdate'));
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const formatDate = (value, includeTime = false) => value
+    ? new Intl.DateTimeFormat(language === 'vi' ? 'vi-VN' : 'en-US', includeTime
+      ? { dateStyle: 'short', timeStyle: 'short' }
+      : { dateStyle: 'short' }).format(new Date(value))
+    : '—';
+
+  const bookingVideos = (booking) => {
+    const value = booking?.video_url;
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return (Array.isArray(parsed) ? parsed : [parsed]).map((item) => (
+        typeof item === 'string' ? { title: item, video_url: item } : item
+      ));
+    } catch {
+      return [{ title: value, video_url: value }];
+    }
+  };
+
+  const selectedTargetCreator = selectedBooking
+    ? targetKocsByKey.get(`${selectedBooking.target_shop_id}:${selectedBooking.creator_open_id}`)
+    : null;
+  const selectedCreatorName = selectedBooking ? getKocDisplayName(
+    selectedTargetCreator?.nickname
+    || selectedBooking.creator_name
+    || selectedBooking.creator?.name
+    || selectedTargetCreator?.username
+    || selectedBooking.creator_username
+    || selectedBooking.creator_id,
+  ) : '';
+  const selectedCreatorUsername = selectedTargetCreator?.username || selectedBooking?.creator_username;
+  const selectedCreatorAvatar = selectedTargetCreator?.avatar_url || selectedBooking?.creator_avatar_url;
+
   return (
     <div className="page">
       <section className="page__hero">
         <h1 className="page__title">{t('booking.heroTitle') || heroTitle}</h1>
-        <div className="page__stats page__stats--four">
+        <div className="page__stats booking-stats">
           <article className="stat-card">
-            <p className="stat-card__label">{t('booking.bookings')}</p>
-            <p className="stat-card__value">{stats.total}</p>
+            <p className="stat-card__label">{t('booking.activeBookings')}</p>
+            <p className="stat-card__value">{stats.active}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">{t('booking.koc')}</p>
-            <p className="stat-card__value">{targetKocs.length}</p>
+            <p className="stat-card__label">{t('booking.waitingVideo')}</p>
+            <p className="stat-card__value">{stats.waitingVideo}</p>
           </article>
           <article className="stat-card">
-            <p className="stat-card__label">{t('booking.staff')}</p>
-            <p className="stat-card__value">{staffCount}</p>
+            <p className="stat-card__label">{t('booking.overdue')}</p>
+            <p className="stat-card__value">{stats.overdue}</p>
+          </article>
+          <article className="stat-card">
+            <p className="stat-card__label">{t('booking.completed')}</p>
+            <p className="stat-card__value">{stats.done}</p>
           </article>
           <article className="stat-card">
             <p className="stat-card__label">{t('booking.totalCost')}</p>
-            <p className="stat-card__value">{localizedFormatMoney(stats.totalCost)}</p>
+            <p className="stat-card__value">RM {localizedFormatMoney(stats.totalCost)}</p>
           </article>
         </div>
       </section>
@@ -353,11 +431,20 @@ const BookingManagement = ({ heroTitle }) => {
               name="booking_cost"
               type="number"
               min="0"
-              step="1000"
+              step="0.01"
+              inputMode="decimal"
               value={form.booking_cost}
               onChange={handleChange}
               required
             />
+          </div>
+          <div className="field">
+            <label htmlFor="deadline">{t('booking.deadline')}</label>
+            <input id="deadline" name="deadline" type="date" value={form.deadline} onChange={handleChange} />
+          </div>
+          <div className="field booking-create-note">
+            <label htmlFor="note">{t('booking.note')}</label>
+            <input id="note" name="note" type="text" value={form.note} onChange={handleChange} placeholder={t('booking.notePlaceholder')} />
           </div>
           <div className="actions">
             <button className="button" type="submit" disabled={saving}>
@@ -379,20 +466,17 @@ const BookingManagement = ({ heroTitle }) => {
             <thead>
               <tr>
                 <th className="cell-number">ID</th>
-                <th>{t('booking.staffColumn')}</th>
                 <th>{t('booking.kocColumn')}</th>
+                <th>{t('booking.statusColumn')}</th>
+                <th>{t('booking.deadlineColumn')}</th>
                 <th className="cell-number">{t('booking.costColumn')}</th>
-                <th className="cell-number">{t('booking.viewsColumn')}</th>
-                <th className="cell-number">{t('booking.likesColumn')}</th>
-                <th className="cell-number">{t('booking.sharesColumn')}</th>
-                <th>{t('booking.videoColumn')}</th>
                 <th className="cell-actions">{t('booking.actionsColumn')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={9}>
+                  <td className="table-state-cell" colSpan={6}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('booking.loading')}</div>
@@ -401,47 +485,52 @@ const BookingManagement = ({ heroTitle }) => {
                 </tr>
               ) : bookings.length ? (
                 bookings.map((booking) => {
-                  const bookingVideos = parseBookingVideos(booking.video_url);
-                  const bookingVideoStats = bookingVideos.reduce((acc, video) => {
-                    acc.views += Number(video.views || 0);
-                    acc.likes += Number(video.likes || 0);
-                    acc.shares += Number(video.shares || 0);
-                    return acc;
-                  }, { views: 0, likes: 0, shares: 0 });
+                  const currentCreator = targetKocsByKey.get(`${booking.target_shop_id}:${booking.creator_open_id}`);
+                  const creatorName = getKocDisplayName(
+                    currentCreator?.nickname
+                    || booking.creator_name
+                    || booking.creator?.name
+                    || currentCreator?.username
+                    || booking.creator_username
+                    || booking.creator_id,
+                  );
+                  const creatorUsername = currentCreator?.username || booking.creator_username;
+                  const creatorAvatar = currentCreator?.avatar_url || booking.creator_avatar_url;
 
                   return (
                     <tr key={booking.id}>
                       <td className="cell-number"><span className="row-title">#{booking.id}</span></td>
-                      <td>{booking.staff_name || booking.staff?.name || '—'}</td>
-                      <td>{getKocDisplayName(booking.creator_name || booking.creator?.name || booking.creator_username || booking.creator_id)}</td>
-                      <td className="cell-number">{localizedFormatMoney(booking.booking_cost)}</td>
-                      <td className="cell-number">{localizedFormatMoney(bookingVideoStats.views)}</td>
-                      <td className="cell-number">{localizedFormatMoney(bookingVideoStats.likes)}</td>
-                      <td className="cell-number">{localizedFormatMoney(bookingVideoStats.shares)}</td>
                       <td>
-                        <div className="booking-video-list">
-                          {bookingVideos.length ? (
-                            bookingVideos.map((video) => (
-                              <a
-                                key={`${booking.id}-${video.id || video.video_url || video.title}`}
-                                className="booking-video-list__item"
-                                href={video.video_url || '#'}
-                                target={video.video_url ? '_blank' : undefined}
-                                rel={video.video_url ? 'noreferrer' : undefined}
-                                onClick={video.video_url ? undefined : (event) => event.preventDefault()}
-                              >
-                                <span className="booking-video-list__title">
-                                  {video.title || video.platform_video_id || video.video_url}
-                                </span>
-                              </a>
-                            ))
-                          ) : (
-                            <div className="row-subtitle">{t('booking.noVideo')}</div>
-                          )}
+                        <div className="booking-koc-identity">
+                          <TargetKocAvatar src={creatorAvatar} name={creatorName} />
+                          <span>
+                            <strong>{creatorName}</strong>
+                            {creatorUsername ? <small>@{creatorUsername}</small> : null}
+                          </span>
                         </div>
                       </td>
+                      <td>
+                        <select
+                          className={`booking-status-select is-${booking.status}`}
+                          value={booking.status || 'booked'}
+                          disabled={updatingId === booking.id}
+                          aria-label={t('booking.changeStatus', { id: booking.id })}
+                          onChange={(event) => changeStatus(booking, event.target.value)}
+                        >
+                          {BOOKING_STATUSES.map((status) => <option value={status} key={status}>{t(`booking.statuses.${status}`)}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        <span className={`booking-deadline is-${bookingDeadlineState(booking)}`}>
+                          {formatDate(booking.deadline)}
+                          {bookingDeadlineState(booking) === 'overdue' ? <small>{t('booking.overdue')}</small> : null}
+                          {bookingDeadlineState(booking) === 'soon' ? <small>{t('booking.dueSoon')}</small> : null}
+                        </span>
+                      </td>
+                      <td className="cell-number">RM {localizedFormatMoney(booking.booking_cost)}</td>
                       <td className="cell-actions">
                         <div className="actions actions--inline">
+                          <button type="button" className="button button--ghost button--small" onClick={() => openDetails(booking)}>{t('booking.details')}</button>
                           <button
                             type="button"
                             className="button button--ghost button--small"
@@ -457,7 +546,7 @@ const BookingManagement = ({ heroTitle }) => {
                 })
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={9}>
+                  <td className="table-state-cell" colSpan={6}>
                     <div className="empty-state empty-state--compact table-empty-state">{t('booking.noData')}</div>
                   </td>
                 </tr>
@@ -466,6 +555,52 @@ const BookingManagement = ({ heroTitle }) => {
           </table>
         </div>
       </section>
+
+      {selectedBooking && detailForm ? (
+        <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            setSelectedBooking(null);
+            setDetailForm(null);
+          }
+        }}>
+          <aside className="koc-drawer booking-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="booking-detail-title">
+            <div className="koc-drawer__header">
+              <div>
+                <h2 id="booking-detail-title">{t('booking.detailTitle', { id: selectedBooking.id })}</h2>
+                <p>{selectedCreatorUsername ? `@${selectedCreatorUsername}` : selectedCreatorName}</p>
+              </div>
+              <button className="button button--ghost" type="button" aria-label={t('common.close')} onClick={() => { setSelectedBooking(null); setDetailForm(null); }}>×</button>
+            </div>
+            <div className="koc-drawer__body">
+              <section className="drawer-section">
+                <div className="drawer-profile">
+                  <TargetKocAvatar src={selectedCreatorAvatar} name={selectedCreatorName} />
+                  <div><strong>{selectedCreatorName}</strong><span>RM {localizedFormatMoney(selectedBooking.booking_cost)}</span></div>
+                </div>
+              </section>
+              <form className="booking-detail-form" onSubmit={saveDetails}>
+                <label className="field"><span>{t('booking.statusColumn')}</span><select value={detailForm.status} onChange={(event) => setDetailForm((current) => ({ ...current, status: event.target.value }))}>{BOOKING_STATUSES.map((status) => <option value={status} key={status}>{t(`booking.statuses.${status}`)}</option>)}</select></label>
+                <label className="field"><span>{t('booking.deadline')}</span><input type="date" value={detailForm.deadline} onChange={(event) => setDetailForm((current) => ({ ...current, deadline: event.target.value }))} /></label>
+                <label className="field"><span>{t('booking.bookingStaff')}</span><input type="text" value={detailForm.staff_name} onChange={(event) => setDetailForm((current) => ({ ...current, staff_name: event.target.value }))} /></label>
+                <label className="field booking-detail-form__wide"><span>{t('booking.note')}</span><textarea rows="5" value={detailForm.note} onChange={(event) => setDetailForm((current) => ({ ...current, note: event.target.value }))} /></label>
+                <div className="actions booking-detail-form__wide"><button className="button" type="submit" disabled={updatingId === selectedBooking.id}>{updatingId === selectedBooking.id ? t('common.loading') : t('booking.saveChanges')}</button></div>
+              </form>
+              <section className="drawer-section">
+                <h3>{t('booking.videoColumn')}</h3>
+                <div className="drawer-list">
+                  {bookingVideos(selectedBooking).map((video, index) => (
+                    <div className="drawer-list__item" key={video.id || video.video_url || index}>
+                      <strong>{video.title || video.platform_video_id || t('booking.videoColumn')}</strong>
+                      {video.video_url ? <a href={video.video_url} target="_blank" rel="noreferrer">{t('booking.openVideo')}</a> : null}
+                    </div>
+                  ))}
+                  {!bookingVideos(selectedBooking).length ? <div className="empty-state empty-state--compact">{t('booking.noVideo')}</div> : null}
+                </div>
+              </section>
+            </div>
+          </aside>
+        </div>
+      ) : null}
 
     </div>
   );

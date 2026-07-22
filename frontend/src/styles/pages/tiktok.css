@@ -453,88 +453,101 @@
 
 .dashboard-hero__mini-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
-
 
 .dashboard-chart-card {
   padding-top: 18px;
 }
 
+.dashboard-chart-card__header {
+  align-items: end;
+}
+
+.dashboard-channel-filter {
+  width: min(100%, 320px);
+  margin-left: auto;
+}
 
 .dashboard-chart {
-  height: 340px;
+  height: 420px;
 }
 
-
-.dashboard-section__header {
-  margin-bottom: 16px;
+.dashboard-chart-shell {
+  overflow: hidden;
+  padding: 16px 16px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
 }
 
-
-.dashboard-rankings {
-  align-items: start;
+.dashboard-chart-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 4px 8px;
 }
 
-
-.dashboard-ranking-card {
-  min-height: 100%;
+.dashboard-chart-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-muted-strong);
+  font-size: 0.78rem;
 }
 
-
-.dashboard-ranking-list {
-  display: grid;
-  gap: 12px;
+.dashboard-chart-summary strong {
+  color: var(--color-text);
 }
 
+.dashboard-chart-summary__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
 
-.dashboard-ranking-item {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  gap: 12px;
+.dashboard-chart-label {
+  fill: var(--color-text);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.dashboard-chart-tooltip {
+  min-width: 220px;
+  max-width: min(320px, 82vw);
   padding: 14px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
 }
 
-
-.dashboard-ranking-item__rank {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
-  background: var(--color-surface-subtle);
+.dashboard-chart-tooltip strong {
+  display: block;
+  margin-bottom: 10px;
   color: var(--color-text);
-  font-size: 0.88rem;
-  font-weight: 800;
+  line-height: 1.4;
 }
 
-
-.dashboard-ranking-item__rank--accent {
-  background: rgba(20, 184, 166, 0.12);
-  color: var(--color-accent-strong);
-}
-
-
-.dashboard-ranking-item__body {
-  min-width: 0;
-  display: grid;
-  gap: 8px;
-}
-
-
-.dashboard-ranking-item__meta {
+.dashboard-chart-tooltip div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 7px;
   color: var(--color-muted-strong);
-  font-size: 0.9rem;
-  line-height: 1.55;
+  font-size: 0.82rem;
 }
 
-
-.dashboard-ranking-item__progress {
-  height: 8px;
+.dashboard-chart-tooltip b {
+  color: var(--color-text);
 }
 
 
@@ -1117,6 +1130,84 @@
   text-align: center;
 }
 
+.booking-koc-identity {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 190px;
+}
+
+.booking-koc-identity .creator-identity__avatar {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.booking-koc-identity > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.booking-koc-identity strong,
+.booking-koc-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-koc-identity small {
+  color: var(--color-text-soft);
+}
+
+.booking-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.booking-status-select {
+  min-width: 132px;
+  padding: 7px 30px 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+  font-size: .78rem;
+  font-weight: 750;
+}
+
+.booking-status-select.is-booked,
+.booking-status-select.is-waiting_video { background: #fff7dc; color: #8a5b00; }
+.booking-status-select.is-video_posted { background: #eaf2ff; color: #2458a6; }
+.booking-status-select.is-done { background: #e8f8ef; color: #177245; }
+.booking-status-select.is-cancelled { background: var(--color-danger-soft); color: var(--color-danger-strong); }
+
+.booking-deadline {
+  display: grid;
+  gap: 2px;
+  min-width: 92px;
+  font-weight: 650;
+}
+
+.booking-deadline small { color: var(--color-text-soft); font-size: .7rem; }
+.booking-deadline.is-overdue,
+.booking-deadline.is-overdue small { color: var(--color-danger-strong); }
+.booking-deadline.is-soon,
+.booking-deadline.is-soon small { color: #9a6500; }
+.booking-detail-drawer { width: min(560px, 94vw); }
+.booking-detail-drawer .drawer-profile .creator-identity__avatar { width: 52px; height: 52px; }
+
+.booking-detail-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.booking-detail-form__wide { grid-column: 1 / -1; }
+.booking-detail-form textarea { resize: vertical; }
+
 
 .booking-video-list {
   display: grid;
@@ -1151,6 +1242,13 @@
 
 
 @media (max-width: 640px) {
+.booking-stats,
+.booking-detail-form {
+    grid-template-columns: 1fr;
+  }
+
+.booking-detail-form__wide { grid-column: auto; }
+
 .booking-video-picker__filters {
     grid-template-columns: 1fr;
   }
@@ -1196,21 +1294,28 @@
     grid-template-columns: 1fr;
   }
 
+  .dashboard-chart-card__header {
+    align-items: stretch;
+  }
+
+  .dashboard-channel-filter {
+    width: 100%;
+    margin-left: 0;
+  }
 
   .dashboard-chart {
-    height: 280px;
+    height: 390px;
+  }
+
+  .dashboard-chart-shell {
+    padding-inline: 4px;
+  }
+
+  .dashboard-chart-summary {
+    justify-content: flex-start;
   }
 
 
-  .dashboard-ranking-item {
-    grid-template-columns: 1fr;
-  }
-
-
-  .dashboard-ranking-item__rank {
-    width: 36px;
-    height: 36px;
-  }
 }
 
 
@@ -1243,21 +1348,6 @@
 .dashboard-hero__ring {
   padding: var(--space-4);
   box-shadow: none;
-}
-
-
-.dashboard-chart {
-  height: 320px;
-}
-
-
-.dashboard-ranking-list {
-  gap: 8px;
-}
-
-
-.dashboard-ranking-item {
-  padding: 12px;
 }
 
 
@@ -1801,25 +1891,6 @@
     linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
     linear-gradient(135deg, rgba(0, 242, 234, 0.7), rgba(255, 0, 80, 0.35)) border-box;
   box-shadow: none;
-}
-
-
-.dashboard-ranking-item {
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-}
-
-
-.dashboard-ranking-item__rank {
-  border-radius: var(--radius-default);
-  background: var(--color-primary);
-  color: #ffffff;
-}
-
-
-.dashboard-ranking-item__rank--accent {
-  background: var(--color-magenta-soft);
-  color: #b8003a;
 }
 
 

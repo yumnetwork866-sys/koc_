@@ -3,26 +3,36 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchKpis } from '../lib/api';
+import { fetchChannels, fetchVideos } from '../lib/api';
 import { useI18n } from '../lib/language';
 
-const chartTooltipStyle = {
-  borderRadius: '8px',
-  border: '1px solid #e2e8f0',
-  boxShadow: '0 18px 40px -12px rgba(15, 23, 42, 0.24)',
-  color: '#0f172a',
-};
+const chartTick = { fill: 'var(--color-muted)', fontSize: 12 };
 
-const chartTick = { fill: '#64748b', fontSize: 12 };
+const DashboardChartTooltip = ({ active, payload, formatNumber, t }) => {
+  const video = payload?.[0]?.payload;
+  if (!active || !video) return null;
+
+  return (
+    <div className="dashboard-chart-tooltip">
+      <strong>{video.fullName}</strong>
+      <div><span>{t('dashboard.views')}</span><b>{formatNumber(video.views)}</b></div>
+      <div><span>{t('dashboard.totalLikes')}</span><b>{formatNumber(video.likes)}</b></div>
+      <div><span>{t('dashboard.totalShares')}</span><b>{formatNumber(video.shares)}</b></div>
+    </div>
+  );
+};
 
 const Dashboard = ({ heroTitle }) => {
   const { t, language } = useI18n();
-  const [kpis, setKpis] = useState(null);
+  const [videos, setVideos] = useState([]);
+  const [channels, setChannels] = useState([]);
+  const [selectedChannelId, setSelectedChannelId] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -35,8 +45,12 @@ const Dashboard = ({ heroTitle }) => {
       try {
         setLoading(true);
         setError('');
-        const loadedKpis = await fetchKpis(controller.signal);
-        setKpis(loadedKpis);
+        const [loadedVideos, loadedChannels] = await Promise.all([
+          fetchVideos(controller.signal),
+          fetchChannels(controller.signal),
+        ]);
+        setVideos(loadedVideos);
+        setChannels(loadedChannels);
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || t('dashboard.errorLoad') || 'Failed to load dashboard data');
@@ -53,31 +67,34 @@ const Dashboard = ({ heroTitle }) => {
     return () => controller.abort();
   }, [t]);
 
-  const topUsers = useMemo(() => {
-    return [...(kpis?.users || [])]
-      .sort((a, b) => Number(b.totalViews || 0) - Number(a.totalViews || 0))
-      .slice(0, 5);
-  }, [kpis]);
+  const filteredVideos = useMemo(() => {
+    if (selectedChannelId === 'all') return videos;
+    return videos.filter((video) => String(video.channel_id) === selectedChannelId);
+  }, [selectedChannelId, videos]);
 
-  const topProducts = useMemo(() => {
-    return [...(kpis?.products || [])]
-      .sort((a, b) => Number(b.totalViews || 0) - Number(a.totalViews || 0))
-      .slice(0, 5);
-  }, [kpis]);
+  const totals = useMemo(() => filteredVideos.reduce((result, video) => ({
+    views: result.views + Number(video.views || 0),
+    likes: result.likes + Number(video.likes || 0),
+    shares: result.shares + Number(video.shares || 0),
+  }), { views: 0, likes: 0, shares: 0 }), [filteredVideos]);
 
-  const chartData = (kpis?.users || [])
-    .slice()
-    .sort((a, b) => Number(b.totalViews || 0) - Number(a.totalViews || 0))
-    .slice(0, 6)
-      .map((user) => ({
-        name: user.name,
-        views: user.totalViews,
-        videos: user.videoCount,
-      }));
+  const chartData = useMemo(() => [...filteredVideos]
+    .sort((a, b) => Number(b.views || 0) - Number(a.views || 0))
+    .slice(0, 10)
+    .map((video, index) => {
+      const title = String(video.title || `${t('dashboard.video')} ${index + 1}`);
+      return {
+        name: title.length > 24 ? `${title.slice(0, 24)}…` : title,
+        fullName: title,
+        views: Number(video.views || 0),
+        likes: Number(video.likes || 0),
+        shares: Number(video.shares || 0),
+      };
+    }), [filteredVideos, t]);
 
-  const topUser = topUsers[0] || null;
-  const totalViews = Number(kpis?.overview?.totalViews || 0);
-  const totalVideos = Number(kpis?.overview?.totalVideos || 0);
+  const averageChartViews = chartData.length
+    ? chartData.reduce((sum, video) => sum + video.views, 0) / chartData.length
+    : 0;
 
   return (
     <div className="page dashboard-page">
@@ -89,27 +106,23 @@ const Dashboard = ({ heroTitle }) => {
 
         <div className="dashboard-hero__summary">
           <div className={`dashboard-hero__ring${loading ? ' dashboard-hero__ring--loading' : ''}`} aria-live="polite">
-            <div className="dashboard-hero__ring-value" title={loading ? undefined : formatNumber(totalViews)}>
-              {loading ? '—' : formatNumber(totalViews)}
+            <div className="dashboard-hero__ring-value" title={loading ? undefined : formatNumber(totals.views)}>
+              {loading ? '—' : formatNumber(totals.views)}
             </div>
             <div className="dashboard-hero__ring-label">{t('dashboard.totalViews')}</div>
           </div>
           <div className="dashboard-hero__mini-grid">
             <article className="stat-card stat-card--soft">
               <p className="stat-card__label">{t('dashboard.totalVideos')}</p>
-              <p className="stat-card__value">{formatNumber(totalVideos)}</p>
+              <p className="stat-card__value">{formatNumber(filteredVideos.length)}</p>
             </article>
             <article className="stat-card stat-card--soft">
               <p className="stat-card__label">{t('dashboard.totalLikes')}</p>
-              <p className="stat-card__value">{formatNumber(kpis?.overview?.totalLikes)}</p>
+              <p className="stat-card__value">{formatNumber(totals.likes)}</p>
             </article>
             <article className="stat-card stat-card--soft">
               <p className="stat-card__label">{t('dashboard.totalShares')}</p>
-              <p className="stat-card__value">{formatNumber(kpis?.overview?.totalShares)}</p>
-            </article>
-            <article className="stat-card stat-card--soft">
-              <p className="stat-card__label">{t('dashboard.topUser')}</p>
-              <p className="stat-card__value stat-card__value--small">{topUser?.name || '-'}</p>
+              <p className="stat-card__value">{formatNumber(totals.shares)}</p>
             </article>
           </div>
         </div>
@@ -123,104 +136,55 @@ const Dashboard = ({ heroTitle }) => {
       ) : null}
 
       <section className="section-card dashboard-chart-card">
-        <div className="section-card__header dashboard-section__header">
+        <div className="section-card__header dashboard-chart-card__header">
           <div>
-            <h2 className="section-card__title">{t('dashboard.kpiByUser')}</h2>
+            <h2 className="section-card__title">{t('dashboard.videoPerformance')}</h2>
+            <p className="section-card__meta">{t('dashboard.videoPerformanceMeta')}</p>
           </div>
-          <div className="chip-row">
-            <span className="chip chip--blue">Users {formatNumber(topUsers.length)}</span>
-            <span className="chip chip--positive">Products {formatNumber(topProducts.length)}</span>
+          <div className="field dashboard-channel-filter">
+            <label htmlFor="dashboard-channel">{t('dashboard.channel')}</label>
+            <select
+              id="dashboard-channel"
+              value={selectedChannelId}
+              onChange={(event) => setSelectedChannelId(event.target.value)}
+            >
+              <option value="all">{t('dashboard.allChannels')}</option>
+              {channels.map((channel) => (
+                <option key={channel.id} value={channel.id}>
+                  {channel.display_name || channel.username || `${t('dashboard.channel')} #${channel.id}`}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
         {loading ? (
-          <div className="empty-state">
-            <div className="loading-dot" />
-            <div>{t('dashboard.loadingKpi')}</div>
-          </div>
-      ) : chartData.length ? (
-          <div
-            className="dashboard-chart"
-            role="img"
-            aria-label={`${t('dashboard.kpiByUser')}. ${chartData.map((item) => `${item.name}: ${formatNumber(item.views)}`).join('; ')}`}
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} barSize={36}>
-                <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tick={chartTick} />
-                <YAxis tickLine={false} axisLine={false} allowDecimals={false} tick={chartTick} />
-                <Tooltip
-                  cursor={{ fill: 'rgba(0, 242, 234, 0.08)' }}
-                  contentStyle={chartTooltipStyle}
-                />
-                <Bar dataKey="views" fill="var(--color-social-cyan-strong)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="empty-state"><div className="loading-dot" />{t('dashboard.loading')}</div>
+        ) : chartData.length ? (
+          <div className="dashboard-chart-shell">
+            <div className="dashboard-chart-summary" aria-hidden="true">
+              <span><i className="dashboard-chart-summary__dot" />{t('dashboard.videosShown')} <strong>{chartData.length}</strong></span>
+              <span>{t('dashboard.averageViews')} <strong>{formatNumber(Math.round(averageChartViews))}</strong></span>
+            </div>
+            <div className="dashboard-chart" role="img" aria-label={t('dashboard.videoPerformance')}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart layout="vertical" data={chartData} barSize={22} margin={{ top: 8, right: 72, bottom: 8, left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 6" horizontal={false} stroke="var(--color-border)" />
+                  <XAxis type="number" tickLine={false} axisLine={false} tick={chartTick} tickFormatter={(value) => Intl.NumberFormat(language === 'vi' ? 'vi-VN' : 'en-US', { notation: 'compact' }).format(value)} />
+                  <YAxis type="category" dataKey="name" width={172} tickLine={false} axisLine={false} tick={chartTick} />
+                  <Tooltip cursor={{ fill: 'var(--color-accent-soft)' }} content={<DashboardChartTooltip formatNumber={formatNumber} t={t} />} />
+                  <Bar dataKey="views" fill="var(--color-primary)" radius={[0, 11, 11, 0]} background={{ fill: 'var(--color-surface-subtle)', radius: 11 }}>
+                    <LabelList dataKey="views" position="right" formatter={(value) => Intl.NumberFormat(language === 'vi' ? 'vi-VN' : 'en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value)} className="dashboard-chart-label" />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         ) : (
-          <div className="empty-state">
-            <div>{t('dashboard.noUserData')}</div>
-          </div>
+          <div className="empty-state">{t('dashboard.noVideoData')}</div>
         )}
       </section>
 
-      <section className="grid-two dashboard-rankings">
-        <article className="section-card dashboard-ranking-card">
-          <div className="section-card__header dashboard-section__header">
-            <div>
-              <h2 className="section-card__title">{t('dashboard.topUser')}</h2>
-            </div>
-          </div>
-          <div className="dashboard-ranking-list">
-            {topUsers.map((user, index) => (
-              <div className="dashboard-ranking-item" key={user.id}>
-                <div className="dashboard-ranking-item__rank">{index + 1}</div>
-                <div className="dashboard-ranking-item__body">
-                  <div className="metric-item__head">
-                    <span>{user.name}</span>
-                    <span>{formatNumber(user.totalViews)} {t('dashboard.viewsLabel')}</span>
-                  </div>
-                  <div className="dashboard-ranking-item__meta">
-                    {user.videoCount} {t('dashboard.videoLabel')} · {t('dashboard.avgLabel')} {formatNumber(user.avgViewsPerVideo)} · {user.over10kRate}% {t('dashboard.over10kLabel')}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {!topUsers.length && <div className="empty-state empty-state--compact">{t('dashboard.noUserData')}</div>}
-          </div>
-        </article>
-
-        <article className="section-card dashboard-ranking-card">
-          <div className="section-card__header dashboard-section__header">
-            <div>
-              <h2 className="section-card__title">{t('dashboard.topProduct')}</h2>
-            </div>
-          </div>
-          <div className="dashboard-ranking-list">
-            {topProducts.map((product, index) => (
-              <div className="dashboard-ranking-item" key={product.id}>
-                <div className="dashboard-ranking-item__rank dashboard-ranking-item__rank--accent">{index + 1}</div>
-                <div className="dashboard-ranking-item__body">
-                  <div className="metric-item__head">
-                    <span>{product.name}</span>
-                    <span>{formatNumber(product.totalViews)} {t('dashboard.viewsLabel')}</span>
-                  </div>
-                  <div className="progress dashboard-ranking-item__progress">
-                    <div
-                      className="progress__bar progress__bar--teal"
-                      style={{ width: `${Math.min(100, Math.max(product.avgViewsPerVideo / 500, 8))}%` }}
-                    />
-                  </div>
-                  <div className="dashboard-ranking-item__meta">
-                    {product.totalVideos} {t('dashboard.videoLabel')} · {t('dashboard.avgLabel')} {formatNumber(product.avgViewsPerVideo)}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {!topProducts.length ? <div className="empty-state empty-state--compact">{t('dashboard.noUserData')}</div> : null}
-          </div>
-        </article>
-      </section>
     </div>
   );
 };

@@ -44,6 +44,7 @@ const migrations = [
   require('./034_add_creator_performance_full_metrics'),
   require('./035_create_tiktok_creator_contact_histories'),
   require('./036_allow_booking_target_creators'),
+  require('./037_add_booking_timestamps'),
 ];
 
 const createMigrationRunner = ({

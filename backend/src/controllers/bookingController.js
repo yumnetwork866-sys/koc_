@@ -159,6 +159,7 @@ const createBooking = async (req, res) => {
       video_platform_id: req.body.video_platform_id || null,
       video_url: normalizeBookingVideoUrl(req.body.video_url),
       posted_at: req.body.posted_at || null,
+      updated_at: new Date(),
     });
 
     if (!ALLOWED_STATUSES.has(payload.status)) {
@@ -190,6 +191,7 @@ const updateBooking = async (req, res) => {
       video_platform_id: req.body.video_platform_id,
       video_url: normalizeBookingVideoUrl(req.body.video_url),
       posted_at: req.body.posted_at,
+      updated_at: new Date(),
     });
 
     const [updated] = await Booking.update(payload, {

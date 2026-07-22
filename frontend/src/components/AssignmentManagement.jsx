@@ -148,7 +148,6 @@ const AssignmentManagement = ({ heroTitle, heroSubtitle }) => {
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">Assignments hiện có</h2>
-            <p className="section-card__meta">Dashboard KPI theo user lấy từ danh sách này.</p>
           </div>
         </div>
 
