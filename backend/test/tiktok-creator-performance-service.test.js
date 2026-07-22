@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const XLSX = require('xlsx');
+const { describeIdentityChange } = require('../src/services/tiktokCreatorProfileService');
 
 const {
   exportDateRange,
@@ -17,6 +18,27 @@ const {
   DEFAULT_CREATOR_PROFILE_TTL_MS,
   createCreatorPerformanceExportWithFallback,
 } = require('../src/services/tiktokCreatorPerformanceService');
+
+test('creator profile identity logs describe name and avatar changes without exposing the URL', () => {
+  const change = describeIdentityChange({
+    username: 'updated.creator',
+    nickname: 'New name',
+    avatar_url: 'https://example.test/new-avatar.webp?signature=secret',
+  }, {
+    nickname: 'Old name',
+    avatar_url: 'https://example.test/old-avatar.webp?signature=old-secret',
+  });
+
+  assert.deepEqual(change, {
+    username: 'updated.creator',
+    previousName: 'Old name',
+    currentName: 'New name',
+    nameChanged: true,
+    avatarChanged: true,
+    avatarAction: 'refreshed',
+  });
+  assert.equal(JSON.stringify(change).includes('signature='), false);
+});
 
 test('Compass date ranges are inclusive and match TikTok report filenames', () => {
   assert.deepEqual(exportDateRange('PAST_7_DAYS', 20260715), {

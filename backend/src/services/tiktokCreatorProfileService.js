@@ -19,6 +19,25 @@ const mergeProfile = (profile, existing = {}) => ({
   follower_count: profile.follower_count || Number(existing.follower_count) || 0,
 });
 
+const describeIdentityChange = (profile, existing = {}) => {
+  const previousName = existing.nickname || null;
+  const currentName = profile.nickname || null;
+  const previousAvatar = existing.avatar_url || null;
+  const currentAvatar = profile.avatar_url || null;
+  const nameChanged = currentName !== previousName;
+  const avatarChanged = currentAvatar !== previousAvatar;
+  return {
+    username: profile.username,
+    previousName,
+    currentName,
+    nameChanged,
+    avatarChanged,
+    avatarAction: !avatarChanged
+      ? (currentAvatar ? 'unchanged' : 'missing')
+      : (previousAvatar ? 'refreshed' : 'added'),
+  };
+};
+
 const profileMap = (profiles) => {
   const map = new Map();
   for (const profile of profiles) {
@@ -41,16 +60,20 @@ const loadCreatorProfiles = async (shopId, creators = []) => {
   return profileMap(profiles);
 };
 
-const saveCreatorProfiles = async (shopId, creators = [], source = 'unknown') => {
+const saveCreatorProfiles = async (shopId, creators = [], source = 'unknown', {
+  logger = console,
+} = {}) => {
   const profiles = creators.map(normalizeCreatorProfile).filter((profile) => profile.username);
   if (!profiles.length) return new Map();
   const existingMap = await loadCreatorProfiles(shopId, profiles);
   const unique = new Map();
+  const existingByUsername = new Map();
   for (const profile of profiles) {
     const existing = existingMap.get(`open:${profile.creator_open_id}`)
       || existingMap.get(`username:${profile.username}`)
       || unique.get(profile.username)
       || {};
+    if (!existingByUsername.has(profile.username)) existingByUsername.set(profile.username, existing);
     unique.set(profile.username, mergeProfile(profile, existing));
   }
   const now = new Date();
@@ -70,6 +93,30 @@ const saveCreatorProfiles = async (shopId, creators = [], source = 'unknown') =>
       ],
     },
   );
+  const identityChanges = [...unique.values()].map((profile) => (
+    describeIdentityChange(profile, existingByUsername.get(profile.username))
+  ));
+  for (const change of identityChanges.filter((item) => item.nameChanged || item.avatarChanged)) {
+    logger?.info?.('[Creator Profile] Identity persisted', {
+      shopId,
+      source,
+      username: change.username,
+      nameChanged: change.nameChanged,
+      previousName: change.previousName,
+      currentName: change.currentName,
+      avatarChanged: change.avatarChanged,
+      avatarAction: change.avatarAction,
+    });
+  }
+  logger?.info?.('[Creator Profile] Batch persisted', {
+    shopId,
+    source,
+    received: creators.length,
+    persisted: unique.size,
+    identityUpdates: identityChanges.filter((item) => item.nameChanged || item.avatarChanged).length,
+    nameUpdates: identityChanges.filter((item) => item.nameChanged).length,
+    avatarUpdates: identityChanges.filter((item) => item.avatarChanged).length,
+  });
   return loadCreatorProfiles(shopId, profiles);
 };
 
@@ -117,6 +164,7 @@ const syncAndHydrateCollaborationCreators = async (shopId, rows = []) => {
 module.exports = {
   normalizeUsername,
   normalizeCreatorProfile,
+  describeIdentityChange,
   loadCreatorProfiles,
   saveCreatorProfiles,
   hydrateCreatorRows,

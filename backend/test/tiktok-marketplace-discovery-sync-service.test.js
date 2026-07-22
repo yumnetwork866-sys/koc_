@@ -51,7 +51,7 @@ test('Marketplace Discovery job stores one page and advances its pagination stat
 
   assert.deepEqual(result, { skipped: false, creator_count: 1, has_next_page: true });
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].pageSize, 20);
+  assert.equal(requests[0].pageSize, 50);
   assert.equal(requests[0].pageToken, 'page-2');
   assert.equal(requests[0].searchKey, 'stable-search');
   assert.equal(storedRows.length, 1);

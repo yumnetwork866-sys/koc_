@@ -459,7 +459,18 @@ const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependenc
     batchDelayMs = configuredCreatorProfileBatchDelayMs(),
     now = () => Date.now(),
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    logger = console,
   } = dependencies;
+  const startedAt = Date.now();
+  logger?.info?.('[Creator Profile Refresh] Started', {
+    shopId: shop.id,
+    exportId: exportRecord.id,
+    taskId: exportRecord.task_id,
+    startDate: exportRecord.start_date,
+    endDate: exportRecord.end_date,
+    planType: exportRecord.plan_type,
+    profileTtlMs,
+  });
   const snapshots = await TikTokCreatorPerformanceSnapshot.findAll({
     where: {
       shop_id: shop.id,
@@ -468,11 +479,20 @@ const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependenc
       plan_type: exportRecord.plan_type,
     },
   });
-  if (!snapshots.length) return 0;
+  if (!snapshots.length) {
+    logger?.info?.('[Creator Profile Refresh] Completed', {
+      shopId: shop.id,
+      exportId: exportRecord.id,
+      snapshotCount: 0,
+      refreshedCount: 0,
+      durationMs: Date.now() - startedAt,
+    });
+    return 0;
+  }
   const rows = snapshots.map((snapshot) => snapshot.toJSON());
   const persistRows = async (profileRows) => {
     if (!profileRows.length) return;
-    await saveCreatorProfiles(shop.id, profileRows, 'performance');
+    await saveCreatorProfiles(shop.id, profileRows, 'performance', { logger });
     const sharedRows = await hydrateCreatorRows(shop.id, profileRows);
     await TikTokCreatorPerformanceSnapshot.bulkCreate(sharedRows, {
       conflictAttributes: ['shop_id', 'username', 'start_date', 'end_date', 'plan_type'],
@@ -490,6 +510,12 @@ const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependenc
     refreshed.add(normalizeUsername(row.username));
   }
   await persistRows(sampleRows);
+  logger?.info?.('[Creator Profile Refresh] Sample Applications checked', {
+    shopId: shop.id,
+    exportId: exportRecord.id,
+    snapshotCount: rows.length,
+    matchedCount: sampleRows.length,
+  });
 
   const storedProfiles = await loadStoredCreatorProfiles(shop.id, rows);
   const currentTime = typeof now === 'function' ? Number(now()) : Number(now);
@@ -499,10 +525,35 @@ const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependenc
   });
   const batchSize = Math.max(1, Math.min(50, Number(requestedBatchSize) || 20));
   const normalizedBatchDelayMs = Math.max(0, Number(batchDelayMs) || 0);
+  const totalBatches = Math.ceil(candidates.length / batchSize);
+  logger?.info?.('[Creator Profile Refresh] Marketplace candidates selected', {
+    shopId: shop.id,
+    exportId: exportRecord.id,
+    candidateCount: candidates.length,
+    batchSize,
+    totalBatches,
+    batchDelayMs: normalizedBatchDelayMs,
+  });
   for (let index = 0; index < candidates.length; index += batchSize) {
     const preparedMarketplace = await prepareMarketplaceOptions(shop, searchMarketplace, marketplaceOptions);
-    if (preparedMarketplace.coolingDown) break;
+    const batchNumber = Math.floor(index / batchSize) + 1;
+    if (preparedMarketplace.coolingDown) {
+      logger?.warn?.('[Creator Profile Refresh] Marketplace batch skipped during cooldown', {
+        shopId: shop.id,
+        exportId: exportRecord.id,
+        batchNumber,
+        totalBatches,
+      });
+      break;
+    }
     const batch = candidates.slice(index, index + batchSize);
+    logger?.info?.('[Creator Profile Refresh] Marketplace batch started', {
+      shopId: shop.id,
+      exportId: exportRecord.id,
+      batchNumber,
+      totalBatches,
+      creatorCount: batch.length,
+    });
     const profiles = await loadMarketplaceCreatorProfiles(
       shop,
       batch.map((row) => row.username),
@@ -518,11 +569,42 @@ const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependenc
       refreshed.add(normalizeUsername(row.username));
     }
     await persistRows(enrichedRows);
-    if (Number(marketplaceShopCooldowns.get(String(shop.id)) || 0) > Date.now()) break;
+    logger?.info?.('[Creator Profile Refresh] Marketplace batch completed', {
+      shopId: shop.id,
+      exportId: exportRecord.id,
+      batchNumber,
+      totalBatches,
+      requestedCount: batch.length,
+      matchedCount: enrichedRows.length,
+      notFoundCount: batch.length - enrichedRows.length,
+    });
+    const cooldownUntil = Number(marketplaceShopCooldowns.get(String(shop.id)) || 0);
+    if (cooldownUntil > Date.now()) {
+      logger?.warn?.('[Creator Profile Refresh] Paused by Marketplace rate-limit cooldown', {
+        shopId: shop.id,
+        exportId: exportRecord.id,
+        batchNumber,
+        cooldownUntil: new Date(cooldownUntil).toISOString(),
+      });
+      break;
+    }
     if (index + batchSize < candidates.length && normalizedBatchDelayMs > 0) {
+      logger?.info?.('[Creator Profile Refresh] Waiting before next batch', {
+        shopId: shop.id,
+        exportId: exportRecord.id,
+        nextBatchNumber: batchNumber + 1,
+        delayMs: normalizedBatchDelayMs,
+      });
       await sleep(normalizedBatchDelayMs);
     }
   }
+  logger?.info?.('[Creator Profile Refresh] Completed', {
+    shopId: shop.id,
+    exportId: exportRecord.id,
+    candidateCount: candidates.length,
+    refreshedCount: refreshed.size,
+    durationMs: Date.now() - startedAt,
+  });
   return refreshed.size;
 };
 

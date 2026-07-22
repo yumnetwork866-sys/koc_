@@ -70,7 +70,7 @@ const createMarketplaceDiscoverySyncService = ({
         authorization: shop.authorization,
         shopCipher: shop.cipher,
         pageToken: state?.next_page_token || null,
-        pageSize: 20,
+        pageSize: 50,
         searchKey: state?.search_key || null,
       }));
       const creators = Array.isArray(payload.data?.creators) ? payload.data.creators : [];

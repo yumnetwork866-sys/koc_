@@ -53,6 +53,12 @@ const startCreatorProfileRefresh = (shop, exportRecord, { force = false } = {}) 
   const completedAt = existing?.completed_at ? new Date(existing.completed_at).getTime() : 0;
   if (!force && completedAt > Date.now() - 6 * 60 * 60 * 1000) return false;
   creatorProfileRefreshJobs.set(refreshKey, { status: 'PROCESSING', started_at: new Date() });
+  console.info('[Creator Profile Refresh] Queued', {
+    shopId: shop.id,
+    exportId: exportRecord.id,
+    taskId: exportRecord.task_id,
+    force,
+  });
   setImmediate(() => refreshCreatorPerformanceProfiles(shop, exportRecord).then((count) => {
     creatorProfileRefreshJobs.set(refreshKey, { status: 'SUCCEEDED', count, completed_at: new Date() });
     console.log('[Creator Performance] Profiles refreshed', { shopId: shop.id, taskId: exportRecord.task_id, count });
