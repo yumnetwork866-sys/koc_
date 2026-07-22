@@ -1,4 +1,5 @@
-const { Op } = require('sequelize');
+const crypto = require('node:crypto');
+const { Op, QueryTypes } = require('sequelize');
 const {
   sequelize, TikTokShopAuthorization, TikTokShop, TikTokShopAnalyticsSnapshot,
   TikTokCreatorPerformanceExport, TikTokCreatorPerformanceSnapshot,
@@ -444,6 +445,13 @@ const sampleApplicationStatuses = new Set([
   'OPS_CANCELLED', 'OPS_FAILED', 'OPS_COMPLETED', 'COMPLETED',
 ]);
 
+const marketplaceBrowseSeed = (value) => {
+  const candidate = String(value || '');
+  return /^browse:[a-f0-9]{32}$/.test(candidate)
+    ? candidate
+    : `browse:${crypto.randomBytes(16).toString('hex')}`;
+};
+
 const listAffiliateCreators = affiliateResponse('creators', (shop, req) => searchSellerSampleApplications({
   authorization: shop.authorization,
   shopCipher: shop.cipher,
@@ -480,33 +488,50 @@ const listMarketplaceCreators = async (req, res) => {
       ? Math.max(0, Number(req.query.page_token))
       : 0;
     const keyword = String(req.query.keyword || '').trim().replace(/^@+/, '');
-    const where = {
-      shop_id: shop.id,
-      ...(keyword ? {
-        [Op.or]: [
-          { username: { [Op.iLike]: `%${keyword}%` } },
-          { nickname: { [Op.iLike]: `%${keyword}%` } },
-        ],
-      } : {}),
-    };
-    const { count, rows } = await TikTokMarketplaceCreator.findAndCountAll({
-      where,
-      order: [['first_seen_at', 'DESC'], ['id', 'DESC']],
-      limit: pageSize,
-      offset,
+    const browseSeed = marketplaceBrowseSeed(req.query.search_key);
+    const rows = await sequelize.query(`
+      WITH candidates AS (
+        SELECT
+          c.*,
+          COALESCE(d.detail, '{}'::jsonb) AS detail,
+          c.profile || COALESCE(d.detail, '{}'::jsonb) AS metric_payload
+        FROM tiktok_marketplace_creators c
+        LEFT JOIN tiktok_marketplace_creator_details d
+          ON d.shop_id = c.shop_id
+          AND d.creator_open_id = c.creator_open_id
+        WHERE c.shop_id = :shopId
+          ${keyword ? `AND (c.username ILIKE :keywordPattern OR c.nickname ILIKE :keywordPattern)` : ''}
+      ), ranked AS (
+        SELECT
+          candidates.*,
+          (CASE WHEN metric_payload ?| ARRAY['units_sold', 'items_sold'] THEN 1 ELSE 0 END
+            + CASE WHEN metric_payload ?| ARRAY['avg_video_views', 'avg_ec_video_play_count', 'avg_ec_video_view_count'] THEN 1 ELSE 0 END
+            + CASE WHEN metric_payload ?| ARRAY['video_engagement_rate', 'ec_video_engagement_rate', 'avg_ec_video_engagement_rate'] THEN 1 ELSE 0 END
+          ) AS completeness_score
+        FROM candidates
+      )
+      SELECT ranked.*, COUNT(*) OVER()::integer AS total_count
+      FROM ranked
+      ORDER BY completeness_score DESC, MD5(creator_open_id || :browseSeed), creator_open_id
+      LIMIT :pageSize OFFSET :offset
+    `, {
+      replacements: {
+        shopId: shop.id,
+        browseSeed,
+        pageSize,
+        offset,
+        ...(keyword ? { keywordPattern: `%${keyword}%` } : {}),
+      },
+      type: QueryTypes.SELECT,
     });
+    const count = Number(rows[0]?.total_count || 0);
     const queuedSearch = keyword && count === 0
       ? await marketplaceSearchQueueService.queueSearch(shop.id, keyword)
       : null;
-    const creatorIds = rows.map((row) => String(row.creator_open_id));
-    const details = creatorIds.length ? await TikTokMarketplaceCreatorDetail.findAll({
-      where: { shop_id: shop.id, creator_open_id: { [Op.in]: creatorIds } },
-    }) : [];
-    const detailById = new Map(details.map((detail) => [String(detail.creator_open_id), detail.detail || {}]));
     const state = await TikTokMarketplaceDiscoveryState.findByPk(shop.id);
     let creators = rows.map((row) => ({
       ...(row.profile || {}),
-      ...(detailById.get(String(row.creator_open_id)) || {}),
+      ...(row.detail || {}),
       creator_open_id: row.creator_open_id,
       username: row.username || row.profile?.username,
       nickname: row.nickname || row.profile?.nickname,
@@ -528,7 +553,7 @@ const listMarketplaceCreators = async (req, res) => {
       ...(exchangeRate ? { exchange_rate: exchangeRate } : {}),
       total_count: count,
       next_page_token: nextOffset < count ? String(nextOffset) : '',
-      search_key: 'database',
+      search_key: browseSeed,
       detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 },
       discovery_source: 'DATABASE',
       search_pending: queuedSearch?.status === 'PENDING',
