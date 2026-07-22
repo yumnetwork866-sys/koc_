@@ -42,6 +42,8 @@ const migrations = [
   require('./032_create_tiktok_marketplace_request_gates'),
   require('./033_create_tiktok_marketplace_discovery_store'),
   require('./034_add_creator_performance_full_metrics'),
+  require('./035_create_tiktok_creator_contact_histories'),
+  require('./036_allow_booking_target_creators'),
 ];
 
 const createMigrationRunner = ({

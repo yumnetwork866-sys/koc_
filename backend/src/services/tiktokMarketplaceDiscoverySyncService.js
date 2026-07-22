@@ -44,9 +44,6 @@ const createMarketplaceDiscoverySyncService = ({
   };
 
   const syncShop = async (shop, scheduledMinute = scheduledMinuteValue(now())) => {
-    if (profileRefreshActive(shop.id)) {
-      return { skipped: true, reason: 'creator_profile_refresh_active' };
-    }
     const run = await claimRun(shop, scheduledMinute);
     if (!run) return { skipped: true, reason: 'already_claimed' };
     const scopes = Array.isArray(shop.authorization?.granted_scopes) ? shop.authorization.granted_scopes : [];
@@ -103,12 +100,17 @@ const createMarketplaceDiscoverySyncService = ({
         await CreatorModel.bulkCreate(rows, {
           updateOnDuplicate: ['username', 'nickname', 'profile', 'last_seen_at', 'updated_at'],
         });
-        await queueCreatorDetails(shop, rows.map((row) => row.profile)).catch((error) => {
-          logger.warn('[Marketplace Discovery] Could not queue creator details', {
-            shopId: shop.id,
-            message: error.message,
+        // Detail enrichment also consumes Marketplace quota. Defer it while the
+        // Performance profile worker is active so even/odd minute alternation is
+        // not disrupted by a third request stream.
+        if (!profileRefreshActive(shop.id)) {
+          await queueCreatorDetails(shop, rows.map((row) => row.profile)).catch((error) => {
+            logger.warn('[Marketplace Discovery] Could not queue creator details', {
+              shopId: shop.id,
+              message: error.message,
+            });
           });
-        });
+        }
       }
       if (pendingSearch) await searchQueue.completeSearch(pendingSearch, rows.length);
       const nextPageToken = pendingKeyword ? (state?.next_page_token || null) : (payload.data?.next_page_token || null);

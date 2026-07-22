@@ -2,9 +2,10 @@ const { sequelize } = require('../models');
 
 const DISCOVERY_LOCK_NAMESPACE = 81427;
 const MINUTE_MS = 60 * 1000;
+const MINIMUM_MARKETPLACE_INTERVAL_MS = MINUTE_MS;
 const DEFAULT_MIN_INTERVAL_MS = Math.max(
-  MINUTE_MS,
-  Number(process.env.TIKTOK_MARKETPLACE_DISCOVERY_MIN_INTERVAL_MS) || MINUTE_MS,
+  MINIMUM_MARKETPLACE_INTERVAL_MS,
+  Number(process.env.TIKTOK_MARKETPLACE_DISCOVERY_MIN_INTERVAL_MS) || MINIMUM_MARKETPLACE_INTERVAL_MS,
 );
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -15,7 +16,10 @@ const createMarketplaceRequestGate = ({
   now = () => Date.now(),
   sleep = delay,
 } = {}) => async (shopId, operation) => {
-  const enforcedIntervalMs = Math.max(MINUTE_MS, Number(minIntervalMs) || DEFAULT_MIN_INTERVAL_MS);
+  const enforcedIntervalMs = Math.max(
+    MINIMUM_MARKETPLACE_INTERVAL_MS,
+    Number(minIntervalMs) || DEFAULT_MIN_INTERVAL_MS,
+  );
   const outcome = await sequelizeInstance.transaction(async (transaction) => {
     await sequelizeInstance.query(
       'SELECT pg_advisory_xact_lock(:namespace, :shopId)',
@@ -59,5 +63,6 @@ module.exports = {
   createMarketplaceRequestGate,
   runMarketplaceDiscoveryRequest,
   DEFAULT_MIN_INTERVAL_MS,
+  MINIMUM_MARKETPLACE_INTERVAL_MS,
   MINUTE_MS,
 };

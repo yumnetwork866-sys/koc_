@@ -4,6 +4,7 @@ const {
   normalizeRunTimes,
   assertTimezone,
   enqueueScheduledJob,
+  stopScheduledJob,
 } = require('../services/scheduledJobService');
 
 const serializeJob = async (job) => {
@@ -57,4 +58,18 @@ const runScheduleNow = async (req, res) => {
   }
 };
 
-module.exports = { listSchedules, updateSchedule, runScheduleNow };
+const stopScheduleNow = async (req, res) => {
+  try {
+    const jobKey = String(req.params.jobKey || '');
+    if (!JOB_KEYS.has(jobKey)) return res.status(404).json({ message: 'Schedule not found.' });
+    const job = await ScheduledJob.findOne({ where: { job_key: jobKey } });
+    if (!job) return res.status(404).json({ message: 'Schedule not found.' });
+    const run = await stopScheduledJob(job);
+    if (!run) return res.status(409).json({ message: 'This job is not running.' });
+    return res.json({ run, stopped: true });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { listSchedules, updateSchedule, runScheduleNow, stopScheduleNow };

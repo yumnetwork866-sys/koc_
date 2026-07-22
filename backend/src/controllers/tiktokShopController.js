@@ -32,7 +32,6 @@ const {
   createBasePerformanceExportWithFallback,
   processCreatorPerformanceExport,
   processBasePerformanceExport,
-  refreshCreatorPerformanceProfiles,
   yesterdayEndDay,
 } = require('../services/tiktokCreatorPerformanceService');
 const { createTtlPromiseCache } = require('../lib/ttlPromiseCache');
@@ -41,6 +40,8 @@ const {
   hydrateCreatorRows,
   syncAndHydrateCollaborationCreators,
 } = require('../services/tiktokCreatorProfileService');
+const { recordTargetCollaborationInvites } = require('../services/tiktokCreatorContactHistoryService');
+const { targetCollaborationSyncService } = require('../services/tiktokTargetCollaborationSyncService');
 
 const affiliateCacheTtlValue = Number(process.env.TIKTOK_SELLER_AFFILIATE_CACHE_TTL_MS ?? 120000);
 const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
@@ -67,32 +68,6 @@ const addMarketplaceCategoryNames = async (creators, shop) => {
     return categories.length ? { ...creator, categories } : creator;
   });
 };
-const creatorProfileRefreshJobs = new Map();
-const creatorProfileRefreshKey = (shopId, exportId) => `${shopId}:${exportId}`;
-const startCreatorProfileRefresh = (shop, exportRecord, { force = false } = {}) => {
-  if (!shop || !exportRecord) return false;
-  const refreshKey = creatorProfileRefreshKey(shop.id, exportRecord.id);
-  const existing = creatorProfileRefreshJobs.get(refreshKey);
-  if (existing?.status === 'PROCESSING') return false;
-  const completedAt = existing?.completed_at ? new Date(existing.completed_at).getTime() : 0;
-  if (!force && completedAt > Date.now() - 6 * 60 * 60 * 1000) return false;
-  creatorProfileRefreshJobs.set(refreshKey, { status: 'PROCESSING', started_at: new Date() });
-  console.info('[Creator Profile Refresh] Queued', {
-    shopId: shop.id,
-    exportId: exportRecord.id,
-    taskId: exportRecord.task_id,
-    force,
-  });
-  setImmediate(() => refreshCreatorPerformanceProfiles(shop, exportRecord).then((count) => {
-    creatorProfileRefreshJobs.set(refreshKey, { status: 'SUCCEEDED', count, completed_at: new Date() });
-    console.log('[Creator Performance] Profiles refreshed', { shopId: shop.id, taskId: exportRecord.task_id, count });
-  }).catch((error) => {
-    creatorProfileRefreshJobs.set(refreshKey, { status: 'FAILED', error: error.message, completed_at: new Date() });
-    console.error('[Creator Performance] Profile refresh failed', { shopId: shop.id, taskId: exportRecord.task_id, message: error.message });
-  }));
-  return true;
-};
-
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3005';
 const redirectUrl = (status, message, returnPath = '/manage/shop-analytics') => {
   const safeReturnPath = ['/manage/shops', '/manage/shop-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
@@ -268,7 +243,8 @@ const syncShopAnalytics = async (req, res) => {
     });
     await shop.update({ last_synced_at: new Date(), last_sync_status: 'success', last_sync_error: null });
     await shop.authorization.update({ last_sync_status: 'success', last_sync_error: null, updated_at: new Date() });
-    res.json({ shop: safeShop(shop), snapshot });
+    const collaborationSync = targetCollaborationSyncService.startShopSync(shop);
+    res.json({ shop: safeShop(shop), snapshot, target_collaboration_sync: collaborationSync });
   } catch (error) {
     await shop?.update({ last_synced_at: new Date(), last_sync_status: 'failed', last_sync_error: String(error.message).slice(0, 2000) }).catch(() => {});
     await shop?.authorization?.update({ last_sync_status: 'failed', last_sync_error: String(error.message).slice(0, 2000), updated_at: new Date() }).catch(() => {});
@@ -402,6 +378,7 @@ const listTargetCollaborations = affiliateResponse('target-collaborations', asyn
     }
   });
   const sharedProfileRows = await syncAndHydrateCollaborationCreators(shop.id, detailedRows);
+  await recordTargetCollaborationInvites(shop.id, sharedProfileRows);
   return { ...payload, data: { ...payload.data, target_collaborations: sharedProfileRows } };
 });
 
@@ -517,10 +494,23 @@ const listMarketplaceCreators = async (req, res) => {
           c.*,
           COALESCE(d.detail, '{}'::jsonb) AS detail,
           c.profile || COALESCE(d.detail, '{}'::jsonb) AS metric_payload
+          , contact.previously_invited
+          , contact.previously_invited_at
         FROM tiktok_marketplace_creators c
         LEFT JOIN tiktok_marketplace_creator_details d
           ON d.shop_id = c.shop_id
           AND d.creator_open_id = c.creator_open_id
+        LEFT JOIN LATERAL (
+          SELECT
+            TRUE AS previously_invited,
+            GREATEST(h.last_invited_at, h.last_messaged_at) AS previously_invited_at
+          FROM tiktok_creator_contact_histories h
+          WHERE h.shop_id = c.shop_id
+            AND (h.creator_open_id = c.creator_open_id OR LOWER(h.username) = LOWER(c.username))
+            AND GREATEST(h.last_invited_at, h.last_messaged_at) >= NOW() - INTERVAL '90 days'
+          ORDER BY GREATEST(h.last_invited_at, h.last_messaged_at) DESC
+          LIMIT 1
+        ) contact ON TRUE
         WHERE c.shop_id = :shopId
           ${keyword ? `AND (c.username ILIKE :keywordPattern OR c.nickname ILIKE :keywordPattern)` : ''}
       ), ranked AS (
@@ -559,6 +549,8 @@ const listMarketplaceCreators = async (req, res) => {
       nickname: row.nickname || row.profile?.nickname,
       marketplace_first_seen_at: row.first_seen_at,
       marketplace_last_seen_at: row.last_seen_at,
+      previously_invited: Boolean(row.previously_invited),
+      previously_invited_at: row.previously_invited_at || null,
     }));
     let exchangeRate = null;
     try {
@@ -756,7 +748,6 @@ const listCreatorPerformance = async (req, res) => {
         ...basePayload,
       });
     }
-    startCreatorProfileRefresh(shop, snapshotExport);
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
     const keyword = String(req.query.keyword || '').trim();
@@ -801,7 +792,7 @@ const listCreatorPerformance = async (req, res) => {
       totals: totals[0],
       page,
       page_size: pageSize,
-      profile_refresh: creatorProfileRefreshJobs.get(creatorProfileRefreshKey(shop.id, snapshotExport.id)) || null,
+      profile_refresh: { status: 'BACKGROUND' },
       ...basePayload,
     });
   } catch (error) { res.status(500).json({ message: error.message }); }
@@ -835,10 +826,7 @@ const syncCreatorPerformance = async (req, res) => {
         console.error('[Base Performance] Export failed', { shopId: shop.id, taskId: baseExportRecord.task_id, message: error.message });
       }));
     }
-    const profile_refresh_started = exportRecord.status === 'SUCCEEDED';
-    if (profile_refresh_started) {
-      startCreatorProfileRefresh(shop, exportRecord, { force: true });
-    }
+    const profile_refresh_started = false;
     res.status(202).json({
       export: exportRecord,
       base_export: baseExportRecord,

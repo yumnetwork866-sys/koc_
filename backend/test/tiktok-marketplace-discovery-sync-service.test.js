@@ -90,27 +90,34 @@ test('Marketplace Discovery job claims each shop and minute only once across ins
   assert.equal(searchCalls, 0);
 });
 
-test('Marketplace Discovery yields its minute while Creator Performance refresh is active', async () => {
-  let claimed = false;
+test('Marketplace Discovery uses its alternating minute while Creator Performance refresh is active', async () => {
   let searchCalls = 0;
+  let detailQueues = 0;
+  const run = { async update() {} };
   const service = createMarketplaceDiscoverySyncService({
-    RunModel: {
-      async findOrCreate() {
-        claimed = true;
-        return [{}, true];
-      },
+    RunModel: { async findOrCreate() { return [run, true]; } },
+    StateModel: {
+      async findByPk() { return null; },
+      async upsert() {},
     },
+    CreatorModel: { async bulkCreate() {} },
     profileRefreshActive: () => true,
     searchQueue: emptySearchQueue,
-    searchMarketplace: async () => { searchCalls += 1; },
+    searchMarketplace: async () => {
+      searchCalls += 1;
+      return { data: { creators: [{ creator_open_id: 'creator-1', username: 'new.koc' }] } };
+    },
+    runRequest: async (_shopId, operation) => operation(),
+    loadCooldown: async () => 0,
+    queueCreatorDetails: async () => { detailQueues += 1; },
     now: () => new Date('2026-07-22T03:19:17.000Z'),
   });
 
   const result = await service.syncShop(marketplaceShop());
 
-  assert.deepEqual(result, { skipped: true, reason: 'creator_profile_refresh_active' });
-  assert.equal(claimed, false);
-  assert.equal(searchCalls, 0);
+  assert.deepEqual(result, { skipped: false, creator_count: 1, has_next_page: false });
+  assert.equal(searchCalls, 1);
+  assert.equal(detailQueues, 0);
 });
 
 test('Marketplace Discovery job persists cooldown after TikTok rate limiting', async () => {

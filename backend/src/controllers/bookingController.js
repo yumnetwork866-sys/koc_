@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { QueryTypes } = require('sequelize');
 const { User, Booking, TikTokPartnerAuthorization, TikTokShop, sequelize } = require('../models');
 const {
   buildAuthorizationUrl,
@@ -53,6 +54,65 @@ const resolveSellerShopId = async (authorization, requestedShopId) => {
   return String(sellerShop?.platform_shop_id || authorization?.shop_id || '').trim();
 };
 
+const targetCreatorSql = `
+  SELECT DISTINCT ON (h.shop_id, COALESCE(h.creator_open_id, LOWER(h.username)))
+    h.shop_id,
+    h.creator_open_id,
+    h.username,
+    COALESCE(p_open.nickname, p_username.nickname, h.username) AS nickname,
+    COALESCE(p_open.avatar_url, p_username.avatar_url) AS avatar_url,
+    h.last_invited_at
+  FROM tiktok_creator_contact_histories h
+  LEFT JOIN LATERAL (
+    SELECT profile.nickname, profile.avatar_url
+    FROM tiktok_creator_profiles profile
+    WHERE profile.shop_id = h.shop_id
+      AND profile.creator_open_id = h.creator_open_id
+    ORDER BY profile.refreshed_at DESC
+    LIMIT 1
+  ) p_open ON TRUE
+  LEFT JOIN tiktok_creator_profiles p_username
+    ON p_username.shop_id = h.shop_id
+    AND p_username.username = LOWER(h.username)
+  WHERE h.last_invited_at IS NOT NULL
+`;
+
+const getTargetKocs = async (req, res) => {
+  try {
+    const keyword = String(req.query.keyword || '').trim();
+    const rows = await sequelize.query(`
+      ${targetCreatorSql}
+      ${keyword ? `AND (h.username ILIKE :keyword OR p_open.nickname ILIKE :keyword OR p_username.nickname ILIKE :keyword)` : ''}
+      ORDER BY h.shop_id, COALESCE(h.creator_open_id, LOWER(h.username)), h.last_invited_at DESC
+    `, {
+      replacements: keyword ? { keyword: `%${keyword}%` } : {},
+      type: QueryTypes.SELECT,
+    });
+    rows.sort((left, right) => {
+      const recency = new Date(right.last_invited_at || 0).getTime() - new Date(left.last_invited_at || 0).getTime();
+      return recency || String(left.nickname || left.username).localeCompare(String(right.nickname || right.username));
+    });
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const findTargetCreator = async (shopId, creatorOpenId) => {
+  if (!Number.isInteger(Number(shopId)) || !String(creatorOpenId || '').trim()) return null;
+  const rows = await sequelize.query(`
+    ${targetCreatorSql}
+      AND h.shop_id = :shopId
+      AND h.creator_open_id = :creatorOpenId
+    ORDER BY h.shop_id, COALESCE(h.creator_open_id, LOWER(h.username)), h.last_invited_at DESC
+    LIMIT 1
+  `, {
+    replacements: { shopId: Number(shopId), creatorOpenId: String(creatorOpenId) },
+    type: QueryTypes.SELECT,
+  });
+  return rows[0] || null;
+};
+
 const getBookings = async (req, res) => {
   try {
     const bookings = await Booking.findAll({
@@ -79,9 +139,19 @@ const getBookingById = async (req, res) => {
 
 const createBooking = async (req, res) => {
   try {
+    const staffName = String(req.body.staff_name || '').trim();
+    const targetCreator = await findTargetCreator(req.body.target_shop_id, req.body.creator_open_id);
+    if (!staffName) return res.status(400).json({ message: 'Booking staff name is required.' });
+    if (!targetCreator && !req.body.creator_id) return res.status(400).json({ message: 'Select a KOC from Target Collaboration.' });
     const payload = compactPayload({
-      staff_id: req.body.staff_id,
-      creator_id: req.body.creator_id,
+      staff_id: req.body.staff_id || null,
+      staff_name: staffName,
+      creator_id: req.body.creator_id || null,
+      creator_open_id: targetCreator?.creator_open_id,
+      creator_username: targetCreator?.username,
+      creator_name: targetCreator?.nickname,
+      creator_avatar_url: targetCreator?.avatar_url,
+      target_shop_id: targetCreator?.shop_id,
       booking_cost: req.body.booking_cost,
       status: req.body.status || 'booked',
       deadline: req.body.deadline,
@@ -111,6 +181,7 @@ const updateBooking = async (req, res) => {
 
     const payload = compactPayload({
       staff_id: req.body.staff_id,
+      staff_name: req.body.staff_name === undefined ? undefined : String(req.body.staff_name || '').trim(),
       creator_id: req.body.creator_id,
       booking_cost: req.body.booking_cost,
       status: req.body.status,
@@ -379,6 +450,7 @@ module.exports = {
   createBooking,
   updateBooking,
   deleteBooking,
+  getTargetKocs,
   getTikTokPartnerCollaborations,
   getTikTokPartnerStatuses,
   startTikTokPartnerOauth,

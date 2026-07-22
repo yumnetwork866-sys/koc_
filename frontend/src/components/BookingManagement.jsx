@@ -1,15 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createBooking,
   deleteBooking,
+  fetchBookingTargetKocs,
   fetchBookings,
-  fetchUsers,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 
 const initialForm = {
-  staff_id: '',
-  creator_id: '',
+  staff_name: '',
+  creator_key: '',
   booking_cost: '',
 };
 
@@ -61,10 +61,135 @@ const getKocDisplayName = (user) => {
     .trim() || rawName;
 };
 
+const targetKocKey = (creator) => `${creator.shop_id}:${creator.creator_open_id}`;
+const targetKocLabel = (creator) => {
+  if (!creator) return '';
+  const name = creator.nickname || creator.username || 'KOC';
+  return creator.username ? `${name} (@${creator.username})` : name;
+};
+
+const TargetKocAvatar = ({ src, name }) => {
+  const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+    setRetry(false);
+  }, [src]);
+  if (!src || failed) {
+    return <span className="creator-identity__avatar creator-identity__avatar--fallback">{String(name || 'K').trim().charAt(0).toUpperCase()}</span>;
+  }
+  return (
+    <img
+      className="creator-identity__avatar"
+      src={retry ? `${src}#avatar-retry` : src}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => { if (!retry) setRetry(true); else setFailed(true); }}
+    />
+  );
+};
+
+const TargetKocCombobox = ({ creators, value, onChange, placeholder, noResults }) => {
+  const rootRef = useRef(null);
+  const selectedCreator = useMemo(
+    () => creators.find((creator) => targetKocKey(creator) === value) || null,
+    [creators, value],
+  );
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setQuery(targetKocLabel(selectedCreator));
+  }, [selectedCreator]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (event.key === 'Escape' || (event.type === 'pointerdown' && !rootRef.current?.contains(event.target))) {
+        setOpen(false);
+        if (selectedCreator) setQuery(targetKocLabel(selectedCreator));
+      }
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, [open, selectedCreator]);
+
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredCreators = useMemo(() => creators.filter((creator) => {
+    if (!normalizedQuery || targetKocKey(creator) === value) return true;
+    return `${creator.nickname || ''} ${creator.username || ''}`.toLocaleLowerCase().includes(normalizedQuery);
+  }).slice(0, 50), [creators, normalizedQuery, value]);
+
+  const selectCreator = (creator) => {
+    onChange(targetKocKey(creator));
+    setQuery(targetKocLabel(creator));
+    setOpen(false);
+  };
+
+  return (
+    <div className="booking-koc-combobox" ref={rootRef}>
+      <div className="booking-koc-combobox__control">
+        <input
+          type="text"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls="booking-koc-options"
+          value={query}
+          placeholder={placeholder}
+          required
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            onChange('');
+            setOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              setOpen(true);
+              window.requestAnimationFrame(() => rootRef.current?.querySelector('[role="option"]')?.focus());
+            }
+          }}
+        />
+        <button type="button" aria-label={placeholder} aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+          <span className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" />
+        </button>
+      </div>
+      {open ? (
+        <div className="booking-koc-combobox__menu" id="booking-koc-options" role="listbox">
+          {filteredCreators.length ? filteredCreators.map((creator) => {
+            const creatorKey = targetKocKey(creator);
+            return (
+              <button
+                className={`booking-koc-combobox__option${creatorKey === value ? ' booking-koc-combobox__option--active' : ''}`}
+                type="button"
+                role="option"
+                aria-selected={creatorKey === value}
+                key={creatorKey}
+                onClick={() => selectCreator(creator)}
+              >
+                <TargetKocAvatar src={creator.avatar_url} name={creator.nickname || creator.username} />
+                <span><strong>{creator.nickname || creator.username}</strong><small>@{creator.username}</small></span>
+              </button>
+            );
+          }) : <div className="booking-koc-combobox__empty">{noResults}</div>}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 const BookingManagement = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const [bookings, setBookings] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [targetKocs, setTargetKocs] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -72,13 +197,13 @@ const BookingManagement = ({ heroTitle }) => {
   const [error, setError] = useState('');
 
   const loadData = async (signal) => {
-    const [loadedBookings, loadedUsers] = await Promise.all([
+    const [loadedBookings, loadedTargetKocs] = await Promise.all([
       fetchBookings(signal),
-      fetchUsers(signal),
+      fetchBookingTargetKocs(signal),
     ]);
 
     setBookings(loadedBookings);
-    setUsers(loadedUsers);
+    setTargetKocs(loadedTargetKocs);
   };
 
   useEffect(() => {
@@ -106,19 +231,11 @@ const BookingManagement = ({ heroTitle }) => {
   }, [t]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const creatorId = params.get('creator_id');
-    if (creatorId) setForm((current) => ({ ...current, creator_id: creatorId }));
     window.history.replaceState({}, '', window.location.pathname);
   }, []);
 
-  const kocUsers = useMemo(() => users.filter((user) => user.role === 'koc'), [users]);
-  const staffUsers = useMemo(() => users.filter((user) => user.role !== 'koc'), [users]);
   const localizedFormatMoney = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
-
-  const userNameById = useMemo(() => {
-    return new Map(users.map((user) => [String(user.id), user.name]));
-  }, [users]);
+  const staffCount = useMemo(() => new Set(bookings.map((booking) => booking.staff_name || booking.staff?.name).filter(Boolean)).size, [bookings]);
 
   const stats = useMemo(() => {
     return bookings.reduce(
@@ -149,9 +266,11 @@ const BookingManagement = ({ heroTitle }) => {
     try {
       setSaving(true);
       setError('');
+      const selectedKoc = targetKocs.find((creator) => `${creator.shop_id}:${creator.creator_open_id}` === form.creator_key);
       await createBooking({
-        staff_id: Number(form.staff_id),
-        creator_id: Number(form.creator_id),
+        staff_name: form.staff_name.trim(),
+        target_shop_id: selectedKoc?.shop_id,
+        creator_open_id: selectedKoc?.creator_open_id,
         booking_cost: Number(form.booking_cost),
       });
       resetForm();
@@ -192,11 +311,11 @@ const BookingManagement = ({ heroTitle }) => {
           </article>
           <article className="stat-card">
             <p className="stat-card__label">{t('booking.koc')}</p>
-            <p className="stat-card__value">{kocUsers.length}</p>
+            <p className="stat-card__value">{targetKocs.length}</p>
           </article>
           <article className="stat-card">
             <p className="stat-card__label">{t('booking.staff')}</p>
-            <p className="stat-card__value">{staffUsers.length}</p>
+            <p className="stat-card__value">{staffCount}</p>
           </article>
           <article className="stat-card">
             <p className="stat-card__label">{t('booking.totalCost')}</p>
@@ -220,22 +339,12 @@ const BookingManagement = ({ heroTitle }) => {
 
         <form className="filter-panel" onSubmit={handleSubmit}>
           <div className="field">
-            <label htmlFor="staff_id">{t('booking.bookingStaff')}</label>
-            <select id="staff_id" name="staff_id" value={form.staff_id} onChange={handleChange} required>
-              <option value="">{t('booking.selectStaff')}</option>
-              {staffUsers.map((user) => (
-                <option key={user.id} value={user.id}>{user.name}</option>
-              ))}
-            </select>
+            <label htmlFor="staff_name">{t('booking.bookingStaff')}</label>
+            <input id="staff_name" name="staff_name" type="text" value={form.staff_name} onChange={handleChange} placeholder={t('booking.enterStaff')} required />
           </div>
           <div className="field">
-            <label htmlFor="creator_id">{t('booking.koc')}</label>
-            <select id="creator_id" name="creator_id" value={form.creator_id} onChange={handleChange} required>
-              <option value="">{t('booking.selectKoc')}</option>
-              {kocUsers.map((user) => (
-                <option key={user.id} value={user.id}>{user.name}</option>
-              ))}
-            </select>
+            <label htmlFor="creator_key">{t('booking.koc')}</label>
+            <TargetKocCombobox creators={targetKocs} value={form.creator_key} onChange={(creatorKey) => setForm((current) => ({ ...current, creator_key: creatorKey }))} placeholder={t('booking.searchKoc')} noResults={t('booking.noKocMatch')} />
           </div>
           <div className="field">
             <label htmlFor="booking_cost">{t('booking.bookingCost')}</label>
@@ -270,6 +379,7 @@ const BookingManagement = ({ heroTitle }) => {
             <thead>
               <tr>
                 <th className="cell-number">ID</th>
+                <th>{t('booking.staffColumn')}</th>
                 <th>{t('booking.kocColumn')}</th>
                 <th className="cell-number">{t('booking.costColumn')}</th>
                 <th className="cell-number">{t('booking.viewsColumn')}</th>
@@ -282,7 +392,7 @@ const BookingManagement = ({ heroTitle }) => {
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={8}>
+                  <td className="table-state-cell" colSpan={9}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('booking.loading')}</div>
@@ -302,7 +412,8 @@ const BookingManagement = ({ heroTitle }) => {
                   return (
                     <tr key={booking.id}>
                       <td className="cell-number"><span className="row-title">#{booking.id}</span></td>
-                      <td>{getKocDisplayName(booking.creator?.name || userNameById.get(String(booking.creator_id)) || booking.creator_id)}</td>
+                      <td>{booking.staff_name || booking.staff?.name || '—'}</td>
+                      <td>{getKocDisplayName(booking.creator_name || booking.creator?.name || booking.creator_username || booking.creator_id)}</td>
                       <td className="cell-number">{localizedFormatMoney(booking.booking_cost)}</td>
                       <td className="cell-number">{localizedFormatMoney(bookingVideoStats.views)}</td>
                       <td className="cell-number">{localizedFormatMoney(bookingVideoStats.likes)}</td>
@@ -346,7 +457,7 @@ const BookingManagement = ({ heroTitle }) => {
                 })
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={8}>
+                  <td className="table-state-cell" colSpan={9}>
                     <div className="empty-state empty-state--compact table-empty-state">{t('booking.noData')}</div>
                   </td>
                 </tr>

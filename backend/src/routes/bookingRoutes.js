@@ -6,6 +6,7 @@ const {
   createBooking,
   updateBooking,
   deleteBooking,
+  getTargetKocs,
   getTikTokPartnerCollaborations,
   getTikTokPartnerStatuses,
   startTikTokPartnerOauth,
@@ -14,6 +15,7 @@ const {
 } = require('../controllers/bookingController');
 
 router.get('/', getBookings);
+router.get('/target-kocs', getTargetKocs);
 router.get('/tiktok-partner/collaborations', getTikTokPartnerCollaborations);
 router.get('/tiktok-partner/status', getTikTokPartnerStatuses);
 router.get('/tiktok-partner/oauth/start', startTikTokPartnerOauth);

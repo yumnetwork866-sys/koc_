@@ -13,6 +13,7 @@ const {
   loadPersistedMarketplaceCooldown,
   persistMarketplaceCooldown,
   creatorRowHasFetchedProfile,
+  creatorProfileNeedsRefresh,
   creatorProfileTtlExpired,
   selectCreatorProfileRefreshCandidates,
   runCreatorPerformanceProfileRefresh,
@@ -240,7 +241,29 @@ test('complete creator profiles are refreshed after the 24-hour TTL', () => {
   ), []);
 });
 
-test('Creator Performance refresh requests one creator at a time with a one-minute gap', async () => {
+test('a fresh creator profile with an avatar is not refreshed just because followers are zero', () => {
+  const now = Date.parse('2026-07-22T07:30:00.000Z');
+  const row = {
+    username: '111_wafia',
+    avatar_url: 'https://example.test/avatar.webp',
+    followers: 0,
+  };
+  const profile = {
+    username: '111_wafia',
+    avatar_url: 'https://example.test/avatar.webp',
+    follower_count: 0,
+    refreshed_at: new Date(now - 60 * 60 * 1000),
+  };
+
+  assert.equal(creatorProfileNeedsRefresh(row), false);
+  assert.deepEqual(selectCreatorProfileRefreshCandidates(
+    [row],
+    new Map([['username:111_wafia', profile]]),
+    { now },
+  ), []);
+});
+
+test('Creator Performance refresh requests one creator at a time with a two-minute gap', async () => {
   const searches = [];
   const waits = [];
   const persisted = [];
@@ -300,7 +323,7 @@ test('Creator Performance refresh requests one creator at a time with a one-minu
   assert.equal(snapshotUpdates.length, 2);
 });
 
-test('Creator Performance retries the same creator after one minute when TikTok rate-limits it', async () => {
+test('Creator Performance retries the same creator after two minutes when TikTok rate-limits it', async () => {
   let fakeNow = Date.parse('2026-07-22T04:00:00.000Z');
   let searchCalls = 0;
   const waits = [];
@@ -494,7 +517,7 @@ test('creator Marketplace fallback is skipped when OAuth scope is not granted', 
   assert.equal(rows[0].avatar_url, null);
 });
 
-test('creator Marketplace refresh fills followers when an avatar already exists', async () => {
+test('creator Marketplace fallback does not request an avatar-complete creator just to fill followers', async () => {
   const rows = [{
     username: 'avatar.only',
     nickname: 'Avatar Only',
@@ -526,9 +549,9 @@ test('creator Marketplace refresh fills followers when an avatar already exists'
     marketplaceOptions: { minIntervalMs: 0 },
   });
 
-  assert.deepEqual(marketplaceKeywords, ['avatar.only']);
-  assert.equal(rows[0].followers, 9876);
-  assert.equal(rows[0].creator_open_id, 'avatar-only-open-id');
+  assert.deepEqual(marketplaceKeywords, []);
+  assert.equal(rows[0].followers, 0);
+  assert.equal(rows[0].creator_open_id, null);
 });
 
 test('Marketplace creator lookup cools down downstream rate limits', async () => {
@@ -661,7 +684,7 @@ test('Marketplace cooldown survives process memory through the persistent store'
   assert.equal(stored.namespace, 'creator_marketplace_profile');
 });
 
-test('legacy 30-minute Creator Performance cooldown is capped at one minute', async () => {
+test('legacy 30-minute Creator Performance cooldown is capped at two minutes', async () => {
   const updatedAt = new Date('2026-07-22T04:00:00.000Z');
   const model = {
     async findOne() {

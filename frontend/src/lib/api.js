@@ -71,6 +71,10 @@ export function fetchBookings(signal) {
   return apiRequest('/bookings', { signal });
 }
 
+export function fetchBookingTargetKocs(signal) {
+  return apiRequest('/bookings/target-kocs', { signal });
+}
+
 export function fetchTikTokPartnerCollaborations({ creatorId, signal, pageToken, keyword } = {}) {
   const params = new URLSearchParams();
   params.set('creator_id', creatorId);
@@ -129,6 +133,10 @@ export function updateSchedule(jobKey, payload) {
 
 export function runScheduleNow(jobKey) {
   return apiRequest(`/schedules/${encodeURIComponent(jobKey)}/run`, { method: 'POST' });
+}
+
+export function stopScheduleNow(jobKey) {
+  return apiRequest(`/schedules/${encodeURIComponent(jobKey)}/stop`, { method: 'POST' });
 }
 
 function fetchTikTokSellerAffiliate(shopId, resource, filters = {}) {

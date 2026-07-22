@@ -41,6 +41,8 @@ const defaultMigrationNames = [
   '032_create_tiktok_marketplace_request_gates',
   '033_create_tiktok_marketplace_discovery_store',
   '034_add_creator_performance_full_metrics',
+  '035_create_tiktok_creator_contact_histories',
+  '036_allow_booking_target_creators',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

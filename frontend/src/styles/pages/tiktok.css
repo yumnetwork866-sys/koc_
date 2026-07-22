@@ -1018,6 +1018,105 @@
   justify-content: space-between;
 }
 
+.booking-koc-combobox {
+  position: relative;
+  min-width: 260px;
+}
+
+.booking-koc-combobox__control {
+  position: relative;
+}
+
+.field .booking-koc-combobox__control input {
+  padding-right: 42px;
+}
+
+.booking-koc-combobox__control > button {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  display: grid;
+  width: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: transparent;
+  color: var(--color-text-soft);
+  cursor: pointer;
+}
+
+.booking-koc-combobox__menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  display: grid;
+  max-height: 320px;
+  padding: 6px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.booking-koc-combobox__option {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.booking-koc-combobox__option:hover,
+.booking-koc-combobox__option:focus-visible,
+.booking-koc-combobox__option--active {
+  background: var(--color-accent-soft);
+  outline: none;
+}
+
+.booking-koc-combobox__option .creator-identity__avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8edf4;
+  object-fit: cover;
+  font-weight: 800;
+}
+
+.booking-koc-combobox__option > span:last-child {
+  display: grid;
+  min-width: 0;
+}
+
+.booking-koc-combobox__option strong,
+.booking-koc-combobox__option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-koc-combobox__option small {
+  color: var(--color-text-soft);
+}
+
+.booking-koc-combobox__empty {
+  padding: 18px 12px;
+  color: var(--color-text-soft);
+  text-align: center;
+}
+
 
 .booking-video-list {
   display: grid;
@@ -1546,6 +1645,20 @@
   color: var(--color-muted);
   font-size: 0.8rem;
   line-height: 1.35;
+}
+
+.marketplace-creator__previously-invited {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
 }
 
 .marketplace-creator-video-cell {

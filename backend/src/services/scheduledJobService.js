@@ -10,7 +10,6 @@ const {
 const {
   createCreatorPerformanceExportWithFallback,
   processCreatorPerformanceExport,
-  refreshCreatorPerformanceProfiles,
   yesterdayEndDay,
 } = require('./tiktokCreatorPerformanceService');
 const {
@@ -18,6 +17,7 @@ const {
   syncShopAnalyticsSnapshot,
 } = require('./tiktokShopAnalyticsSyncService');
 const { run: syncTikTokChannels } = require('../jobs/syncTiktokChannels');
+const { targetCollaborationSyncService } = require('./tiktokTargetCollaborationSyncService');
 
 const JOB_KEYS = new Set([
   'tiktok_creator_performance',
@@ -25,6 +25,14 @@ const JOB_KEYS = new Set([
   'tiktok_channel_metrics',
 ]);
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const activeRunControllers = new Map();
+
+const throwIfAborted = (signal) => {
+  if (!signal?.aborted) return;
+  const error = new Error('Job was stopped by the user.');
+  error.name = 'AbortError';
+  throw error;
+};
 
 const normalizeRunTimes = (values) => {
   if (!Array.isArray(values)) throw new Error('run_times must be an array.');
@@ -98,13 +106,15 @@ const connectedShops = () => TikTokShop.findAll({
   order: [['id', 'ASC']],
 });
 
-const runForShops = async (operation) => {
+const runForShops = async (operation, signal) => {
   const shops = await connectedShops();
   const results = [];
   for (const shop of shops) {
+    throwIfAborted(signal);
     try {
       results.push({ shop_id: shop.id, status: 'SUCCEEDED', ...(await operation(shop)) });
     } catch (error) {
+      if (signal?.aborted || error.name === 'AbortError') throw error;
       results.push({ shop_id: shop.id, status: 'FAILED', error: error.message });
     }
   }
@@ -123,22 +133,26 @@ const runForShops = async (operation) => {
 };
 
 const jobHandlers = {
-  tiktok_creator_performance: () => runForShops(async (shop) => {
+  tiktok_creator_performance: ({ signal } = {}) => runForShops(async (shop) => {
     const { exportRecord, requestedEndDay, endDay } = await createCreatorPerformanceExportWithFallback(shop, {
       windowType: 'PAST_7_DAYS',
       endDay: yesterdayEndDay(shop.region),
       planType: 'ALL',
     });
     if (exportRecord.status === 'PROCESSING') await processCreatorPerformanceExport(shop, exportRecord);
-    else await refreshCreatorPerformanceProfiles(shop, exportRecord);
     return { requested_end_day: requestedEndDay, effective_end_day: endDay, export_id: exportRecord.id };
-  }),
-  tiktok_shop_analytics: () => runForShops(async (shop) => {
+  }, signal),
+  tiktok_shop_analytics: ({ signal } = {}) => runForShops(async (shop) => {
     const range = scheduledAnalyticsRange(shop);
-    return syncShopAnalyticsSnapshot(shop, range);
-  }),
-  tiktok_channel_metrics: async () => {
+    const analytics = await syncShopAnalyticsSnapshot(shop, range);
+    throwIfAborted(signal);
+    const target_collaborations = await targetCollaborationSyncService.syncShop(shop, { signal });
+    return { ...analytics, target_collaborations };
+  }, signal),
+  tiktok_channel_metrics: async ({ signal } = {}) => {
+    throwIfAborted(signal);
     const summary = await syncTikTokChannels({ closeConnection: false });
+    throwIfAborted(signal);
     if (summary.failed) {
       const error = new Error(`${summary.failed}/${summary.channels} Channel syncs failed.`);
       error.summary = summary;
@@ -149,17 +163,40 @@ const jobHandlers = {
 };
 
 const processScheduledJobRun = async (job, run) => {
+  const controller = new AbortController();
+  activeRunControllers.set(String(run.id), controller);
   try {
-    const summary = await jobHandlers[job.job_key]();
+    const summary = await jobHandlers[job.job_key]({ signal: controller.signal });
+    await run.reload();
+    if (run.status !== 'PROCESSING') return run;
     await run.update({ status: 'SUCCEEDED', summary, completed_at: new Date(), error: null });
   } catch (error) {
+    await run.reload();
+    if (run.status !== 'PROCESSING' || controller.signal.aborted || error.name === 'AbortError') return run;
     await run.update({
       status: 'FAILED',
       summary: error.summary || null,
       error: String(error.message || error).slice(0, 4000),
       completed_at: new Date(),
     });
+  } finally {
+    activeRunControllers.delete(String(run.id));
   }
+  return run.reload();
+};
+
+const stopScheduledJob = async (job) => {
+  const run = await ScheduledJobRun.findOne({
+    where: { scheduled_job_id: job.id, status: 'PROCESSING' },
+    order: [['started_at', 'DESC']],
+  });
+  if (!run) return null;
+  activeRunControllers.get(String(run.id))?.abort();
+  await run.update({
+    status: 'CANCELLED',
+    error: 'Stopped by user.',
+    completed_at: new Date(),
+  });
   return run.reload();
 };
 
@@ -285,6 +322,7 @@ module.exports = {
   latestScheduledSlot,
   executeScheduledJob,
   enqueueScheduledJob,
+  stopScheduledJob,
   tickScheduledJobs,
   catchUpScheduledJobs,
   startDatabaseScheduler,

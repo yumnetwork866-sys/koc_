@@ -29,6 +29,7 @@ const { requireAdmin } = require('./lib/session');
 const { getAdminAccount } = require('./lib/adminAccount');
 const { startDatabaseScheduler } = require('./services/scheduledJobService');
 const { startMarketplaceCreatorDiscoveryJob } = require('./jobs/scheduleMarketplaceCreatorDiscovery');
+const { startCreatorProfileRefreshJob } = require('./jobs/scheduleCreatorProfileRefresh');
 
 const httpLogFormat = process.env.HTTP_LOG_FORMAT || ':method :url :status :response-time ms';
 
@@ -123,6 +124,7 @@ const startServer = async () => {
       console.log(`Server is running on port ${PORT}`);
     });
     startDatabaseScheduler();
+    startCreatorProfileRefreshJob();
     startMarketplaceCreatorDiscoveryJob();
   } catch (error) {
     console.error('Failed to start server:', error);

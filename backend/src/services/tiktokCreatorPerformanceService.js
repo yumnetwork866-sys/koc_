@@ -42,9 +42,11 @@ const MARKETPLACE_PROFILE_COOLDOWN_NAMESPACE = 'creator_marketplace_profile';
 const HOUR_MS = 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 const DEFAULT_CREATOR_PROFILE_TTL_MS = 24 * HOUR_MS;
-const DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS = MINUTE_MS;
+const DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS = 2 * MINUTE_MS;
 const runCreatorProfileMarketplaceRequest = createMarketplaceRequestGate({
-  minIntervalMs: DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
+  // The profile worker itself waits two minutes. The shared Marketplace gate
+  // leaves a one-minute slot for Discovery between profile requests.
+  minIntervalMs: MINUTE_MS,
 });
 
 const configuredCreatorProfileTtlMs = () => {
@@ -438,8 +440,7 @@ const applyCreatorProfile = (row, profile) => {
 };
 
 const creatorProfileNeedsRefresh = (row) => !row.avatar_url
-  || avatarUrlExpired(row.avatar_url)
-  || Number(row.followers) <= 0;
+  || avatarUrlExpired(row.avatar_url);
 
 const creatorProfileTtlExpired = (profile, {
   now = Date.now(),
@@ -458,17 +459,23 @@ const creatorProfileTtlExpired = (profile, {
 
 const selectCreatorProfileRefreshCandidates = (rows, storedProfiles, options = {}) => rows.filter((row) => {
   const storedProfile = storedProfiles.get(`username:${normalizeUsername(row.username)}`);
-  return creatorProfileNeedsRefresh(row) || creatorProfileTtlExpired(storedProfile, options);
+  const effectiveProfile = {
+    ...row,
+    avatar_url: storedProfile?.avatar_url || row.avatar_url,
+  };
+  return creatorProfileNeedsRefresh(effectiveProfile) || creatorProfileTtlExpired(storedProfile, options);
 });
 
 const enrichCreatorRows = async (shop, rows, {
   searchSamples = searchSellerSampleApplications,
   searchMarketplace = searchMarketplaceCreators,
+  marketplaceEnabled = true,
   refreshMarketplace = false,
   marketplaceOptions,
 } = {}) => {
   const sampleProfiles = await loadCreatorProfiles(shop, searchSamples).catch(() => new Map());
   for (const row of rows) applyCreatorProfile(row, sampleProfiles.get(normalizeUsername(row.username)));
+  if (!marketplaceEnabled) return rows;
   const missingUsernames = rows
     .filter((row) => creatorProfileNeedsRefresh(row)
       && (!row.avatar_url || Number(row.followers) <= 0 || refreshMarketplace))
@@ -656,17 +663,16 @@ const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependenc
 
 const refreshCreatorPerformanceProfiles = (shop, exportRecord, dependencies = {}) => {
   const shopKey = String(shop.id);
-  const previousRun = creatorProfileRefreshRuns.get(shopKey) || Promise.resolve();
-  const run = previousRun
-    .catch(() => {})
-    .then(async () => {
-      beginCreatorProfileRefresh(shop.id);
-      try {
-        return await runCreatorPerformanceProfileRefresh(shop, exportRecord, dependencies);
-      } finally {
-        endCreatorProfileRefresh(shop.id);
-      }
-    });
+  const existingRun = creatorProfileRefreshRuns.get(shopKey);
+  if (existingRun) return existingRun;
+  const run = (async () => {
+    beginCreatorProfileRefresh(shop.id);
+    try {
+      return await runCreatorPerformanceProfileRefresh(shop, exportRecord, dependencies);
+    } finally {
+      endCreatorProfileRefresh(shop.id);
+    }
+  })();
   const trackedRun = run.finally(() => {
     if (creatorProfileRefreshRuns.get(shopKey) === trackedRun) creatorProfileRefreshRuns.delete(shopKey);
   });
@@ -808,7 +814,14 @@ const processCreatorPerformanceExport = async (shop, exportRecord, {
           planType: exportRecord.plan_type,
           currency: REGION_CURRENCY[String(shop.region || '').toUpperCase()] || 'USD',
         });
-        await enrichCreatorRows(shop, rows, { searchSamples, searchMarketplace });
+        // Marketplace profiles are refreshed by the minute-based background worker.
+        // Export processing only uses the sample API so it cannot start a second
+        // long-running Marketplace refresh.
+        await enrichCreatorRows(shop, rows, {
+          searchSamples,
+          searchMarketplace,
+          marketplaceEnabled: false,
+        });
         await saveCreatorProfiles(shop.id, rows.filter(creatorRowHasFetchedProfile), 'performance');
         const sharedRows = await hydrateCreatorRows(shop.id, rows);
         rows.splice(0, rows.length, ...sharedRows);

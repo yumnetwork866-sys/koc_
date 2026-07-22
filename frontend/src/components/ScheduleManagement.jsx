@@ -10,10 +10,16 @@ import {
   Play,
   RefreshCw,
   Save,
+  Square,
   Trash2,
   XCircle,
 } from 'lucide-react';
-import { fetchSchedules, runScheduleNow, updateSchedule } from '../lib/api';
+import {
+  fetchSchedules,
+  runScheduleNow,
+  stopScheduleNow,
+  updateSchedule,
+} from '../lib/api';
 import { useI18n } from '../lib/language';
 
 const TIMEZONES = ['Asia/Ho_Chi_Minh', 'Asia/Kuala_Lumpur', 'Asia/Singapore', 'Asia/Bangkok', 'UTC'];
@@ -54,6 +60,7 @@ const ScheduleManagement = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [savingKey, setSavingKey] = useState('');
   const [runningKey, setRunningKey] = useState('');
+  const [stoppingKey, setStoppingKey] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -142,6 +149,20 @@ const ScheduleManagement = () => {
       setError(err.message || t('schedule.runError'));
     } finally {
       setRunningKey('');
+    }
+  };
+
+  const stopNow = async (schedule) => {
+    try {
+      setStoppingKey(schedule.job_key);
+      setError('');
+      await stopScheduleNow(schedule.job_key);
+      setNotice(t('schedule.stopped'));
+      await load(undefined, true);
+    } catch (err) {
+      setError(err.message || t('schedule.stopError'));
+    } finally {
+      setStoppingKey('');
     }
   };
 
@@ -271,7 +292,11 @@ const ScheduleManagement = () => {
 
                 <footer className="schedule-card__actions">
                   <button className="button schedule-action schedule-action--save" type="button" disabled={savingKey === schedule.job_key} onClick={() => save(schedule)}><Save aria-hidden="true" />{savingKey === schedule.job_key ? t('common.loading') : t('schedule.save')}</button>
-                  <button className="button button--ghost schedule-action" type="button" disabled={isRunning} onClick={() => runNow(schedule)}><Play aria-hidden="true" />{isRunning ? t('schedule.running') : t('schedule.runNow')}</button>
+                  {isRunning ? (
+                    <button className="button button--danger schedule-action" type="button" disabled={stoppingKey === schedule.job_key} onClick={() => stopNow(schedule)}><Square aria-hidden="true" />{stoppingKey === schedule.job_key ? t('schedule.stopping') : t('schedule.stop')}</button>
+                  ) : (
+                    <button className="button button--ghost schedule-action" type="button" disabled={runningKey === schedule.job_key} onClick={() => runNow(schedule)}><Play aria-hidden="true" />{t('schedule.runNow')}</button>
+                  )}
                 </footer>
               </article>
             );
@@ -285,7 +310,7 @@ const ScheduleManagement = () => {
             <div><h2>{t('schedule.logsTitle')}</h2><span>{t('schedule.logsCount', { count: filteredRuns.length })}</span></div>
             <div className="schedule-logs__filters">
               <label><span className="sr-only">{t('schedule.filterJob')}</span><select value={jobFilter} onChange={(event) => setJobFilter(event.target.value)}><option value="ALL">{t('schedule.allJobs')}</option>{schedules.map((schedule) => <option value={schedule.job_key} key={schedule.job_key}>{t(`schedule.jobs.${schedule.job_key}.name`)}</option>)}</select></label>
-              <label><span className="sr-only">{t('schedule.filterStatus')}</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">{t('schedule.allStatuses')}</option><option value="SUCCEEDED">{statusLabel('SUCCEEDED')}</option><option value="FAILED">{statusLabel('FAILED')}</option><option value="PROCESSING">{statusLabel('PROCESSING')}</option></select></label>
+              <label><span className="sr-only">{t('schedule.filterStatus')}</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">{t('schedule.allStatuses')}</option><option value="SUCCEEDED">{statusLabel('SUCCEEDED')}</option><option value="FAILED">{statusLabel('FAILED')}</option><option value="PROCESSING">{statusLabel('PROCESSING')}</option><option value="CANCELLED">{statusLabel('CANCELLED')}</option></select></label>
               <button className="button button--ghost schedule-logs__refresh" type="button" disabled={refreshing} onClick={() => load(undefined, true)}><RefreshCw className={refreshing ? 'is-spinning' : ''} aria-hidden="true" />{t('schedule.refresh')}</button>
             </div>
           </header>
