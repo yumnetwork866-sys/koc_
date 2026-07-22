@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Heart, MessageCircle, Share2 } from 'lucide-react';
 import { fetchChannels, fetchProducts, fetchVideos } from '../lib/api';
-import { getPlatformLabel } from '../lib/platforms';
 import { useI18n } from '../lib/language';
+
+const PAGE_SIZE = 20;
 
 const VideoTable = ({ heroTitle }) => {
   const { t, language } = useI18n();
@@ -11,8 +13,9 @@ const VideoTable = ({ heroTitle }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedChannelId, setSelectedChannelId] = useState('all');
+  const [selectedChannelId, setSelectedChannelId] = useState('');
   const [isChannelDropdownOpen, setIsChannelDropdownOpen] = useState(false);
+  const [page, setPage] = useState(1);
 
   const loadData = async (signal) => {
     const [loadedVideos, loadedChannels, loadedProducts] = await Promise.all([
@@ -24,6 +27,11 @@ const VideoTable = ({ heroTitle }) => {
     setVideos(loadedVideos);
     setChannels(loadedChannels);
     setProducts(loadedProducts);
+    setSelectedChannelId((current) => (
+      loadedChannels.some((channel) => String(channel.id) === current)
+        ? current
+        : String(loadedChannels[0]?.id || '')
+    ));
   };
 
   useEffect(() => {
@@ -62,10 +70,7 @@ const VideoTable = ({ heroTitle }) => {
   }, []);
 
   const filteredVideos = useMemo(() => {
-    if (selectedChannelId === 'all') {
-      return videos;
-    }
-
+    if (!selectedChannelId) return [];
     return videos.filter((video) => String(video.channel_id) === selectedChannelId);
   }, [videos, selectedChannelId]);
 
@@ -79,17 +84,23 @@ const VideoTable = ({ heroTitle }) => {
     }, { views: 0, likes: 0, comments: 0, shares: 0 });
   }, [filteredVideos]);
 
-  const selectedChannel = useMemo(() => {
-    if (selectedChannelId === 'all') {
-      return null;
-    }
+  const pageCount = Math.max(1, Math.ceil(filteredVideos.length / PAGE_SIZE));
+  const paginatedVideos = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredVideos.slice(start, start + PAGE_SIZE);
+  }, [filteredVideos, page]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [selectedChannelId]);
+
+  const selectedChannel = useMemo(() => {
     return channels.find((channel) => String(channel.id) === selectedChannelId) || null;
   }, [channels, selectedChannelId]);
 
   const selectedChannelLabel = selectedChannel
     ? selectedChannel.display_name || selectedChannel.username || t('videoLibrary.channel')
-    : t('videoLibrary.allChannels');
+    : t('videoLibrary.noChannels');
 
   return (
     <div className="page">
@@ -134,6 +145,7 @@ const VideoTable = ({ heroTitle }) => {
                 type="button"
                 aria-haspopup="listbox"
                 aria-expanded={isChannelDropdownOpen}
+                disabled={!channels.length}
                 onClick={() => setIsChannelDropdownOpen((current) => !current)}
               >
                 <span className="channel-picker__current">
@@ -156,22 +168,6 @@ const VideoTable = ({ heroTitle }) => {
 
               {isChannelDropdownOpen ? (
                 <div className="channel-picker__menu" role="listbox">
-                  <button
-                    className={`channel-picker__option ${selectedChannelId === 'all' ? 'channel-picker__option--active' : ''}`}
-                    type="button"
-                    role="option"
-                    aria-selected={selectedChannelId === 'all'}
-                    onClick={() => {
-                      setSelectedChannelId('all');
-                      setIsChannelDropdownOpen(false);
-                    }}
-                  >
-                    <span className="channel-picker__option-avatar channel-picker__option-avatar--empty" aria-hidden="true">*</span>
-                    <span className="channel-picker__option-meta">
-                      <span className="channel-picker__option-title">{t('videoLibrary.allChannels')}</span>
-                    </span>
-                  </button>
-
                   {channels.map((channel) => {
                     const isActive = String(channel.id) === selectedChannelId;
                     return (
@@ -211,17 +207,6 @@ const VideoTable = ({ heroTitle }) => {
               ) : null}
             </div>
           </div>
-          <div className="actions">
-            {selectedChannel ? (
-              <button
-                className="button button--ghost"
-                type="button"
-                onClick={() => setSelectedChannelId('all')}
-              >
-                {t('videoLibrary.clearFilter')}
-              </button>
-            ) : null}
-          </div>
         </div>
 
         <div className="table-wrap">
@@ -229,10 +214,7 @@ const VideoTable = ({ heroTitle }) => {
             <thead>
               <tr>
                 <th>{t('videoLibrary.videos')}</th>
-                <th>{t('videoLibrary.platform')}</th>
                 <th>{t('videoLibrary.channel')}</th>
-                <th>{t('videoLibrary.productsColumn')}</th>
-                <th>{t('videoLibrary.campaign')}</th>
                 <th className="cell-number">{t('videoLibrary.views')}</th>
                 <th className="cell-number">{t('videoLibrary.engagement')}</th>
                 <th className="cell-number">{t('videoLibrary.assignments')}</th>
@@ -241,7 +223,7 @@ const VideoTable = ({ heroTitle }) => {
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={8}>
+                  <td className="table-state-cell" colSpan={5}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('videoLibrary.loading')}</div>
@@ -249,7 +231,7 @@ const VideoTable = ({ heroTitle }) => {
                   </td>
                 </tr>
               ) : filteredVideos.length ? (
-                filteredVideos.map((video) => (
+                paginatedVideos.map((video) => (
                   <tr key={video.id}>
                     <td>
                       <div className="video-cell">
@@ -284,11 +266,9 @@ const VideoTable = ({ heroTitle }) => {
                         )}
                         <div className="video-cell__meta">
                           <span className="row-title">{video.title}</span>
-                          <span className="row-subtitle">{video.content_type || 'content'} | {video.platform_video_id}</span>
                         </div>
                       </div>
                     </td>
-                    <td><span className="chip">{getPlatformLabel(video.platform || 'tiktok')}</span></td>
                     <td>
                       <div className="channel-cell">
                         {video.channel?.avatar_url ? (
@@ -311,22 +291,29 @@ const VideoTable = ({ heroTitle }) => {
                         </div>
                       </div>
                     </td>
-                    <td>
-                      <div className="chip-row">
-                        {(video.products || []).map((product) => (
-                          <span className="chip" key={product.id}>{product.name}</span>
-                        ))}
+                    <td className="cell-number">{formatNumber(video.views)}</td>
+                    <td className="cell-number">
+                      <div className="video-engagement">
+                        <span title={t('videoLibrary.likes')} aria-label={`${t('videoLibrary.likes')}: ${formatNumber(video.likes)}`}>
+                          <Heart size={15} strokeWidth={1.8} aria-hidden="true" />
+                          {formatNumber(video.likes)}
+                        </span>
+                        <span title={t('videoLibrary.comments')} aria-label={`${t('videoLibrary.comments')}: ${formatNumber(video.comments)}`}>
+                          <MessageCircle size={15} strokeWidth={1.8} aria-hidden="true" />
+                          {formatNumber(video.comments)}
+                        </span>
+                        <span title={t('videoLibrary.shares')} aria-label={`${t('videoLibrary.shares')}: ${formatNumber(video.shares)}`}>
+                          <Share2 size={15} strokeWidth={1.8} aria-hidden="true" />
+                          {formatNumber(video.shares)}
+                        </span>
                       </div>
                     </td>
-                    <td>{video.campaign || '-'}</td>
-                    <td className="cell-number">{formatNumber(video.views)}</td>
-                    <td className="cell-number">{formatNumber(video.likes)} {t('videoLibrary.likes').toLowerCase()} | {formatNumber(video.comments)} {t('videoLibrary.comments')} | {formatNumber(video.shares)} {t('videoLibrary.shares').toLowerCase()}</td>
                     <td className="cell-number">{video.assignments?.length || 0}</td>
                   </tr>
                 ))
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={8}>
+                  <td className="table-state-cell" colSpan={5}>
                     <div className="empty-state empty-state--compact table-empty-state">
                       <div>{t('videoLibrary.noMatch')}</div>
                     </div>
@@ -336,6 +323,19 @@ const VideoTable = ({ heroTitle }) => {
             </tbody>
           </table>
         </div>
+        {filteredVideos.length > PAGE_SIZE ? (
+          <nav className="table-pagination" aria-label={t('videoLibrary.pagination')}>
+            <span>{t('videoLibrary.pageOf', { page, total: pageCount })}</span>
+            <div className="actions actions--inline">
+              <button className="button button--small button--ghost" type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
+                {t('common.previous')}
+              </button>
+              <button className="button button--small button--ghost" type="button" disabled={page >= pageCount} onClick={() => setPage((current) => current + 1)}>
+                {t('common.next')}
+              </button>
+            </div>
+          </nav>
+        ) : null}
       </section>
     </div>
   );

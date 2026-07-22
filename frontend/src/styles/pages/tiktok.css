@@ -330,6 +330,33 @@
   min-width: 0;
 }
 
+.video-engagement {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.video-engagement span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-default);
+  background: var(--color-surface-muted);
+  color: var(--color-text-soft);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.video-engagement svg {
+  color: var(--color-muted);
+}
+
 
 .channel-cell {
   display: flex;
