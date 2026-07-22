@@ -706,6 +706,7 @@
     "discoverMeta": "Tìm nhà sáng tạo trong TikTok Shop Creator Marketplace bằng tên người dùng.",
     "discoverPrompt": "Nhập tên người dùng nhà sáng tạo để bắt đầu khám phá.",
     "discoverSyncPending": "Nhà sáng tạo được thu thập bằng tác vụ nền mỗi phút. Kết quả đầu tiên sẽ sớm xuất hiện.",
+    "discoverSearchPending": "Đang xếp hàng tìm kiếm trên TikTok. Kết quả sẽ tự cập nhật sau lượt đồng bộ kế tiếp.",
     "performanceTitle": "Hiệu quả nhà sáng tạo",
     "performanceMeta": "Hiệu quả nhà sáng tạo từ TikTok Affiliate Compass theo đúng khoảng báo cáo.",
     "baseReport": "Báo cáo Base",

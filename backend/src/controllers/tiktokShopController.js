@@ -23,6 +23,7 @@ const {
 } = require('../services/tiktokShopService');
 const { loadShopAnalyticsPerformance } = require('../services/tiktokShopAnalyticsSyncService');
 const { addMarketplaceLocalCurrency } = require('../services/exchangeRateService');
+const { marketplaceSearchQueueService } = require('../services/tiktokMarketplaceSearchQueueService');
 const {
   createCreatorPerformanceExportWithFallback,
   createBasePerformanceExportWithFallback,
@@ -494,6 +495,9 @@ const listMarketplaceCreators = async (req, res) => {
       limit: pageSize,
       offset,
     });
+    const queuedSearch = keyword && count === 0
+      ? await marketplaceSearchQueueService.queueSearch(shop.id, keyword)
+      : null;
     const creatorIds = rows.map((row) => String(row.creator_open_id));
     const details = creatorIds.length ? await TikTokMarketplaceCreatorDetail.findAll({
       where: { shop_id: shop.id, creator_open_id: { [Op.in]: creatorIds } },
@@ -527,6 +531,9 @@ const listMarketplaceCreators = async (req, res) => {
       search_key: 'database',
       detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 },
       discovery_source: 'DATABASE',
+      search_pending: queuedSearch?.status === 'PENDING',
+      search_status: queuedSearch?.status || null,
+      search_poll_after_ms: queuedSearch?.status === 'PENDING' ? 60 * 1000 : 0,
       discovery_sync: state ? {
         status: state.last_status,
         last_requested_at: state.last_requested_at,

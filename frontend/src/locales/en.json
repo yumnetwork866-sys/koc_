@@ -706,6 +706,7 @@
     "discoverMeta": "Find creators in TikTok Shop Creator Marketplace by username.",
     "discoverPrompt": "Enter a creator username to start discovering.",
     "discoverSyncPending": "Creators are collected by the background job every minute. The first results will appear shortly.",
+    "discoverSearchPending": "The TikTok search is queued. Results will update automatically after the next sync slot.",
     "performanceTitle": "Creator Performance",
     "performanceMeta": "Creator metrics from TikTok Affiliate Compass for the selected report window.",
     "baseReport": "Base report",

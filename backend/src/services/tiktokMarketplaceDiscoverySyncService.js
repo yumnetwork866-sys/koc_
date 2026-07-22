@@ -15,6 +15,7 @@ const {
 const { createMarketplaceRequestGate } = require('./tiktokMarketplaceRequestGate');
 const { isCreatorProfileRefreshActive } = require('./tiktokMarketplaceWorkCoordinator');
 const { marketplaceCreatorDetailService } = require('./tiktokMarketplaceCreatorDetailService');
+const { marketplaceSearchQueueService } = require('./tiktokMarketplaceSearchQueueService');
 
 const MINUTE_MS = 60 * 1000;
 const runBackgroundMarketplaceRequest = createMarketplaceRequestGate({ minIntervalMs: MINUTE_MS });
@@ -30,6 +31,7 @@ const createMarketplaceDiscoverySyncService = ({
   persistCooldown = persistMarketplaceCooldown,
   profileRefreshActive = isCreatorProfileRefreshActive,
   queueCreatorDetails = (shop, creators) => marketplaceCreatorDetailService.enrichAndQueue(shop, creators),
+  searchQueue = marketplaceSearchQueueService,
   now = () => new Date(),
   logger = console,
 } = {}) => {
@@ -60,6 +62,8 @@ const createMarketplaceDiscoverySyncService = ({
     }
 
     const state = await StateModel.findByPk(shop.id);
+    const pendingSearch = await searchQueue.nextPendingSearch(shop.id);
+    const pendingKeyword = pendingSearch?.payload?.keyword || '';
     const requestedAt = now();
     await StateModel.upsert({
       shop_id: shop.id,
@@ -76,9 +80,10 @@ const createMarketplaceDiscoverySyncService = ({
       const payload = await runRequest(shop.id, () => searchMarketplace({
         authorization: shop.authorization,
         shopCipher: shop.cipher,
-        pageToken: state?.next_page_token || null,
+        pageToken: pendingKeyword ? null : (state?.next_page_token || null),
         pageSize: 50,
-        searchKey: state?.search_key || null,
+        keyword: pendingKeyword || null,
+        searchKey: pendingKeyword ? null : (state?.search_key || null),
       }));
       const creators = Array.isArray(payload.data?.creators) ? payload.data.creators : [];
       const seenAt = now();
@@ -105,11 +110,14 @@ const createMarketplaceDiscoverySyncService = ({
           });
         });
       }
-      const nextPageToken = payload.data?.next_page_token || null;
+      if (pendingSearch) await searchQueue.completeSearch(pendingSearch, rows.length);
+      const nextPageToken = pendingKeyword ? (state?.next_page_token || null) : (payload.data?.next_page_token || null);
       await StateModel.upsert({
         shop_id: shop.id,
         next_page_token: nextPageToken,
-        search_key: nextPageToken ? (payload.data?.search_key || state?.search_key || null) : null,
+        search_key: pendingKeyword
+          ? (state?.search_key || null)
+          : (nextPageToken ? (payload.data?.search_key || state?.search_key || null) : null),
         last_requested_at: requestedAt,
         last_succeeded_at: seenAt,
         last_status: 'SUCCEEDED',
@@ -125,6 +133,7 @@ const createMarketplaceDiscoverySyncService = ({
       return { skipped: false, creator_count: rows.length, has_next_page: Boolean(nextPageToken) };
     } catch (error) {
       const failedAt = now();
+      if (pendingSearch) await searchQueue.retrySearch(pendingSearch, error).catch(() => {});
       if (Number(error.tiktokCode) === 36009002) {
         await persistCooldown({
           shopId: shop.id,

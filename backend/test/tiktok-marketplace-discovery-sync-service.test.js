@@ -15,6 +15,11 @@ const marketplaceShop = () => ({
   cipher: 'shop-cipher',
   authorization: { granted_scopes: ['seller.creator_marketplace.read'] },
 });
+const emptySearchQueue = {
+  async nextPendingSearch() { return null; },
+  async completeSearch() {},
+  async retrySearch() {},
+};
 
 test('Marketplace Discovery job stores one page and advances its pagination state', async () => {
   const currentTime = new Date('2026-07-22T03:19:17.000Z');
@@ -48,6 +53,7 @@ test('Marketplace Discovery job stores one page and advances its pagination stat
     },
     runRequest: async (_shopId, operation) => operation(),
     queueCreatorDetails: async (shop, creators) => { detailQueues.push({ shop, creators }); },
+    searchQueue: emptySearchQueue,
     loadCooldown: async () => 0,
     now: () => new Date(currentTime),
     logger: { warn() {} },
@@ -75,6 +81,7 @@ test('Marketplace Discovery job claims each shop and minute only once across ins
     RunModel: { async findOrCreate() { return [{}, false]; } },
     searchMarketplace: async () => { searchCalls += 1; },
     now: () => new Date('2026-07-22T03:19:17.000Z'),
+    searchQueue: emptySearchQueue,
   });
 
   const result = await service.syncShop(marketplaceShop());
@@ -94,6 +101,7 @@ test('Marketplace Discovery yields its minute while Creator Performance refresh 
       },
     },
     profileRefreshActive: () => true,
+    searchQueue: emptySearchQueue,
     searchMarketplace: async () => { searchCalls += 1; },
     now: () => new Date('2026-07-22T03:19:17.000Z'),
   });
@@ -127,6 +135,7 @@ test('Marketplace Discovery job persists cooldown after TikTok rate limiting', a
     runRequest: async (_shopId, operation) => operation(),
     loadCooldown: async () => 0,
     persistCooldown: async (value) => { cooldowns.push(value); },
+    searchQueue: emptySearchQueue,
     now: () => new Date(currentTime),
     logger: { warn() {} },
   });
