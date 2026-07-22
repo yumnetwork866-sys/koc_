@@ -168,7 +168,6 @@ const Dashboard = ({ heroTitle }) => {
         <div className="section-card__header dashboard-chart-card__header">
           <div>
             <h2 className="section-card__title">{t('dashboard.videoPerformance')}</h2>
-            <p className="section-card__meta">{t('dashboard.videoPerformanceMeta')}</p>
           </div>
           <div className="dashboard-chart-filters">
             <div className="field dashboard-channel-filter">

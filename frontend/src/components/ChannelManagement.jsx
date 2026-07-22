@@ -7,7 +7,6 @@ import {
   syncChannelVideos,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
-import { getPlatformLabel } from '../lib/platforms';
 
 const ChannelManagement = ({ heroTitle }) => {
   const { t } = useI18n();
@@ -102,6 +101,33 @@ const ChannelManagement = ({ heroTitle }) => {
     const text = String(value || '').trim();
     return !text || text.startsWith('tiktok_') || text.startsWith('-');
   };
+
+  const renderChannelIdentity = (channel) => (
+    <>
+      {channel.avatar_url ? (
+        <img
+          className="channel-cell__avatar"
+          src={channel.avatar_url}
+          alt={channel.display_name || channel.username || 'Channel avatar'}
+        />
+      ) : (
+        <div className="channel-cell__avatar channel-cell__avatar--empty" aria-hidden="true">
+          {(channel.display_name || channel.username || channel.id || '?')
+            .toString()
+            .trim()
+            .charAt(0)
+            .toUpperCase()}
+        </div>
+      )}
+      <div className="channel-cell__meta">
+        <span className="row-title">{channel.display_name}</span>
+        {!isFallbackUsername(channel.username) ? <div className="row-subtitle">@{channel.username}</div> : null}
+        {channel.sync_source === 'oauth' && !channel.is_connected ? (
+          <div className="row-subtitle">{t('channel.disconnected')}</div>
+        ) : null}
+      </div>
+    </>
+  );
 
   const handleDeleteChannel = async (channel) => {
     const confirmed = window.confirm(t('channel.confirmDelete', { name: channel.display_name }));
@@ -220,17 +246,14 @@ const ChannelManagement = ({ heroTitle }) => {
             <thead>
               <tr>
                 <th>{t('channel.channelColumn')}</th>
-                <th>{t('channel.platformColumn')}</th>
-                <th>{t('channel.sourceColumn')}</th>
                 <th className="cell-number">{t('channel.videosColumn')}</th>
-                <th>{t('channel.profileColumn')}</th>
                 <th className="cell-actions">{t('channel.actionsColumn')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={6}>
+                  <td className="table-state-cell" colSpan={3}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('channel.loading')}</div>
@@ -241,37 +264,19 @@ const ChannelManagement = ({ heroTitle }) => {
                 channels.map((channel) => (
                   <tr key={channel.id}>
                     <td>
-                      <div className="channel-cell">
-                        {channel.avatar_url ? (
-                          <img
-                            className="channel-cell__avatar"
-                            src={channel.avatar_url}
-                            alt={channel.display_name || channel.username || 'Channel avatar'}
-                          />
-                        ) : (
-                          <div className="channel-cell__avatar channel-cell__avatar--empty" aria-hidden="true">
-                            {(channel.display_name || channel.username || channel.id || '?')
-                              .toString()
-                              .trim()
-                              .charAt(0)
-                              .toUpperCase()}
-                          </div>
-                        )}
-                        <div className="channel-cell__meta">
-                          <span className="row-title">{channel.display_name}</span>
-                          {!isFallbackUsername(channel.username) ? (
-                            <div className="row-subtitle">@{channel.username}</div>
-                          ) : null}
-                          {channel.sync_source === 'oauth' && !channel.is_connected ? (
-                            <div className="row-subtitle">{t('channel.disconnected')}</div>
-                          ) : null}
-                        </div>
-                      </div>
+                      {channel.profile_url ? (
+                        <a
+                          className="channel-cell channel-cell--link"
+                          href={channel.profile_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={t('channel.openProfile', { name: channel.display_name || channel.username })}
+                        >
+                          {renderChannelIdentity(channel)}
+                        </a>
+                      ) : <div className="channel-cell">{renderChannelIdentity(channel)}</div>}
                     </td>
-                    <td>{getPlatformLabel(channel.platform || 'tiktok')}</td>
-                    <td><span className="chip">{channel.sync_source}</span></td>
                     <td className="cell-number">{channel.videos?.length || 0}</td>
-                    <td>{channel.profile_url ? <a href={channel.profile_url}>{channel.profile_url}</a> : '-'}</td>
                     <td className="cell-actions">
                       <div className="action-menu">
                         <button
@@ -329,7 +334,7 @@ const ChannelManagement = ({ heroTitle }) => {
                 ))
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={6}>
+                  <td className="table-state-cell" colSpan={3}>
                     <div className="empty-state empty-state--compact table-empty-state">{t('channel.noData')}</div>
                   </td>
                 </tr>

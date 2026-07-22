@@ -96,7 +96,7 @@
     "offlineMessage": "You're offline. Reconnect to continue the conversation.",
     "unreadCount": "{{count}} unread assistant messages",
     "closeHint": "Close suggestion",
-    "quickPrompts": ["Summarize today", "Review KOC performance"]
+    "quickPrompts": ["Summarize today", "Review KOC bookings"]
   },
   "home": {
     "heroTitle": "Manage, review, and report",
@@ -441,7 +441,6 @@
     "video": "Video",
     "views": "Views",
     "videoPerformance": "Video performance",
-    "videoPerformanceMeta": "Compare video performance by channel and selected metric.",
     "metric": "Metric",
     "metric_views": "Views",
     "metric_date": "Publish date",
@@ -955,11 +954,9 @@
     "list": "Channel list",
     "loading": "Loading channels",
     "channelColumn": "Channel",
-    "platformColumn": "Platform",
-    "sourceColumn": "Source",
     "videosColumn": "Videos",
-    "profileColumn": "Profile",
     "actionsColumn": "Actions",
+    "openProfile": "Open {{name}} profile",
     "disconnected": "Disconnected",
     "syncVideo": "Sync video",
     "syncing": "Syncing",

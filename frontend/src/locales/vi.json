@@ -96,7 +96,7 @@
     "offlineMessage": "Bạn đang ngoại tuyến. Hãy kết nối lại để tiếp tục trò chuyện.",
     "unreadCount": "{{count}} tin nhắn chưa đọc từ trợ lý",
     "closeHint": "Đóng gợi ý",
-    "quickPrompts": ["Tóm tắt hôm nay", "Đánh giá hiệu quả KOC"]
+    "quickPrompts": ["Tóm tắt hôm nay", "Đánh giá KOC theo Booking"]
   },
   "home": {
     "heroTitle": "Quản lý, đánh giá và báo cáo",
@@ -436,7 +436,6 @@
     "video": "Video",
     "views": "Lượt xem",
     "videoPerformance": "Hiệu suất video",
-    "videoPerformanceMeta": "So sánh hiệu suất video theo channel và chỉ số đã chọn.",
     "metric": "Chỉ số",
     "metric_views": "Lượt xem",
     "metric_date": "Ngày đăng",
@@ -955,11 +954,9 @@
     "list": "Danh sách kênh",
     "loading": "Đang tải kênh",
     "channelColumn": "Channel",
-    "platformColumn": "Platform",
-    "sourceColumn": "Nguồn",
     "videosColumn": "Videos",
-    "profileColumn": "Profile",
     "actionsColumn": "Actions",
+    "openProfile": "Mở profile của {{name}}",
     "disconnected": "Disconnected",
     "syncVideo": "Sync video",
     "syncing": "Đang sync",
