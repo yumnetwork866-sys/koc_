@@ -697,6 +697,7 @@ const listCreatorPerformance = async (req, res) => {
         ...basePayload,
       });
     }
+    startCreatorProfileRefresh(shop, snapshotExport);
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
     const keyword = String(req.query.keyword || '').trim();

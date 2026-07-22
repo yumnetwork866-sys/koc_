@@ -9,15 +9,44 @@ const {
 const { runMarketplaceDiscoveryRequest } = require('./tiktokMarketplaceRequestGate');
 
 const HOUR_MS = 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
 const configuredTtlMs = Number(process.env.TIKTOK_MARKETPLACE_DETAIL_TTL_MS || 12 * HOUR_MS);
 const DEFAULT_TTL_MS = Math.min(24 * HOUR_MS, Math.max(6 * HOUR_MS, configuredTtlMs || 12 * HOUR_MS));
-const DEFAULT_INTERVAL_MS = Math.max(1000, Number(process.env.TIKTOK_MARKETPLACE_DETAIL_INTERVAL_MS) || 1000);
+const DEFAULT_INTERVAL_MS = Math.max(
+  MINUTE_MS,
+  Number(process.env.TIKTOK_MARKETPLACE_DETAIL_INTERVAL_MS) || MINUTE_MS,
+);
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = Math.max(
   60 * 1000,
   Number(process.env.TIKTOK_MARKETPLACE_DETAIL_RATE_LIMIT_COOLDOWN_MS) || DEFAULT_MARKETPLACE_COOLDOWN_MS,
 );
 
 const plainSnapshot = (snapshot) => typeof snapshot?.toJSON === 'function' ? snapshot.toJSON() : snapshot;
+
+const firstMetric = (detail, names) => names
+  .map((name) => detail?.[name])
+  .find((value) => value !== undefined && value !== null && value !== '');
+
+const normalizeMarketplaceCreatorDetail = (detail) => {
+  if (!detail || typeof detail !== 'object') return detail;
+  const unitsSold = firstMetric(detail, ['units_sold', 'items_sold']);
+  const avgVideoViews = firstMetric(detail, [
+    'avg_video_views',
+    'avg_ec_video_play_count',
+    'avg_ec_video_view_count',
+  ]);
+  const videoEngagementRate = firstMetric(detail, [
+    'video_engagement_rate',
+    'ec_video_engagement_rate',
+    'avg_ec_video_engagement_rate',
+  ]);
+  return {
+    ...detail,
+    ...(unitsSold !== undefined ? { units_sold: unitsSold } : {}),
+    ...(avgVideoViews !== undefined ? { avg_video_views: avgVideoViews } : {}),
+    ...(videoEngagementRate !== undefined ? { video_engagement_rate: videoEngagementRate } : {}),
+  };
+};
 
 const createMarketplaceCreatorDetailService = ({
   DetailModel = TikTokMarketplaceCreatorDetail,
@@ -27,7 +56,9 @@ const createMarketplaceCreatorDetailService = ({
   rateLimitCooldownMs = DEFAULT_RATE_LIMIT_COOLDOWN_MS,
   now = () => Date.now(),
   sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
-  schedule = (operation) => setImmediate(operation),
+  schedule = (operation, delayMs = 0) => (delayMs > 0
+    ? setTimeout(operation, delayMs)
+    : setImmediate(operation)),
   loadCooldown = loadMarketplaceCooldown,
   persistCooldown = persistMarketplaceCooldown,
   runRequest = runMarketplaceDiscoveryRequest,
@@ -42,6 +73,7 @@ const createMarketplaceCreatorDetailService = ({
         queue: [],
         queuedIds: new Set(),
         running: false,
+        retryScheduled: false,
         nextRequestAt: 0,
         cooldownUntil: 0,
       });
@@ -52,18 +84,26 @@ const createMarketplaceCreatorDetailService = ({
   const drain = async (shop, state) => {
     if (state.running) return;
     state.running = true;
+    const scheduleRetry = (cooldownUntil) => {
+      if (state.retryScheduled) return;
+      state.retryScheduled = true;
+      schedule(() => {
+        state.retryScheduled = false;
+        void drain(shop, state);
+      }, Math.max(0, cooldownUntil - now()));
+    };
     try {
       while (state.queue.length) {
         const persistedCooldownUntil = await loadCooldown(shop.id).catch(() => 0);
         if (persistedCooldownUntil > now()) {
           state.cooldownUntil = persistedCooldownUntil;
-          state.queue = [];
-          state.queuedIds.clear();
+          scheduleRetry(persistedCooldownUntil);
           break;
         }
         const waitUntil = Math.max(state.nextRequestAt, state.cooldownUntil);
         if (waitUntil > now()) await sleep(waitUntil - now());
         const job = state.queue.shift();
+        let retryJob = false;
         state.nextRequestAt = now() + intervalMs;
         try {
           const payload = await runRequest(shop.id, () => fetchDetail({
@@ -71,7 +111,7 @@ const createMarketplaceCreatorDetailService = ({
             shopCipher: shop.cipher,
             creatorId: job.creator_open_id,
           }));
-          const detail = payload?.data?.creator;
+          const detail = normalizeMarketplaceCreatorDetail(payload?.data?.creator);
           if (detail) {
             const fetchedAt = new Date(now());
             await DetailModel.upsert({
@@ -101,8 +141,9 @@ const createMarketplaceCreatorDetailService = ({
               creatorId: job.creator_open_id,
               cooldownUntil: new Date(state.cooldownUntil).toISOString(),
             });
-            state.queue = [];
-            state.queuedIds.clear();
+            retryJob = true;
+            state.queue.unshift(job);
+            scheduleRetry(state.cooldownUntil);
             break;
           } else {
             logger.warn('[Marketplace Creator Detail] Refresh failed', {
@@ -112,12 +153,12 @@ const createMarketplaceCreatorDetailService = ({
             });
           }
         } finally {
-          state.queuedIds.delete(job.creator_open_id);
+          if (!retryJob) state.queuedIds.delete(job.creator_open_id);
         }
       }
     } finally {
       state.running = false;
-      if (state.queue.length) schedule(() => drain(shop, state));
+      if (state.queue.length && !state.retryScheduled) schedule(() => drain(shop, state));
     }
   };
 
@@ -183,6 +224,7 @@ const marketplaceCreatorDetailService = createMarketplaceCreatorDetailService();
 module.exports = {
   createMarketplaceCreatorDetailService,
   marketplaceCreatorDetailService,
+  normalizeMarketplaceCreatorDetail,
   DEFAULT_TTL_MS,
   DEFAULT_INTERVAL_MS,
 };

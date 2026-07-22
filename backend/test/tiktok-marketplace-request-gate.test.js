@@ -30,8 +30,38 @@ test('Creator Discovery request gate waits for the shared shop slot', async () =
   assert.equal(queryLog[0].options.replacements.shopId, 7);
   assert.equal(
     queryLog[2].options.replacements.nextRequestAt.getTime(),
-    nextRequestAt.getTime() + 3000,
+    nextRequestAt.getTime() + 60_000,
   );
+});
+
+test('Creator Discovery request gate enforces at most one request per shop per minute', async () => {
+  let currentTime = Date.parse('2026-07-22T03:00:00.000Z');
+  let persistedNextRequestAt = null;
+  const calls = [];
+  const sequelizeInstance = {
+    async transaction(operation) { return operation({}); },
+    async query(sql, options) {
+      if (sql.includes('SELECT next_request_at')) {
+        return [[...(persistedNextRequestAt ? [{ next_request_at: persistedNextRequestAt }] : [])], {}];
+      }
+      if (sql.includes('INSERT INTO tiktok_marketplace_request_gates')) {
+        persistedNextRequestAt = options.replacements.nextRequestAt;
+      }
+      return [[], {}];
+    },
+  };
+  const gate = createMarketplaceRequestGate({
+    sequelizeInstance,
+    minIntervalMs: 1000,
+    now: () => currentTime,
+    sleep: async (milliseconds) => { currentTime += milliseconds; },
+  });
+
+  await gate(7, async () => { calls.push(currentTime); });
+  await gate(7, async () => { calls.push(currentTime); });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1] - calls[0], 60_000);
 });
 
 test('Creator Discovery request gate commits the slot before propagating an API error', async () => {

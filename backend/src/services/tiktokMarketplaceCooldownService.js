@@ -5,14 +5,19 @@ const { TikTokApiCooldown } = require('../models');
 const MARKETPLACE_COOLDOWN_NAMESPACE = 'creator_marketplace_discovery';
 const DEFAULT_MARKETPLACE_COOLDOWN_MS = Math.max(
   60 * 1000,
-  Number(process.env.TIKTOK_MARKETPLACE_RATE_LIMIT_COOLDOWN_MS) || 30 * 60 * 1000,
+  Number(process.env.TIKTOK_MARKETPLACE_RATE_LIMIT_COOLDOWN_MS) || 60 * 1000,
 );
 
 const loadMarketplaceCooldown = async (shopId, model = TikTokApiCooldown) => {
   const row = await model.findOne({
     where: { shop_id: shopId, namespace: MARKETPLACE_COOLDOWN_NAMESPACE },
   });
-  return row?.cooldown_until ? new Date(row.cooldown_until).getTime() : 0;
+  if (!row?.cooldown_until) return 0;
+  const persistedUntil = new Date(row.cooldown_until).getTime();
+  if (!row.updated_at) return persistedUntil;
+  const updatedAt = new Date(row.updated_at || 0).getTime();
+  if (!Number.isFinite(updatedAt)) return persistedUntil;
+  return Math.min(persistedUntil, updatedAt + DEFAULT_MARKETPLACE_COOLDOWN_MS);
 };
 
 const persistMarketplaceCooldown = async (

@@ -1,7 +1,22 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createMarketplaceCreatorDetailService } = require('../src/services/tiktokMarketplaceCreatorDetailService');
+const {
+  createMarketplaceCreatorDetailService,
+  normalizeMarketplaceCreatorDetail,
+} = require('../src/services/tiktokMarketplaceCreatorDetailService');
+
+test('normalizes TikTok marketplace detail metrics to stable application fields', () => {
+  const detail = normalizeMarketplaceCreatorDetail({
+    items_sold: 234,
+    avg_ec_video_play_count: 18000,
+    ec_video_engagement_rate: 72,
+  });
+
+  assert.equal(detail.units_sold, 234);
+  assert.equal(detail.avg_video_views, 18000);
+  assert.equal(detail.video_engagement_rate, 72);
+});
 
 test('marketplace detail snapshots enrich immediately and stale creators share a throttled queue', async () => {
   let currentTime = Date.parse('2026-07-21T10:00:00.000Z');
@@ -85,7 +100,7 @@ test('marketplace detail refresh is complete when every shared snapshot is fresh
   assert.equal(service.stateFor(7).queue.length, 0);
 });
 
-test('marketplace detail rate limits persist a shared cooldown and discard the remaining queue', async () => {
+test('marketplace detail rate limits persist a shared cooldown and retain the queue for retry', async () => {
   const now = Date.parse('2026-07-22T03:19:17.000Z');
   const fetched = [];
   const persisted = [];
@@ -120,8 +135,9 @@ test('marketplace detail rate limits persist a shared cooldown and discard the r
   assert.equal(persisted.length, 1);
   assert.equal(persisted[0].shopId, 7);
   assert.equal(persisted[0].reason, 'Too many requests for downstream.');
-  assert.equal(service.stateFor(shop.id).queue.length, 0);
-  assert.equal(service.stateFor(shop.id).queuedIds.size, 0);
+  assert.equal(service.stateFor(shop.id).queue.length, 3);
+  assert.equal(service.stateFor(shop.id).queuedIds.size, 3);
+  assert.equal(service.stateFor(shop.id).retryScheduled, true);
 });
 
 test('marketplace detail does not queue work while a persisted cooldown is active', async () => {

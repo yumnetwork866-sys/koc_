@@ -15,7 +15,9 @@ const {
   creatorRowHasFetchedProfile,
   creatorProfileTtlExpired,
   selectCreatorProfileRefreshCandidates,
+  runCreatorPerformanceProfileRefresh,
   DEFAULT_CREATOR_PROFILE_TTL_MS,
+  DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
   createCreatorPerformanceExportWithFallback,
 } = require('../src/services/tiktokCreatorPerformanceService');
 
@@ -236,6 +238,139 @@ test('complete creator profiles are refreshed after the 24-hour TTL', () => {
     new Map([['username:stale.creator', freshProfile]]),
     { now },
   ), []);
+});
+
+test('Creator Performance refresh requests one creator at a time with a one-minute gap', async () => {
+  const searches = [];
+  const waits = [];
+  const persisted = [];
+  const snapshotUpdates = [];
+  const rows = [
+    { username: 'first.creator', nickname: 'First', avatar_url: 'https://old.test/first.webp', followers: 10 },
+    { username: 'second.creator', nickname: 'Second', avatar_url: 'https://old.test/second.webp', followers: 20 },
+  ];
+  const SnapshotModel = {
+    async findAll() {
+      return rows.map((row) => ({ toJSON: () => ({
+        ...row,
+        shop_id: 7,
+        start_date: '2026-07-16',
+        end_date: '2026-07-22',
+        plan_type: 'ALL',
+      }) }));
+    },
+    async bulkCreate(profileRows) { snapshotUpdates.push(profileRows); },
+  };
+  const count = await runCreatorPerformanceProfileRefresh({
+    id: 7,
+    cipher: 'shop-cipher',
+    authorization: { granted_scopes: ['seller.creator_marketplace.read'] },
+  }, {
+    id: 12,
+    task_id: 'task-12',
+    start_date: '2026-07-16',
+    end_date: '2026-07-22',
+    plan_type: 'ALL',
+  }, {
+    SnapshotModel,
+    loadStoredProfiles: async () => new Map(),
+    saveProfiles: async (_shopId, profileRows) => persisted.push(profileRows.map((row) => row.username)),
+    hydrateProfiles: async (_shopId, profileRows) => profileRows,
+    searchMarketplace: async ({ keyword }) => {
+      searches.push(keyword);
+      return { data: { creators: [{
+        username: keyword,
+        nickname: `${keyword} updated`,
+        avatar_url: `https://new.test/${keyword}.webp`,
+      }] } };
+    },
+    marketplaceOptions: {
+      retryCount: 0,
+      requestGate: async (_shopId, operation) => operation(),
+    },
+    requestIntervalMs: DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
+    sleep: async (milliseconds) => { waits.push(milliseconds); },
+    logger: { info() {}, warn() {} },
+  });
+
+  assert.equal(count, 2);
+  assert.deepEqual(searches, ['first.creator', 'second.creator']);
+  assert.deepEqual(waits, [DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS]);
+  assert.deepEqual(persisted, [['first.creator'], ['second.creator']]);
+  assert.equal(snapshotUpdates.length, 2);
+});
+
+test('Creator Performance retries the same creator after one minute when TikTok rate-limits it', async () => {
+  let fakeNow = Date.parse('2026-07-22T04:00:00.000Z');
+  let searchCalls = 0;
+  const waits = [];
+  const persisted = [];
+  const cooldowns = new Map();
+  const shopCooldowns = new Map();
+  const wait = async (milliseconds) => {
+    waits.push(milliseconds);
+    fakeNow += milliseconds;
+  };
+  const SnapshotModel = {
+    async findAll() {
+      return [{ toJSON: () => ({
+        username: 'retry.creator',
+        avatar_url: null,
+        followers: 0,
+        shop_id: 7,
+        start_date: '2026-07-16',
+        end_date: '2026-07-22',
+        plan_type: 'ALL',
+      }) }];
+    },
+    async bulkCreate() {},
+  };
+
+  const count = await runCreatorPerformanceProfileRefresh({
+    id: 7,
+    cipher: 'shop-cipher',
+    authorization: { granted_scopes: ['seller.creator_marketplace.read'] },
+  }, {
+    id: 13,
+    task_id: 'task-13',
+    start_date: '2026-07-16',
+    end_date: '2026-07-22',
+    plan_type: 'ALL',
+  }, {
+    SnapshotModel,
+    loadStoredProfiles: async () => new Map(),
+    saveProfiles: async (_shopId, profileRows) => persisted.push(profileRows[0].username),
+    hydrateProfiles: async (_shopId, profileRows) => profileRows,
+    searchMarketplace: async ({ keyword }) => {
+      searchCalls += 1;
+      if (searchCalls === 1) {
+        const error = new Error('Too many requests for downstream.');
+        error.tiktokCode = 36009002;
+        throw error;
+      }
+      return { data: { creators: [{
+        username: keyword,
+        nickname: 'Retry Creator',
+        avatar_url: 'https://new.test/retry.creator.webp',
+      }] } };
+    },
+    marketplaceOptions: {
+      retryCount: 0,
+      cooldowns,
+      shopCooldowns,
+      now: () => fakeNow,
+      sleep: wait,
+      requestGate: async (_shopId, operation) => operation(),
+    },
+    now: () => fakeNow,
+    sleep: wait,
+    logger: { info() {}, warn() {} },
+  });
+
+  assert.equal(count, 1);
+  assert.equal(searchCalls, 2);
+  assert.deepEqual(waits, [DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS]);
+  assert.deepEqual(persisted, ['retry.creator']);
 });
 
 test('report rows without a fetched identity do not advance the profile refresh timestamp', () => {
@@ -524,4 +659,21 @@ test('Marketplace cooldown survives process memory through the persistent store'
   assert.equal(await loadPersistedMarketplaceCooldown(7, model), cooldownUntil);
   assert.equal(stored.shop_id, 7);
   assert.equal(stored.namespace, 'creator_marketplace_profile');
+});
+
+test('legacy 30-minute Creator Performance cooldown is capped at one minute', async () => {
+  const updatedAt = new Date('2026-07-22T04:00:00.000Z');
+  const model = {
+    async findOne() {
+      return {
+        cooldown_until: new Date(updatedAt.getTime() + 30 * 60_000),
+        updated_at: updatedAt,
+      };
+    },
+  };
+
+  assert.equal(
+    await loadPersistedMarketplaceCooldown(7, model),
+    updatedAt.getTime() + DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
+  );
 });

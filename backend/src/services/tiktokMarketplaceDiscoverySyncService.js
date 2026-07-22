@@ -13,6 +13,8 @@ const {
   persistMarketplaceCooldown,
 } = require('./tiktokMarketplaceCooldownService');
 const { createMarketplaceRequestGate } = require('./tiktokMarketplaceRequestGate');
+const { isCreatorProfileRefreshActive } = require('./tiktokMarketplaceWorkCoordinator');
+const { marketplaceCreatorDetailService } = require('./tiktokMarketplaceCreatorDetailService');
 
 const MINUTE_MS = 60 * 1000;
 const runBackgroundMarketplaceRequest = createMarketplaceRequestGate({ minIntervalMs: MINUTE_MS });
@@ -26,6 +28,8 @@ const createMarketplaceDiscoverySyncService = ({
   runRequest = runBackgroundMarketplaceRequest,
   loadCooldown = loadMarketplaceCooldown,
   persistCooldown = persistMarketplaceCooldown,
+  profileRefreshActive = isCreatorProfileRefreshActive,
+  queueCreatorDetails = (shop, creators) => marketplaceCreatorDetailService.enrichAndQueue(shop, creators),
   now = () => new Date(),
   logger = console,
 } = {}) => {
@@ -38,6 +42,9 @@ const createMarketplaceDiscoverySyncService = ({
   };
 
   const syncShop = async (shop, scheduledMinute = scheduledMinuteValue(now())) => {
+    if (profileRefreshActive(shop.id)) {
+      return { skipped: true, reason: 'creator_profile_refresh_active' };
+    }
     const run = await claimRun(shop, scheduledMinute);
     if (!run) return { skipped: true, reason: 'already_claimed' };
     const scopes = Array.isArray(shop.authorization?.granted_scopes) ? shop.authorization.granted_scopes : [];
@@ -90,6 +97,12 @@ const createMarketplaceDiscoverySyncService = ({
       if (rows.length) {
         await CreatorModel.bulkCreate(rows, {
           updateOnDuplicate: ['username', 'nickname', 'profile', 'last_seen_at', 'updated_at'],
+        });
+        await queueCreatorDetails(shop, rows.map((row) => row.profile)).catch((error) => {
+          logger.warn('[Marketplace Discovery] Could not queue creator details', {
+            shopId: shop.id,
+            message: error.message,
+          });
         });
       }
       const nextPageToken = payload.data?.next_page_token || null;

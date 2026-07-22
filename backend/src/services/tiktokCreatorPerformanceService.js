@@ -20,7 +20,14 @@ const {
   saveCreatorProfiles,
   hydrateCreatorRows,
 } = require('./tiktokCreatorProfileService');
-const { runMarketplaceDiscoveryRequest } = require('./tiktokMarketplaceRequestGate');
+const {
+  createMarketplaceRequestGate,
+  runMarketplaceDiscoveryRequest,
+} = require('./tiktokMarketplaceRequestGate');
+const {
+  beginCreatorProfileRefresh,
+  endCreatorProfileRefresh,
+} = require('./tiktokMarketplaceWorkCoordinator');
 
 const WINDOW_DAYS = { PAST_24H: 1, PAST_7_DAYS: 7, PAST_30_DAYS: 30 };
 const VALID_PLAN_TYPES = new Set(['ALL', 'TARGET', 'OPEN', 'PARTNER']);
@@ -33,23 +40,52 @@ const marketplaceShopCooldowns = new Map();
 const creatorProfileRefreshRuns = new Map();
 const MARKETPLACE_PROFILE_COOLDOWN_NAMESPACE = 'creator_marketplace_profile';
 const HOUR_MS = 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
 const DEFAULT_CREATOR_PROFILE_TTL_MS = 24 * HOUR_MS;
+const DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS = MINUTE_MS;
+const runCreatorProfileMarketplaceRequest = createMarketplaceRequestGate({
+  minIntervalMs: DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
+});
 
 const configuredCreatorProfileTtlMs = () => {
   const value = Number(process.env.TIKTOK_CREATOR_PROFILE_TTL_MS ?? DEFAULT_CREATOR_PROFILE_TTL_MS);
   return Number.isFinite(value) && value >= 0 ? value : DEFAULT_CREATOR_PROFILE_TTL_MS;
 };
 
-const configuredCreatorProfileBatchDelayMs = () => {
-  const value = Number(process.env.TIKTOK_CREATOR_PROFILE_BATCH_DELAY_MS ?? 60 * 1000);
-  return Number.isFinite(value) && value >= 0 ? value : 60 * 1000;
+const configuredCreatorProfileRequestIntervalMs = () => {
+  const value = Number(
+    process.env.TIKTOK_CREATOR_PROFILE_REQUEST_INTERVAL_MS
+      ?? process.env.TIKTOK_CREATOR_PROFILE_BATCH_DELAY_MS
+      ?? DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
+  );
+  return Number.isFinite(value)
+    ? Math.max(DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS, value)
+    : DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS;
+};
+
+const configuredCreatorProfileRateLimitCooldownMs = () => {
+  const value = Number(
+    process.env.TIKTOK_CREATOR_PROFILE_RATE_LIMIT_COOLDOWN_MS
+      ?? DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
+  );
+  return Number.isFinite(value)
+    ? Math.max(DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS, value)
+    : DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS;
 };
 
 const loadPersistedMarketplaceCooldown = async (shopId, model = TikTokApiCooldown) => {
   const row = await model.findOne({
     where: { shop_id: shopId, namespace: MARKETPLACE_PROFILE_COOLDOWN_NAMESPACE },
   });
-  return row?.cooldown_until ? new Date(row.cooldown_until).getTime() : 0;
+  if (!row?.cooldown_until) return 0;
+  const persistedUntil = new Date(row.cooldown_until).getTime();
+  if (!row.updated_at) return persistedUntil;
+  const updatedAt = new Date(row.updated_at || 0).getTime();
+  if (!Number.isFinite(updatedAt)) return persistedUntil;
+  return Math.min(
+    persistedUntil,
+    updatedAt + configuredCreatorProfileRateLimitCooldownMs(),
+  );
 };
 
 const persistMarketplaceCooldown = async ({ shopId, cooldownUntil, reason }, model = TikTokApiCooldown) => {
@@ -65,7 +101,7 @@ const persistMarketplaceCooldown = async ({ shopId, cooldownUntil, reason }, mod
 const prepareMarketplaceOptions = async (shop, searchMarketplace, options = {}) => {
   if (searchMarketplace !== searchMarketplaceCreators) return { coolingDown: false, options };
   const cooldownUntil = await loadPersistedMarketplaceCooldown(shop.id).catch(() => 0);
-  if (cooldownUntil > Date.now()) return { coolingDown: true, options };
+  if (cooldownUntil > Date.now()) return { coolingDown: true, cooldownUntil, options };
   return {
     coolingDown: false,
     options: {
@@ -272,7 +308,7 @@ const loadMarketplaceCreatorProfiles = async (
     concurrency = Number(process.env.TIKTOK_CREATOR_PROFILE_CONCURRENCY || 1),
     minIntervalMs = Number(process.env.TIKTOK_CREATOR_PROFILE_MIN_INTERVAL_MS || 2500),
     retryCount = Number(process.env.TIKTOK_CREATOR_PROFILE_RETRY_COUNT || 3),
-    rateLimitCooldownMs = Number(process.env.TIKTOK_CREATOR_PROFILE_RATE_LIMIT_COOLDOWN_MS || 30 * 60 * 1000),
+    rateLimitCooldownMs = configuredCreatorProfileRateLimitCooldownMs(),
     cooldowns = marketplaceProfileCooldowns,
     shopCooldowns = marketplaceShopCooldowns,
     now = () => Date.now(),
@@ -451,16 +487,31 @@ const enrichCreatorRows = async (shop, rows, {
 
 const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependencies = {}) => {
   const {
-    searchSamples = searchSellerSampleApplications,
     searchMarketplace = searchMarketplaceCreators,
     marketplaceOptions,
     profileTtlMs = configuredCreatorProfileTtlMs(),
-    batchSize: requestedBatchSize = Number(process.env.TIKTOK_CREATOR_PROFILE_BATCH_SIZE || 20),
-    batchDelayMs = configuredCreatorProfileBatchDelayMs(),
+    requestIntervalMs = configuredCreatorProfileRequestIntervalMs(),
+    profileRequestGate,
+    SnapshotModel = TikTokCreatorPerformanceSnapshot,
+    loadStoredProfiles = loadStoredCreatorProfiles,
+    saveProfiles = saveCreatorProfiles,
+    hydrateProfiles = hydrateCreatorRows,
     now = () => Date.now(),
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     logger = console,
   } = dependencies;
+  const normalizedRequestIntervalMs = Math.max(
+    DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
+    Number(requestIntervalMs) || DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
+  );
+  const effectiveProfileRequestGate = profileRequestGate
+    || (searchMarketplace === searchMarketplaceCreators
+      ? runCreatorProfileMarketplaceRequest
+      : async (_shopId, operation) => operation());
+  const currentTimestamp = () => {
+    const value = typeof now === 'function' ? Number(now()) : Number(now);
+    return Number.isFinite(value) ? value : Date.now();
+  };
   const startedAt = Date.now();
   logger?.info?.('[Creator Profile Refresh] Started', {
     shopId: shop.id,
@@ -470,8 +521,9 @@ const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependenc
     endDate: exportRecord.end_date,
     planType: exportRecord.plan_type,
     profileTtlMs,
+    requestIntervalMs: normalizedRequestIntervalMs,
   });
-  const snapshots = await TikTokCreatorPerformanceSnapshot.findAll({
+  const snapshots = await SnapshotModel.findAll({
     where: {
       shop_id: shop.id,
       start_date: exportRecord.start_date,
@@ -492,110 +544,104 @@ const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependenc
   const rows = snapshots.map((snapshot) => snapshot.toJSON());
   const persistRows = async (profileRows) => {
     if (!profileRows.length) return;
-    await saveCreatorProfiles(shop.id, profileRows, 'performance', { logger });
-    const sharedRows = await hydrateCreatorRows(shop.id, profileRows);
-    await TikTokCreatorPerformanceSnapshot.bulkCreate(sharedRows, {
+    await saveProfiles(shop.id, profileRows, 'performance', { logger });
+    const sharedRows = await hydrateProfiles(shop.id, profileRows);
+    await SnapshotModel.bulkCreate(sharedRows, {
       conflictAttributes: ['shop_id', 'username', 'start_date', 'end_date', 'plan_type'],
       updateOnDuplicate: ['nickname', 'avatar_url', 'creator_open_id', 'followers'],
     });
   };
   const refreshed = new Set();
-  const sampleProfiles = await loadCreatorProfiles(shop, searchSamples).catch(() => new Map());
-  const sampleRows = [];
-  for (const row of rows) {
-    const profile = sampleProfiles.get(normalizeUsername(row.username));
-    if (!profile) continue;
-    applyCreatorProfile(row, profile);
-    sampleRows.push(row);
-    refreshed.add(normalizeUsername(row.username));
-  }
-  await persistRows(sampleRows);
-  logger?.info?.('[Creator Profile Refresh] Sample Applications checked', {
-    shopId: shop.id,
-    exportId: exportRecord.id,
-    snapshotCount: rows.length,
-    matchedCount: sampleRows.length,
-  });
-
-  const storedProfiles = await loadStoredCreatorProfiles(shop.id, rows);
-  const currentTime = typeof now === 'function' ? Number(now()) : Number(now);
+  const storedProfiles = await loadStoredProfiles(shop.id, rows);
+  const currentTime = currentTimestamp();
   const candidates = selectCreatorProfileRefreshCandidates(rows, storedProfiles, {
     now: currentTime,
     ttlMs: profileTtlMs,
   });
-  const batchSize = Math.max(1, Math.min(50, Number(requestedBatchSize) || 20));
-  const normalizedBatchDelayMs = Math.max(0, Number(batchDelayMs) || 0);
-  const totalBatches = Math.ceil(candidates.length / batchSize);
   logger?.info?.('[Creator Profile Refresh] Marketplace candidates selected', {
     shopId: shop.id,
     exportId: exportRecord.id,
     candidateCount: candidates.length,
-    batchSize,
-    totalBatches,
-    batchDelayMs: normalizedBatchDelayMs,
+    requestsPerRun: candidates.length,
+    requestIntervalMs: normalizedRequestIntervalMs,
   });
-  for (let index = 0; index < candidates.length; index += batchSize) {
+  let index = 0;
+  while (index < candidates.length) {
     const preparedMarketplace = await prepareMarketplaceOptions(shop, searchMarketplace, marketplaceOptions);
-    const batchNumber = Math.floor(index / batchSize) + 1;
+    const requestNumber = index + 1;
     if (preparedMarketplace.coolingDown) {
-      logger?.warn?.('[Creator Profile Refresh] Marketplace batch skipped during cooldown', {
+      const retryInMs = Math.max(1000, Number(preparedMarketplace.cooldownUntil) - currentTimestamp());
+      logger?.warn?.('[Creator Profile Refresh] Waiting for Marketplace rate-limit cooldown', {
         shopId: shop.id,
         exportId: exportRecord.id,
-        batchNumber,
-        totalBatches,
+        requestNumber,
+        totalRequests: candidates.length,
+        cooldownUntil: new Date(preparedMarketplace.cooldownUntil).toISOString(),
+        retryInMs,
       });
-      break;
+      await sleep(retryInMs);
+      continue;
     }
-    const batch = candidates.slice(index, index + batchSize);
-    logger?.info?.('[Creator Profile Refresh] Marketplace batch started', {
+    const row = candidates[index];
+    logger?.info?.('[Creator Profile Refresh] Marketplace request started', {
       shopId: shop.id,
       exportId: exportRecord.id,
-      batchNumber,
-      totalBatches,
-      creatorCount: batch.length,
+      requestNumber,
+      totalRequests: candidates.length,
+      username: row.username,
     });
     const profiles = await loadMarketplaceCreatorProfiles(
       shop,
-      batch.map((row) => row.username),
+      [row.username],
       searchMarketplace,
-      { ...preparedMarketplace.options, concurrency: 1 },
+      {
+        ...preparedMarketplace.options,
+        concurrency: 1,
+        minIntervalMs: normalizedRequestIntervalMs,
+        rateLimitCooldownMs: normalizedRequestIntervalMs,
+        now: preparedMarketplace.options.now || now,
+        sleep: preparedMarketplace.options.sleep || sleep,
+        requestGate: preparedMarketplace.options.requestGate || effectiveProfileRequestGate,
+      },
     );
-    const enrichedRows = [];
-    for (const row of batch) {
-      const profile = profiles.get(normalizeUsername(row.username));
-      if (!profile) continue;
+    const profile = profiles.get(normalizeUsername(row.username));
+    if (profile) {
       applyCreatorProfile(row, profile);
-      enrichedRows.push(row);
       refreshed.add(normalizeUsername(row.username));
+      await persistRows([row]);
     }
-    await persistRows(enrichedRows);
-    logger?.info?.('[Creator Profile Refresh] Marketplace batch completed', {
+    const activeShopCooldowns = preparedMarketplace.options.shopCooldowns || marketplaceShopCooldowns;
+    const cooldownUntil = Number(activeShopCooldowns.get(String(shop.id)) || 0);
+    if (cooldownUntil > currentTimestamp()) {
+      const retryInMs = Math.max(1000, cooldownUntil - currentTimestamp());
+      logger?.warn?.('[Creator Profile Refresh] Rate-limited; retrying the same creator', {
+        shopId: shop.id,
+        exportId: exportRecord.id,
+        requestNumber,
+        username: row.username,
+        cooldownUntil: new Date(cooldownUntil).toISOString(),
+        retryInMs,
+      });
+      await sleep(retryInMs);
+      continue;
+    }
+    logger?.info?.('[Creator Profile Refresh] Marketplace request completed', {
       shopId: shop.id,
       exportId: exportRecord.id,
-      batchNumber,
-      totalBatches,
-      requestedCount: batch.length,
-      matchedCount: enrichedRows.length,
-      notFoundCount: batch.length - enrichedRows.length,
+      requestNumber,
+      totalRequests: candidates.length,
+      username: row.username,
+      matched: Boolean(profile),
     });
-    const cooldownUntil = Number(marketplaceShopCooldowns.get(String(shop.id)) || 0);
-    if (cooldownUntil > Date.now()) {
-      logger?.warn?.('[Creator Profile Refresh] Paused by Marketplace rate-limit cooldown', {
+    index += 1;
+    if (index < candidates.length) {
+      logger?.info?.('[Creator Profile Refresh] Waiting before next request', {
         shopId: shop.id,
         exportId: exportRecord.id,
-        batchNumber,
-        cooldownUntil: new Date(cooldownUntil).toISOString(),
+        nextRequestNumber: index + 1,
+        delayMs: normalizedRequestIntervalMs,
       });
-      break;
-    }
-    if (index + batchSize < candidates.length && normalizedBatchDelayMs > 0) {
-      logger?.info?.('[Creator Profile Refresh] Waiting before next batch', {
-        shopId: shop.id,
-        exportId: exportRecord.id,
-        nextBatchNumber: batchNumber + 1,
-        delayMs: normalizedBatchDelayMs,
-      });
-      await sleep(normalizedBatchDelayMs);
+      await sleep(normalizedRequestIntervalMs);
     }
   }
   logger?.info?.('[Creator Profile Refresh] Completed', {
@@ -613,7 +659,14 @@ const refreshCreatorPerformanceProfiles = (shop, exportRecord, dependencies = {}
   const previousRun = creatorProfileRefreshRuns.get(shopKey) || Promise.resolve();
   const run = previousRun
     .catch(() => {})
-    .then(() => runCreatorPerformanceProfileRefresh(shop, exportRecord, dependencies));
+    .then(async () => {
+      beginCreatorProfileRefresh(shop.id);
+      try {
+        return await runCreatorPerformanceProfileRefresh(shop, exportRecord, dependencies);
+      } finally {
+        endCreatorProfileRefresh(shop.id);
+      }
+    });
   const trackedRun = run.finally(() => {
     if (creatorProfileRefreshRuns.get(shopKey) === trackedRun) creatorProfileRefreshRuns.delete(shopKey);
   });
@@ -856,6 +909,8 @@ module.exports = {
   creatorProfileTtlExpired,
   selectCreatorProfileRefreshCandidates,
   enrichCreatorRows,
+  runCreatorPerformanceProfileRefresh,
   refreshCreatorPerformanceProfiles,
   DEFAULT_CREATOR_PROFILE_TTL_MS,
+  DEFAULT_CREATOR_PROFILE_REQUEST_INTERVAL_MS,
 };
