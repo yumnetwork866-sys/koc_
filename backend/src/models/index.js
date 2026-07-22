@@ -229,15 +229,22 @@ const TikTokCreatorPerformanceSnapshot = sequelize.define('TikTokCreatorPerforma
   video_gmv: DataTypes.DECIMAL(20, 4),
   product_card_gmv: DataTypes.DECIMAL(20, 4),
   affiliate_products_sold: DataTypes.INTEGER,
+  products_sold: DataTypes.BIGINT,
   items_sold: DataTypes.INTEGER,
   estimated_commission: DataTypes.DECIMAL(20, 4),
   estimated_flat_fee: DataTypes.DECIMAL(20, 4),
   average_order_value: DataTypes.DECIMAL(20, 4),
   product_showcase_count: DataTypes.INTEGER,
+  products_added_to_showcase: DataTypes.BIGINT,
+  total_sample_content: DataTypes.BIGINT,
+  samples_shipped: DataTypes.BIGINT,
   affiliate_orders: DataTypes.INTEGER,
   ctr: DataTypes.DECIMAL(12, 8),
+  ctor: DataTypes.DECIMAL(12, 8),
   product_impressions: DataTypes.BIGINT,
   average_affiliate_customers: DataTypes.DECIMAL(20, 4),
+  customers: DataTypes.BIGINT,
+  video_views: DataTypes.BIGINT,
   live_streams: DataTypes.INTEGER,
   shoppable_videos: DataTypes.INTEGER,
   target_gmv: DataTypes.DECIMAL(20, 4),
@@ -302,6 +309,62 @@ const TikTokMarketplaceCreatorDetail = sequelize.define('TikTokMarketplaceCreato
     { fields: ['shop_id', 'fetched_at'] },
   ],
 });
+
+const TikTokMarketplaceSearchSnapshot = sequelize.define('TikTokMarketplaceSearchSnapshot', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  cache_key: { type: DataTypes.STRING(64), allowNull: false },
+  payload: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+  fetched_at: { type: DataTypes.DATE, allowNull: false },
+  updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_marketplace_search_snapshots',
+  timestamps: false,
+  indexes: [
+    { unique: true, fields: ['shop_id', 'cache_key'] },
+    { fields: ['shop_id', 'fetched_at'] },
+  ],
+});
+
+const TikTokMarketplaceCreator = sequelize.define('TikTokMarketplaceCreator', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  creator_open_id: { type: DataTypes.STRING, allowNull: false },
+  username: DataTypes.STRING,
+  nickname: DataTypes.STRING,
+  profile: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+  first_seen_at: { type: DataTypes.DATE, allowNull: false },
+  last_seen_at: { type: DataTypes.DATE, allowNull: false },
+  updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_marketplace_creators',
+  timestamps: false,
+  indexes: [
+    { unique: true, fields: ['shop_id', 'creator_open_id'] },
+    { fields: ['shop_id', 'first_seen_at'] },
+  ],
+});
+
+const TikTokMarketplaceDiscoveryState = sequelize.define('TikTokMarketplaceDiscoveryState', {
+  shop_id: { type: DataTypes.INTEGER, primaryKey: true },
+  next_page_token: DataTypes.TEXT,
+  search_key: DataTypes.TEXT,
+  last_requested_at: DataTypes.DATE,
+  last_succeeded_at: DataTypes.DATE,
+  last_status: DataTypes.STRING(32),
+  last_error: DataTypes.TEXT,
+  updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, { tableName: 'tiktok_marketplace_discovery_states', timestamps: false });
+
+const TikTokMarketplaceDiscoveryRun = sequelize.define('TikTokMarketplaceDiscoveryRun', {
+  shop_id: { type: DataTypes.INTEGER, primaryKey: true },
+  scheduled_minute: { type: DataTypes.DATE, primaryKey: true },
+  status: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'PROCESSING' },
+  creator_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  error: DataTypes.TEXT,
+  started_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  completed_at: DataTypes.DATE,
+}, { tableName: 'tiktok_marketplace_discovery_runs', timestamps: false });
 
 const TikTokBasePerformanceSnapshot = sequelize.define('TikTokBasePerformanceSnapshot', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
@@ -960,6 +1023,14 @@ TikTokShop.hasMany(TikTokApiCooldown, { foreignKey: 'shop_id', as: 'api_cooldown
 TikTokApiCooldown.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokShop.hasMany(TikTokMarketplaceCreatorDetail, { foreignKey: 'shop_id', as: 'marketplace_creator_details' });
 TikTokMarketplaceCreatorDetail.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(TikTokMarketplaceSearchSnapshot, { foreignKey: 'shop_id', as: 'marketplace_search_snapshots' });
+TikTokMarketplaceSearchSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(TikTokMarketplaceCreator, { foreignKey: 'shop_id', as: 'marketplace_creators' });
+TikTokMarketplaceCreator.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasOne(TikTokMarketplaceDiscoveryState, { foreignKey: 'shop_id', as: 'marketplace_discovery_state' });
+TikTokMarketplaceDiscoveryState.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(TikTokMarketplaceDiscoveryRun, { foreignKey: 'shop_id', as: 'marketplace_discovery_runs' });
+TikTokMarketplaceDiscoveryRun.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokShop.hasMany(TikTokBasePerformanceSnapshot, { foreignKey: 'shop_id', as: 'base_performance_snapshots' });
 TikTokBasePerformanceSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokCreatorPerformanceExport.hasOne(TikTokBasePerformanceSnapshot, { foreignKey: 'export_id', as: 'base_snapshot' });
@@ -1011,6 +1082,10 @@ module.exports = {
   TikTokCreatorProfile,
   TikTokApiCooldown,
   TikTokMarketplaceCreatorDetail,
+  TikTokMarketplaceSearchSnapshot,
+  TikTokMarketplaceCreator,
+  TikTokMarketplaceDiscoveryState,
+  TikTokMarketplaceDiscoveryRun,
   TikTokBasePerformanceSnapshot,
   ScheduledJob,
   ScheduledJobRun,

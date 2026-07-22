@@ -28,6 +28,7 @@ const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
 const { requireAdmin } = require('./lib/session');
 const { getAdminAccount } = require('./lib/adminAccount');
 const { startDatabaseScheduler } = require('./services/scheduledJobService');
+const { startMarketplaceCreatorDiscoveryJob } = require('./jobs/scheduleMarketplaceCreatorDiscovery');
 
 const httpLogFormat = process.env.HTTP_LOG_FORMAT || ':method :url :status :response-time ms';
 
@@ -122,6 +123,7 @@ const startServer = async () => {
       console.log(`Server is running on port ${PORT}`);
     });
     startDatabaseScheduler();
+    startMarketplaceCreatorDiscoveryJob();
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

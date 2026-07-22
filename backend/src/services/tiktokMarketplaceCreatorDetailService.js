@@ -1,6 +1,12 @@
 const { Op } = require('sequelize');
 const { TikTokMarketplaceCreatorDetail } = require('../models');
 const { getMarketplaceCreatorPerformance } = require('./tiktokShopService');
+const {
+  DEFAULT_MARKETPLACE_COOLDOWN_MS,
+  loadMarketplaceCooldown,
+  persistMarketplaceCooldown,
+} = require('./tiktokMarketplaceCooldownService');
+const { runMarketplaceDiscoveryRequest } = require('./tiktokMarketplaceRequestGate');
 
 const HOUR_MS = 60 * 60 * 1000;
 const configuredTtlMs = Number(process.env.TIKTOK_MARKETPLACE_DETAIL_TTL_MS || 12 * HOUR_MS);
@@ -8,7 +14,7 @@ const DEFAULT_TTL_MS = Math.min(24 * HOUR_MS, Math.max(6 * HOUR_MS, configuredTt
 const DEFAULT_INTERVAL_MS = Math.max(1000, Number(process.env.TIKTOK_MARKETPLACE_DETAIL_INTERVAL_MS) || 1000);
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = Math.max(
   60 * 1000,
-  Number(process.env.TIKTOK_MARKETPLACE_DETAIL_RATE_LIMIT_COOLDOWN_MS) || 15 * 60 * 1000,
+  Number(process.env.TIKTOK_MARKETPLACE_DETAIL_RATE_LIMIT_COOLDOWN_MS) || DEFAULT_MARKETPLACE_COOLDOWN_MS,
 );
 
 const plainSnapshot = (snapshot) => typeof snapshot?.toJSON === 'function' ? snapshot.toJSON() : snapshot;
@@ -22,6 +28,9 @@ const createMarketplaceCreatorDetailService = ({
   now = () => Date.now(),
   sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
   schedule = (operation) => setImmediate(operation),
+  loadCooldown = loadMarketplaceCooldown,
+  persistCooldown = persistMarketplaceCooldown,
+  runRequest = runMarketplaceDiscoveryRequest,
   logger = console,
 } = {}) => {
   const shops = new Map();
@@ -45,16 +54,23 @@ const createMarketplaceCreatorDetailService = ({
     state.running = true;
     try {
       while (state.queue.length) {
+        const persistedCooldownUntil = await loadCooldown(shop.id).catch(() => 0);
+        if (persistedCooldownUntil > now()) {
+          state.cooldownUntil = persistedCooldownUntil;
+          state.queue = [];
+          state.queuedIds.clear();
+          break;
+        }
         const waitUntil = Math.max(state.nextRequestAt, state.cooldownUntil);
         if (waitUntil > now()) await sleep(waitUntil - now());
         const job = state.queue.shift();
         state.nextRequestAt = now() + intervalMs;
         try {
-          const payload = await fetchDetail({
+          const payload = await runRequest(shop.id, () => fetchDetail({
             authorization: shop.authorization,
             shopCipher: shop.cipher,
             creatorId: job.creator_open_id,
-          });
+          }));
           const detail = payload?.data?.creator;
           if (detail) {
             const fetchedAt = new Date(now());
@@ -70,11 +86,24 @@ const createMarketplaceCreatorDetailService = ({
         } catch (error) {
           if (Number(error?.tiktokCode) === 36009002) {
             state.cooldownUntil = now() + rateLimitCooldownMs;
+            await persistCooldown({
+              shopId: shop.id,
+              cooldownUntil: state.cooldownUntil,
+              reason: error.message,
+            }).catch((persistError) => {
+              logger.warn('[Marketplace Creator Detail] Could not persist cooldown', {
+                shopId: shop.id,
+                message: persistError.message,
+              });
+            });
             logger.warn('[Marketplace Creator Detail] Shop rate-limited', {
               shopId: shop.id,
               creatorId: job.creator_open_id,
               cooldownUntil: new Date(state.cooldownUntil).toISOString(),
             });
+            state.queue = [];
+            state.queuedIds.clear();
+            break;
           } else {
             logger.warn('[Marketplace Creator Detail] Refresh failed', {
               shopId: shop.id,
@@ -121,7 +150,9 @@ const createMarketplaceCreatorDetailService = ({
       const snapshot = snapshotById.get(String(creator.creator_open_id));
       return !snapshot || new Date(snapshot.fetched_at).getTime() < staleBefore;
     });
-    enqueue(shop, needsRefresh);
+    const cooldownUntil = await loadCooldown(shop.id).catch(() => 0);
+    const coolingDown = cooldownUntil > now();
+    if (!coolingDown) enqueue(shop, needsRefresh);
     return {
       creators: creators.map((creator) => {
         const snapshot = snapshotById.get(String(creator.creator_open_id));
@@ -133,9 +164,13 @@ const createMarketplaceCreatorDetailService = ({
         };
       }),
       detail_refresh: {
-        pending: needsRefresh.length > 0,
-        pending_count: needsRefresh.length,
-        poll_after_ms: needsRefresh.length ? 2000 : 0,
+        pending: !coolingDown && needsRefresh.length > 0,
+        pending_count: coolingDown ? 0 : needsRefresh.length,
+        poll_after_ms: !coolingDown && needsRefresh.length ? 2000 : 0,
+        ...(coolingDown ? {
+          cooling_down: true,
+          retry_after_ms: Math.max(0, cooldownUntil - now()),
+        } : {}),
       },
     };
   };

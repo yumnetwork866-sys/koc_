@@ -87,52 +87,33 @@ const normalizeAudienceLabel = (value) => String(value || '')
   .replace(/^(?:AGE_RANGE_|FOLLOWER_AGE_)/, '')
   .replace(/_/g, '-')
   .replace(/^([A-Z])([A-Z]+)$/i, (_, first, rest) => `${first.toUpperCase()}${rest.toLowerCase()}`);
-const creatorAudience = (creator) => {
+const creatorFollowerDemographics = (creator) => {
   const demographics = creator.follower_demographics || creator.follower_audience || {};
   const topDemographics = creator.top_follower_demographics || {};
   const gender = distributionWinner(
     creator.follower_gender_distribution || creator.gender_distribution || demographics.gender_distribution
       || creator.follower_gender || demographics.gender || topDemographics.major_gender,
-    ['gender', 'type', 'name'],
+    ['gender', 'type', 'name', 'key'],
   );
   const age = distributionWinner(
     creator.follower_age_distribution || creator.age_distribution || demographics.age_distribution
       || creator.follower_age_ranges || creator.follower_age || demographics.age_ranges || topDemographics.age_ranges,
-    ['age_range', 'range', 'type', 'name'],
+    ['age_range', 'range', 'type', 'name', 'key'],
   );
   const genderLabel = gender
     ? `${normalizeAudienceLabel(gender.label)}${gender.percentage === null ? '' : ` ${gender.percentage.toLocaleString('en-US', { maximumFractionDigits: 0 })}%`}`
     : '';
-  return [genderLabel, age ? normalizeAudienceLabel(age.label) : ''].filter(Boolean);
+  const ageLabel = age
+    ? `${normalizeAudienceLabel(age.label)}${age.percentage === null ? '' : ` ${age.percentage.toLocaleString('en-US', { maximumFractionDigits: 0 })}%`}`
+    : '';
+  return { gender: genderLabel, age: ageLabel };
 };
-const MarketplaceCreatorCell = ({ creator }) => {
+const MarketplaceCreatorCell = ({ creator, followerCount }) => {
   const level = creatorLevelLabel(creator);
   const categories = creatorCategoryLabels(creator);
-  const audience = creatorAudience(creator);
-  return <td className="marketplace-creator-cell"><div className="creator-identity marketplace-creator"><CreatorAvatar src={creator.avatar?.url || creator.avatar_url} name={creator.nickname || creator.username} /><span className="marketplace-creator__details"><span className="marketplace-creator__username">{creator.username || '—'}{level ? <span className="marketplace-creator__level">{level}</span> : null}</span><strong>{creator.nickname || creator.username || '—'}</strong>{categories.length ? <span className="marketplace-creator__category">{categories[0]}{categories.length > 1 ? `, +${categories.length - 1}` : ''}</span> : null}{audience.length ? <span className="marketplace-creator__audience">{audience.join(', ')}</span> : null}</span></div></td>;
-};
-const MarketplaceCreatorVideo = ({ creator }) => {
-  const video = [
-    creator.sample_video,
-    creator.representative_video,
-    creator.latest_video,
-    creator.video,
-    ...arrayValue(creator.sample_videos),
-    ...arrayValue(creator.videos),
-  ].find((value) => value && typeof value === 'object');
-  const coverUrl = video?.cover_image_url
-    || video?.cover?.url
-    || video?.cover_url
-    || video?.thumbnail_url
-    || video?.image?.url
-    || video?.image_url
-    || creator.sample_video_cover_url
-    || creator.video_cover_url;
-  const link = video?.share_url || video?.video_url || video?.url || creator.sample_video_url;
-  const href = /^https?:\/\//i.test(String(link || '')) ? link : '';
-  if (!coverUrl) return <td className="marketplace-creator-video-cell">—</td>;
-  const preview = <span className="marketplace-creator-video"><img src={coverUrl} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" /><span className="marketplace-creator-video__play" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m7.5 5 7 5-7 5z" /></svg></span></span>;
-  return <td className="marketplace-creator-video-cell">{href ? <a href={href} target="_blank" rel="noreferrer" aria-label={`${creator.nickname || creator.username || 'Creator'} video`}>{preview}</a> : preview}</td>;
+  const demographics = creatorFollowerDemographics(creator);
+  const audience = [followerCount, demographics.gender, demographics.age].filter((value) => value && value !== '—');
+  return <td className="marketplace-creator-cell"><div className="creator-identity marketplace-creator"><CreatorAvatar src={creator.avatar?.url || creator.avatar_url} name={creator.nickname || creator.username} /><span className="marketplace-creator__details"><span className="marketplace-creator__username">{creator.username || '—'}{level ? <span className="marketplace-creator__level">{level}</span> : null}</span><strong>{creator.nickname || creator.username || '—'}</strong>{categories.length ? <span className="marketplace-creator__category">{categories[0]}{categories.length > 1 ? `, +${categories.length - 1}` : ''}</span> : null}{audience.length ? <span className="marketplace-creator__audience">{audience.join(' · ')}</span> : null}</span></div></td>;
 };
 const formatReportDate = (value) => {
   const match = String(value || '').slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -216,7 +197,12 @@ const SellerAffiliatePanel = () => {
     // searchVersion intentionally participates in this request so submitting the
     // same keyword again refreshes Marketplace data and creator details.
     void searchVersion;
-    if (!shopId || !hasScope || (section === 'discover' && !hasMarketplaceScope)) { setData({}); setSettings(null); return; }
+    if (!shopId || !hasScope || (section === 'discover' && !hasMarketplaceScope)) {
+      setData({});
+      setSettings(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -433,8 +419,9 @@ const SellerAffiliatePanel = () => {
       const prefix = money.currency === 'MYR' ? 'RM' : money.currency === 'USD' ? 'US$' : `${money.currency || ''} `;
       return `${prefix}${formatCompactNumber(money.amount)}`;
     }
-    return creator.gmv_range?.formatted_range
-      ? creator.gmv_range.formatted_range.replace(/US\$|USD|\$/g, 'RM')
+    const range = creator.local_gmv_range || creator.gmv_range;
+    return range?.formatted_range
+      ? range.formatted_range
       : '—';
   };
   const formatCreatorCount = (creator, names) => {
@@ -474,6 +461,36 @@ const SellerAffiliatePanel = () => {
     return `${minimum.toLocaleString(locale, { maximumFractionDigits: 2 })}%–${maximum.toLocaleString(locale, { maximumFractionDigits: 2 })}%`;
   };
   const performanceCreatorCell = (row) => <td><div className="creator-identity"><CreatorAvatar src={row.avatar_url} name={row.nickname || row.username} /><span><strong>{row.nickname || row.username}</strong><span className="row-subtitle">@{row.username}</span></span></div></td>;
+  const renderPerformanceMetric = (row, sourceHeaders, formatter) => {
+    const rawMetrics = row.raw_metrics || {};
+    return sourceHeaders.some((header) => Object.prototype.hasOwnProperty.call(rawMetrics, header))
+      ? formatter()
+      : '—';
+  };
+  const performanceColumns = [
+    {
+      key: 'creatorName',
+      render: (row) => <div className="creator-identity"><CreatorAvatar src={row.avatar_url} name={row.nickname || row.username} /><span><strong>{row.nickname || row.username}</strong><span className="row-subtitle">@{row.username}</span></span></div>,
+    },
+    { key: 'creatorAttributedGmv', numeric: true, render: (row) => renderPerformanceMetric(row, ['Affiliate GMV', 'Creator-attributed GMV'], () => formatMoney({ amount: row.affiliate_gmv, currency: row.currency })) },
+    { key: 'refunds', numeric: true, render: (row) => renderPerformanceMetric(row, ['Affiliate refunded GMV', 'Refunds'], () => formatMoney({ amount: row.refunded_gmv, currency: row.currency })) },
+    { key: 'attributedOrders', numeric: true, render: (row) => renderPerformanceMetric(row, ['Affiliate orders', 'Attributed orders'], () => formatNumber(row.affiliate_orders)) },
+    { key: 'creatorAttributedItemsSold', numeric: true, render: (row) => renderPerformanceMetric(row, ['Items sold', 'Creator-attributed items sold'], () => formatNumber(row.items_sold)) },
+    { key: 'itemsRefunded', numeric: true, render: (row) => renderPerformanceMetric(row, ['Affiliate items refunded', 'Items refunded'], () => formatNumber(row.items_refunded)) },
+    { key: 'aov', numeric: true, render: (row) => renderPerformanceMetric(row, ['Avg. order value', 'AOV'], () => formatMoney({ amount: row.average_order_value, currency: row.currency })) },
+    { key: 'liveStreams', numeric: true, render: (row) => renderPerformanceMetric(row, ['Affiliate LIVE streams', 'LIVE streams'], () => formatNumber(row.live_streams)) },
+    { key: 'videos', numeric: true, render: (row) => renderPerformanceMetric(row, ['Affiliate shoppable videos', 'Videos'], () => formatNumber(row.shoppable_videos)) },
+    { key: 'samplesShipped', numeric: true, render: (row) => renderPerformanceMetric(row, ['Samples shipped'], () => formatNumber(row.samples_shipped)) },
+    { key: 'estimatedCommission', numeric: true, render: (row) => renderPerformanceMetric(row, ['Est. commission'], () => formatMoney({ amount: row.estimated_commission, currency: row.currency })) },
+  ];
+  const tableColumnCount = {
+    open: 4,
+    target: 5,
+    discover: 5,
+    performance: performanceColumns.length,
+    creators: 7,
+    orders: 4,
+  }[section] || 1;
   const baseSnapshot = data.base_snapshot;
   const baseMetrics = baseSnapshot ? [
     ['creatorGmv', formatMoney({ amount: baseSnapshot.creator_attributed_gmv, currency: baseSnapshot.currency })],
@@ -560,11 +577,31 @@ const SellerAffiliatePanel = () => {
         {section === 'performance' && performanceBreakdown.length ? <section className="section-card seller-creator-breakdown"><div className="section-card__header"><div><h2 className="section-card__title">{t('sellerAffiliate.performanceChartTitle')}</h2><p className="section-card__meta">{t('sellerAffiliate.performanceChartMeta')}</p></div></div><div className="seller-creator-breakdown__body"><div className="seller-creator-breakdown__chart"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={performanceBreakdown} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="82%" paddingAngle={2}>{performanceBreakdown.map((item, index) => <Cell key={item.name} fill={BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]} />)}</Pie><Tooltip formatter={(value) => formatMoney({ amount: value, currency: rows[0]?.currency || 'MYR' })} /></PieChart></ResponsiveContainer><div className="seller-creator-breakdown__center"><strong>{formatMoney({ amount: performanceBreakdownTotal, currency: rows[0]?.currency || 'MYR' })}</strong><span>{t('sellerAffiliate.top10Gmv')}</span></div></div><div className="seller-creator-breakdown__legend">{performanceBreakdown.map((item, index) => <div key={item.name}><i style={{ background: BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length] }} /><span>{item.name}</span><strong>{formatMoney({ amount: item.value, currency: rows[0]?.currency || 'MYR' })}</strong></div>)}</div></div></section> : null}
         {section === 'creators' ? <section className="section-card seller-creator-breakdown"><div className="section-card__header"><div><h2 className="section-card__title">{t('sellerAffiliate.breakdownTitle')}</h2><p className="section-card__meta">{t('sellerAffiliate.breakdownMeta')}</p></div><div className="field seller-creator-breakdown__select"><label htmlFor="creator-breakdown-metric">{t('sellerAffiliate.metric')}</label><select id="creator-breakdown-metric" value={creatorBreakdownMetric} onChange={(event) => setCreatorBreakdownMetric(event.target.value)}><option value="gmv">{t('sellerAffiliate.creatorGmv')}</option><option value="samplesShipped">{t('sellerAffiliate.samplesShipped')}</option><option value="postedContent">{t('sellerAffiliate.creatorsPosted')}</option><option value="withSales">{t('sellerAffiliate.creatorsWithSales')}</option></select></div></div>{creatorBreakdown.length ? <div className="seller-creator-breakdown__body"><div className="seller-creator-breakdown__chart"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={creatorBreakdown} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="82%" paddingAngle={2}>{creatorBreakdown.map((item, index) => <Cell key={item.name} fill={BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length]} />)}</Pie><Tooltip formatter={(value) => creatorBreakdownMetric === 'gmv' ? formatMoney({ amount: value, currency: creatorBreakdownCurrency }) : formatNumber(value)} /></PieChart></ResponsiveContainer><div className="seller-creator-breakdown__center"><strong>{creatorBreakdownMetric === 'gmv' ? formatMoney({ amount: creatorBreakdownTotal, currency: creatorBreakdownCurrency }) : formatNumber(creatorBreakdownTotal)}</strong><span>{t(`sellerAffiliate.breakdown_${creatorBreakdownMetric}`)}</span></div></div><div className="seller-creator-breakdown__legend">{creatorBreakdown.slice(0, 8).map((item, index) => <div key={item.name}><i style={{ background: BREAKDOWN_COLORS[index % BREAKDOWN_COLORS.length] }} /><span>{item.name}</span><strong>{creatorBreakdownMetric === 'gmv' ? formatMoney({ amount: item.value, currency: creatorBreakdownCurrency }) : formatNumber(item.value)}</strong></div>)}</div></div> : <div className="empty-state">{t('sellerAffiliate.noData')}</div>}</section> : null}
         {section === 'open' && openCollaborationSettings ? <section className="seller-affiliate__summary"><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.autoAdd')}</p><p className="stat-card__value seller-affiliate__setting-value">{openCollaborationSettings.auto_add_product?.enable ? t('common.yes') : t('common.no')}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.defaultCommission')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatRate(openCollaborationSettings.auto_add_product?.commission_rate)}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.total')}</p><p className="stat-card__value seller-affiliate__setting-value">{formatNumber(data.total_count)}</p></article></section> : null}
-        {section !== 'discover' || hasMarketplaceScope ? <section className="section-card">
+        {section === 'performance' ? <section className="section-card">
+          <div className="section-card__header"><div><h2 className="section-card__title">{t('sellerAffiliate.performanceTitle')}</h2><p className="section-card__meta">{t('sellerAffiliate.performanceMeta')}</p></div><span className="chip">{formatNumber(data.total_count ?? rows.length)}</span></div>
+          <div className="table-wrap seller-affiliate__performance-table-wrap"><table className="data-table seller-affiliate__table seller-affiliate__table--performance">
+            <thead><tr>{performanceColumns.map((column) => <th className={column.numeric ? 'cell-number' : undefined} key={column.key}>{t(`sellerAffiliate.${column.key}`)}</th>)}</tr></thead>
+            <tbody>
+              {loading ? <tr><td colSpan={tableColumnCount}><div className="empty-state"><span className="loading-dot" />{t('common.loading')}</div></td></tr> : rows.length ? rows.map((row, index) => <tr key={row.id || index}>{performanceColumns.map((column) => <td className={column.numeric ? 'cell-number' : undefined} key={column.key}>{column.render(row)}</td>)}</tr>) : <tr><td colSpan={tableColumnCount}><div className="empty-state">{t('sellerAffiliate.noData')}</div></td></tr>}
+            </tbody>
+          </table></div>
+          <nav className="seller-affiliate__pagination" aria-label={t('sellerAffiliate.page', { page: pageTokens.length + 1 })}>
+            <button className="button button--ghost seller-affiliate__pagination-button" type="button" disabled={!pageTokens.length || loading} onClick={() => setPageTokens((tokens) => tokens.slice(0, -1))}>
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m12.5 15-5-5 5-5" /></svg>
+              {t('common.previous')}
+            </button>
+            <span className="seller-affiliate__page-number" aria-current="page">{t('sellerAffiliate.page', { page: pageTokens.length + 1 })}</span>
+            <button className="button button--ghost seller-affiliate__pagination-button" type="button" disabled={!nextPageToken || loading} onClick={() => setPageTokens((tokens) => [...tokens, nextPageToken])}>
+              {t('common.next')}
+              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m7.5 5 5 5-5 5" /></svg>
+            </button>
+          </nav>
+        </section> : null}
+        {section !== 'performance' && (section !== 'discover' || hasMarketplaceScope) ? <section className="section-card">
           <div className="section-card__header"><div><h2 className="section-card__title">{t(`sellerAffiliate.${section}Title`)}</h2>{section !== 'target' ? <p className="section-card__meta">{t(`sellerAffiliate.${section}Meta`)}</p> : null}</div><span className="chip">{formatNumber(data.total_count ?? rows.length)}</span></div>
-          <div className="table-wrap"><table className="data-table seller-affiliate__table"><thead><tr>{section === 'open' ? <><th>{t('sellerAffiliate.product')}</th><th>{t('sellerAffiliate.commission')}</th><th>{t('sellerAffiliate.creators')}</th><th>{t('sellerAffiliate.status')}</th></> : section === 'target' ? <><th>{t('sellerAffiliate.invitation')}</th><th>{t('sellerAffiliate.products')}</th><th>{t('sellerAffiliate.creators')}</th><th>{t('sellerAffiliate.validity')}</th><th>{t('sellerAffiliate.status')}</th></> : section === 'discover' ? <><th>{t('sellerAffiliate.creator')}</th><th>{t('sellerAffiliate.video')}</th><th>{t('sellerAffiliate.creatorGmv30')}</th><th>{t('sellerAffiliate.itemsSold')}</th><th>{t('sellerAffiliate.avgVideoViews')}</th><th>{t('sellerAffiliate.engagementRate')}</th></> : section === 'performance' ? <><th>{t('sellerAffiliate.creator')}</th><th>{t('sellerAffiliate.creatorGmv')}</th><th>{t('sellerAffiliate.affiliateOrders')}</th><th>{t('sellerAffiliate.itemsSold')}</th><th>{t('sellerAffiliate.productImpressions')}</th><th>{t('sellerAffiliate.refundedGmv')}</th><th>{t('sellerAffiliate.followers')}</th></> : section === 'creators' ? <><th>{t('sellerAffiliate.creator')}</th><th>{t('sellerAffiliate.followers')}</th><th>{t('sellerAffiliate.creatorGmv30')}</th><th>{t('sellerAffiliate.content')}</th><th>{t('sellerAffiliate.fulfillment')}</th><th>{t('sellerAffiliate.status')}</th><th>{t('sellerAffiliate.actions')}</th></> : <><th>{t('sellerAffiliate.order')}</th><th>{t('sellerAffiliate.product')}</th><th>{t('sellerAffiliate.program')}</th><th>{t('sellerAffiliate.createdAt')}</th></>}</tr></thead><tbody>
-            {loading ? <tr><td colSpan={section === 'discover' ? 6 : 7}><div className="empty-state"><span className="loading-dot" />{t('common.loading')}</div></td></tr> : section !== 'discover' && rows.length ? rows.map((row, index) => section === 'open' ? <tr key={row.id || index}><td><div className="seller-affiliate__product">{row.product?.main_image_url ? <img src={row.product.main_image_url} alt="" loading="lazy" /> : null}<div><strong>{row.product?.title || row.product?.id || row.id}</strong><span>{row.product?.id}</span></div></div></td><td>{formatRate(row.current_commission?.rate ?? row.commission_rate)}</td><td>{formatNumber(row.showcase_creator_count)} / {formatNumber(row.content_creator_count)}</td><td><span className="chip">{formatStatus(row.status, t)}</span></td></tr> : section === 'target' ? <tr key={row.id || index}><td><strong>{row.name || row.id}</strong><span className="row-subtitle">{row.id}</span><div className="target-collaboration__creators">{(row.creators || []).slice(0, 3).map((creator, creatorIndex) => <div className="creator-identity" key={creator.creator_open_id || creator.user_id || creator.username || creatorIndex}><CreatorAvatar src={creator.avatar?.url || creator.avatar_url} name={creator.nickname || creator.username} /><span><strong>{creator.nickname || creator.username || '—'}</strong><span className="row-subtitle">{creator.username ? `@${creator.username.replace(/^@/, '')}` : '—'}</span></span></div>)}{row.creators?.length > 3 ? <span className="target-collaboration__more">+{formatNumber(row.creators.length - 3)}</span> : null}</div></td><td>{formatNumber(row.products?.length ?? row.product_count)}</td><td>{formatNumber(row.showcase_creator_count)} / {formatNumber(row.content_creator_count)}</td><td>{formatTime(row.end_time)}</td><td><span className="chip">{formatStatus(row.status || row.collaboration_status, t)}</span></td></tr> : section === 'performance' ? <tr key={row.id || index}>{performanceCreatorCell(row)}<td>{formatMoney({ amount: row.affiliate_gmv, currency: row.currency })}</td><td>{formatNumber(row.affiliate_orders)}</td><td>{formatNumber(row.items_sold)}</td><td>{formatNumber(row.product_impressions)}</td><td>{formatMoney({ amount: row.refunded_gmv, currency: row.currency })}</td><td>{formatNumber(row.followers)}</td></tr> : section === 'creators' ? <tr key={row.id || index}><td><div className="creator-identity"><CreatorAvatar src={row.creator?.avatar_url} name={row.creator?.nickname || row.creator?.username} /><span><strong>{row.creator?.nickname || row.creator?.username || '—'}</strong><span className="row-subtitle">{row.creator?.username ? `@${row.creator.username.replace(/^@/, '')}` : row.creator?.user_id}</span></span></div></td><td>{formatNumber(row.creator?.follower_count)}</td><td>{formatMoney(row.creator?.gmv)}</td><td>{formatNumber(row.creator?.content_count)}<span className="row-subtitle">{formatNumber(row.creator?.ec_video_view)} {t('common.views')}</span></td><td>{row.creator?.fulfillment_percentage ? `${row.creator.fulfillment_percentage}%` : formatStatus(row.fulfillment_status, t)}</td><td><span className="chip">{formatStatus(row.status, t)}</span></td><td><button className="button button--small button--ghost" type="button" onClick={() => openCreatorDetail(row)}>{t('sellerAffiliate.view')}</button></td></tr> : <tr key={row.order_id || row.id || index}><td><strong>{row.order_id || row.id}</strong></td><td><AffiliateOrderProducts row={row} /></td><td><AffiliateOrderPrograms row={row} t={t} /></td><td>{formatTime(row.create_time || row.created_time)}</td></tr>) : !rows.length ? <tr><td colSpan={section === 'discover' ? 6 : 7}><div className="empty-state">{t('sellerAffiliate.noData')}</div></td></tr> : null}
-            {section === 'discover' && !loading ? rows.map((row, index) => <tr className="marketplace-creator-row" key={`marketplace-${row.creator_open_id || row.username || index}`}><MarketplaceCreatorCell creator={row} /><MarketplaceCreatorVideo creator={row} /><td>{formatCreatorGmv(row)}</td><td>{formatUnitsSold(row)}</td><td>{formatCreatorCount(row, ['avg_video_play_count', 'avg_video_view_count', 'avg_video_views'])}</td><td>{formatEngagementRate(row)}</td></tr>) : null}
+          <div className="table-wrap"><table className="data-table seller-affiliate__table"><thead><tr>{section === 'open' ? <><th>{t('sellerAffiliate.product')}</th><th>{t('sellerAffiliate.commission')}</th><th>{t('sellerAffiliate.creators')}</th><th>{t('sellerAffiliate.status')}</th></> : section === 'target' ? <><th>{t('sellerAffiliate.invitation')}</th><th>{t('sellerAffiliate.products')}</th><th>{t('sellerAffiliate.creators')}</th><th>{t('sellerAffiliate.validity')}</th><th>{t('sellerAffiliate.status')}</th></> : section === 'discover' ? <><th>{t('sellerAffiliate.creator')}</th><th>{t('sellerAffiliate.creatorGmv30')}</th><th>{t('sellerAffiliate.itemsSold')}</th><th>{t('sellerAffiliate.avgVideoViews')}</th><th>{t('sellerAffiliate.engagementRate')}</th></> : section === 'performance' ? <><th>{t('sellerAffiliate.creator')}</th><th>{t('sellerAffiliate.creatorGmv')}</th><th>{t('sellerAffiliate.affiliateOrders')}</th><th>{t('sellerAffiliate.itemsSold')}</th><th>{t('sellerAffiliate.productImpressions')}</th><th>{t('sellerAffiliate.refundedGmv')}</th><th>{t('sellerAffiliate.followers')}</th></> : section === 'creators' ? <><th>{t('sellerAffiliate.creator')}</th><th>{t('sellerAffiliate.followers')}</th><th>{t('sellerAffiliate.creatorGmv30')}</th><th>{t('sellerAffiliate.content')}</th><th>{t('sellerAffiliate.fulfillment')}</th><th>{t('sellerAffiliate.status')}</th><th>{t('sellerAffiliate.actions')}</th></> : <><th>{t('sellerAffiliate.order')}</th><th>{t('sellerAffiliate.product')}</th><th>{t('sellerAffiliate.program')}</th><th>{t('sellerAffiliate.createdAt')}</th></>}</tr></thead><tbody>
+            {loading ? <tr><td colSpan={section === 'discover' ? 5 : 7}><div className="empty-state"><span className="loading-dot" />{t('common.loading')}</div></td></tr> : section !== 'discover' && rows.length ? rows.map((row, index) => section === 'open' ? <tr key={row.id || index}><td><div className="seller-affiliate__product">{row.product?.main_image_url ? <img src={row.product.main_image_url} alt="" loading="lazy" /> : null}<div><strong>{row.product?.title || row.product?.id || row.id}</strong><span>{row.product?.id}</span></div></div></td><td>{formatRate(row.current_commission?.rate ?? row.commission_rate)}</td><td>{formatNumber(row.showcase_creator_count)} / {formatNumber(row.content_creator_count)}</td><td><span className="chip">{formatStatus(row.status, t)}</span></td></tr> : section === 'target' ? <tr key={row.id || index}><td><strong>{row.name || row.id}</strong><span className="row-subtitle">{row.id}</span><div className="target-collaboration__creators">{(row.creators || []).slice(0, 3).map((creator, creatorIndex) => <div className="creator-identity" key={creator.creator_open_id || creator.user_id || creator.username || creatorIndex}><CreatorAvatar src={creator.avatar?.url || creator.avatar_url} name={creator.nickname || creator.username} /><span><strong>{creator.nickname || creator.username || '—'}</strong><span className="row-subtitle">{creator.username ? `@${creator.username.replace(/^@/, '')}` : '—'}</span></span></div>)}{row.creators?.length > 3 ? <span className="target-collaboration__more">+{formatNumber(row.creators.length - 3)}</span> : null}</div></td><td>{formatNumber(row.products?.length ?? row.product_count)}</td><td>{formatNumber(row.showcase_creator_count)} / {formatNumber(row.content_creator_count)}</td><td>{formatTime(row.end_time)}</td><td><span className="chip">{formatStatus(row.status || row.collaboration_status, t)}</span></td></tr> : section === 'performance' ? <tr key={row.id || index}>{performanceCreatorCell(row)}<td>{formatMoney({ amount: row.affiliate_gmv, currency: row.currency })}</td><td>{formatNumber(row.affiliate_orders)}</td><td>{formatNumber(row.items_sold)}</td><td>{formatNumber(row.product_impressions)}</td><td>{formatMoney({ amount: row.refunded_gmv, currency: row.currency })}</td><td>{formatNumber(row.followers)}</td></tr> : section === 'creators' ? <tr key={row.id || index}><td><div className="creator-identity"><CreatorAvatar src={row.creator?.avatar_url} name={row.creator?.nickname || row.creator?.username} /><span><strong>{row.creator?.nickname || row.creator?.username || '—'}</strong><span className="row-subtitle">{row.creator?.username ? `@${row.creator.username.replace(/^@/, '')}` : row.creator?.user_id}</span></span></div></td><td>{formatNumber(row.creator?.follower_count)}</td><td>{formatMoney(row.creator?.gmv)}</td><td>{formatNumber(row.creator?.content_count)}<span className="row-subtitle">{formatNumber(row.creator?.ec_video_view)} {t('common.views')}</span></td><td>{row.creator?.fulfillment_percentage ? `${row.creator.fulfillment_percentage}%` : formatStatus(row.fulfillment_status, t)}</td><td><span className="chip">{formatStatus(row.status, t)}</span></td><td><button className="button button--small button--ghost" type="button" onClick={() => openCreatorDetail(row)}>{t('sellerAffiliate.view')}</button></td></tr> : <tr key={row.order_id || row.id || index}><td><strong>{row.order_id || row.id}</strong></td><td><AffiliateOrderProducts row={row} /></td><td><AffiliateOrderPrograms row={row} t={t} /></td><td>{formatTime(row.create_time || row.created_time)}</td></tr>) : !rows.length ? <tr><td colSpan={section === 'discover' ? 5 : 7}><div className="empty-state">{t(section === 'discover' && !submittedKeyword ? 'sellerAffiliate.discoverSyncPending' : 'sellerAffiliate.noData')}</div></td></tr> : null}
+            {section === 'discover' && !loading ? rows.map((row, index) => <tr className="marketplace-creator-row" key={`marketplace-${row.creator_open_id || row.username || index}`}><MarketplaceCreatorCell creator={row} followerCount={formatCreatorCount(row, ['follower_count', 'followers'])} /><td>{formatCreatorGmv(row)}</td><td>{formatUnitsSold(row)}</td><td>{formatCreatorCount(row, ['avg_video_play_count', 'avg_video_view_count', 'avg_video_views'])}</td><td>{formatEngagementRate(row)}</td></tr>) : null}
           </tbody></table></div>
           <nav className="seller-affiliate__pagination" aria-label={t('sellerAffiliate.page', { page: pageTokens.length + 1 })}>
             <button

@@ -11,6 +11,10 @@ const {
   loadMarketplaceCreatorProfiles,
   loadPersistedMarketplaceCooldown,
   persistMarketplaceCooldown,
+  creatorRowHasFetchedProfile,
+  creatorProfileTtlExpired,
+  selectCreatorProfileRefreshCandidates,
+  DEFAULT_CREATOR_PROFILE_TTL_MS,
   createCreatorPerformanceExportWithFallback,
 } = require('../src/services/tiktokCreatorPerformanceService');
 
@@ -119,6 +123,112 @@ test('Compass production workbook variant with MYR formatting is parsed', () => 
   assert.equal(row.items_sold, 20);
   assert.equal(row.refunded_gmv, 0);
   assert.equal(row.average_order_value, 399.44);
+});
+
+test('Compass creator workbook maps every metric shown in the performance table', () => {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.json_to_sheet([{
+    'Creator name': '@full.creator',
+    'Creator-attributed GMV': 'RM1,200.50',
+    'Creator LIVE-attributed GMV': 'RM300.25',
+    'Creator video-attributed GMV': 'RM400.75',
+    Refunds: 'RM25.50',
+    'Attributed orders': '15',
+    'Creator-attributed items sold': '18',
+    'Items refunded': '2',
+    AOV: 'RM80.03',
+    'Affiliate product card-attributed GMV': 'RM499.50',
+    CTOR: '12.5%',
+    'LIVE streams': '3',
+    Videos: '4',
+    'Total sample content': '5',
+    'Samples shipped': '6',
+    'Products added to showcase': '7',
+    CTR: '8.5%',
+    'Product impressions': '1,000',
+    'Video views': '2,000',
+    Customers: '9',
+    'Products sold': '18',
+    'Est. commission': 'RM60.25',
+  }]);
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Creator List');
+  const [row] = parseCreatorPerformanceWorkbook(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }), {
+    exportId: 3,
+    shopId: 1,
+    startDate: '2026-07-15',
+    endDate: '2026-07-21',
+    windowType: 'PAST_7_DAYS',
+    planType: 'ALL',
+    currency: 'MYR',
+  });
+
+  assert.equal(row.username, 'full.creator');
+  assert.equal(row.affiliate_gmv, 1200.5);
+  assert.equal(row.live_gmv, 300.25);
+  assert.equal(row.video_gmv, 400.75);
+  assert.equal(row.refunded_gmv, 25.5);
+  assert.equal(row.affiliate_orders, 15);
+  assert.equal(row.items_sold, 18);
+  assert.equal(row.items_refunded, 2);
+  assert.equal(row.average_order_value, 80.03);
+  assert.equal(row.product_card_gmv, 499.5);
+  assert.equal(row.ctor, 0.125);
+  assert.equal(row.live_streams, 3);
+  assert.equal(row.shoppable_videos, 4);
+  assert.equal(row.total_sample_content, 5);
+  assert.equal(row.samples_shipped, 6);
+  assert.equal(row.products_added_to_showcase, 7);
+  assert.equal(row.ctr, 0.085);
+  assert.equal(row.product_impressions, 1000);
+  assert.equal(row.video_views, 2000);
+  assert.equal(row.customers, 9);
+  assert.equal(row.products_sold, 18);
+  assert.equal(row.estimated_commission, 60.25);
+});
+
+test('complete creator profiles are refreshed after the 24-hour TTL', () => {
+  const now = Date.parse('2026-07-22T04:00:00.000Z');
+  const completeRow = {
+    username: 'stale.creator',
+    avatar_url: 'https://example.test/avatar.webp',
+    followers: 100,
+  };
+  const freshProfile = {
+    username: 'stale.creator',
+    refreshed_at: new Date(now - DEFAULT_CREATOR_PROFILE_TTL_MS + 1),
+  };
+  const staleProfile = {
+    username: 'stale.creator',
+    refreshed_at: new Date(now - DEFAULT_CREATOR_PROFILE_TTL_MS),
+  };
+
+  assert.equal(creatorProfileTtlExpired(freshProfile, { now }), false);
+  assert.equal(creatorProfileTtlExpired(staleProfile, { now }), true);
+  assert.deepEqual(selectCreatorProfileRefreshCandidates(
+    [completeRow],
+    new Map([['username:stale.creator', staleProfile]]),
+    { now },
+  ), [completeRow]);
+  assert.deepEqual(selectCreatorProfileRefreshCandidates(
+    [completeRow],
+    new Map([['username:stale.creator', freshProfile]]),
+    { now },
+  ), []);
+});
+
+test('report rows without a fetched identity do not advance the profile refresh timestamp', () => {
+  assert.equal(creatorRowHasFetchedProfile({
+    username: 'metrics.only',
+    followers: 1234,
+    nickname: null,
+    avatar_url: null,
+    creator_open_id: null,
+  }), false);
+  assert.equal(creatorRowHasFetchedProfile({
+    username: 'profile.fetched',
+    followers: 1234,
+    nickname: 'Profile Fetched',
+  }), true);
 });
 
 test('Compass BASE workbook skips the description row and maps core metrics', () => {
@@ -293,6 +403,30 @@ test('Marketplace creator lookup cools down downstream rate limits', async () =>
   assert.equal(profiles.size, 0);
   assert.equal(cooldowns.get('1:retry.creator'), 61000);
   assert.equal(shopCooldowns.get('1'), 61000);
+});
+
+test('Marketplace creator profile lookup uses the shared per-shop request gate', async () => {
+  const gatedShopIds = [];
+  let marketplaceCalls = 0;
+  const profiles = await loadMarketplaceCreatorProfiles({
+    id: 7,
+    cipher: 'shop-cipher',
+    authorization: { granted_scopes: ['seller.creator_marketplace.read'] },
+  }, ['gated.creator'], async ({ keyword }) => {
+    marketplaceCalls += 1;
+    return { data: { creators: [{ username: keyword, nickname: 'Gated Creator' }] } };
+  }, {
+    minIntervalMs: 0,
+    retryCount: 0,
+    requestGate: async (shopId, operation) => {
+      gatedShopIds.push(shopId);
+      return operation();
+    },
+  });
+
+  assert.deepEqual(gatedShopIds, [7]);
+  assert.equal(marketplaceCalls, 1);
+  assert.equal(profiles.get('gated.creator').nickname, 'Gated Creator');
 });
 
 test('Marketplace creator lookup still retries transient transport failures', async () => {

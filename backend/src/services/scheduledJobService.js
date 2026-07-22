@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const cron = require('node-cron');
+const { Op } = require('sequelize');
 const {
   ScheduledJob,
   ScheduledJobRun,
@@ -57,6 +58,38 @@ const localScheduleParts = (date, timezone) => {
   return {
     date: `${parts.year}-${parts.month}-${parts.day}`,
     time: `${parts.hour}:${parts.minute}`,
+  };
+};
+
+const shiftLocalDate = (date, days) => {
+  const shifted = new Date(`${date}T00:00:00.000Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10);
+};
+
+const zonedScheduleDate = (date, time, timezone) => {
+  const desiredAsUtc = Date.parse(`${date}T${time}:00.000Z`);
+  let candidate = desiredAsUtc;
+  // Two passes also handle timezones whose UTC offset changes around DST.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const actual = localScheduleParts(new Date(candidate), timezone);
+    const actualAsUtc = Date.parse(`${actual.date}T${actual.time}:00.000Z`);
+    candidate += desiredAsUtc - actualAsUtc;
+  }
+  return new Date(candidate);
+};
+
+const latestScheduledSlot = (job, now = new Date()) => {
+  const local = localScheduleParts(now, job.timezone);
+  const times = normalizeRunTimes(job.run_times);
+  const elapsedTimes = times.filter((time) => time <= local.time);
+  const date = elapsedTimes.length ? local.date : shiftLocalDate(local.date, -1);
+  const time = elapsedTimes.length ? elapsedTimes.at(-1) : times.at(-1);
+  return {
+    date,
+    time,
+    scheduledAt: zonedScheduleDate(date, time, job.timezone),
+    scheduledKey: `SCHEDULED:${date}:${time}`,
   };
 };
 
@@ -191,11 +224,56 @@ const tickScheduledJobs = async (now = new Date()) => {
   }));
 };
 
+const catchUpScheduledJobs = async (now = new Date(), {
+  JobModel = ScheduledJob,
+  RunModel = ScheduledJobRun,
+  enqueue = enqueueScheduledJob,
+} = {}) => {
+  const jobs = await JobModel.findAll({ where: { enabled: true }, order: [['id', 'ASC']] });
+  const results = [];
+  for (const job of jobs) {
+    const slot = latestScheduledSlot(job, now);
+    const successfulRun = await RunModel.findOne({
+      where: {
+        scheduled_job_id: job.id,
+        status: 'SUCCEEDED',
+        completed_at: { [Op.gte]: slot.scheduledAt },
+      },
+      order: [['completed_at', 'DESC']],
+    });
+    if (successfulRun) {
+      results.push({ job_key: job.job_key, caught_up: false, reason: 'already_current' });
+      continue;
+    }
+    const currentLocalDate = localScheduleParts(now, job.timezone).date;
+    const { run, created } = await enqueue(job, {
+      triggerType: 'CATCH_UP',
+      scheduledKey: `CATCH_UP:${slot.date}:${slot.time}:${currentLocalDate}`,
+    });
+    results.push({
+      job_key: job.job_key,
+      caught_up: created,
+      reason: created ? 'overdue' : 'already_queued',
+      run_id: run?.id || null,
+    });
+  }
+  return results;
+};
+
 const startDatabaseScheduler = () => {
   const task = cron.schedule('0 * * * * *', () => tickScheduledJobs().catch((error) => {
     console.error('[Schedule Manager] Tick failed', { message: error.message });
   }), { name: 'database-schedule-manager', noOverlap: true });
   console.info('[Schedule Manager] Started');
+  const catchUpEnabled = String(process.env.SCHEDULE_STARTUP_CATCH_UP_ENABLED ?? 'true').toLowerCase() !== 'false';
+  if (catchUpEnabled) {
+    setImmediate(() => catchUpScheduledJobs().then((results) => {
+      const started = results.filter((result) => result.caught_up).map((result) => result.job_key);
+      console.info('[Schedule Manager] Startup catch-up checked', { started });
+    }).catch((error) => {
+      console.error('[Schedule Manager] Startup catch-up failed', { message: error.message });
+    }));
+  }
   return task;
 };
 
@@ -204,8 +282,10 @@ module.exports = {
   normalizeRunTimes,
   assertTimezone,
   localScheduleParts,
+  latestScheduledSlot,
   executeScheduledJob,
   enqueueScheduledJob,
   tickScheduledJobs,
+  catchUpScheduledJobs,
   startDatabaseScheduler,
 };

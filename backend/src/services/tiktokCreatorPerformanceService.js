@@ -16,9 +16,11 @@ const {
   SELLER_CREATOR_MARKETPLACE_SCOPE,
 } = require('./tiktokShopService');
 const {
+  loadCreatorProfiles: loadStoredCreatorProfiles,
   saveCreatorProfiles,
   hydrateCreatorRows,
 } = require('./tiktokCreatorProfileService');
+const { runMarketplaceDiscoveryRequest } = require('./tiktokMarketplaceRequestGate');
 
 const WINDOW_DAYS = { PAST_24H: 1, PAST_7_DAYS: 7, PAST_30_DAYS: 30 };
 const VALID_PLAN_TYPES = new Set(['ALL', 'TARGET', 'OPEN', 'PARTNER']);
@@ -28,7 +30,20 @@ const REGION_CURRENCY = { MY: 'MYR', VN: 'VND', SG: 'SGD', TH: 'THB', PH: 'PHP',
 const REGION_TIMEZONE = { MY: 'Asia/Kuala_Lumpur', VN: 'Asia/Ho_Chi_Minh', SG: 'Asia/Singapore', TH: 'Asia/Bangkok', PH: 'Asia/Manila', ID: 'Asia/Jakarta' };
 const marketplaceProfileCooldowns = new Map();
 const marketplaceShopCooldowns = new Map();
+const creatorProfileRefreshRuns = new Map();
 const MARKETPLACE_PROFILE_COOLDOWN_NAMESPACE = 'creator_marketplace_profile';
+const HOUR_MS = 60 * 60 * 1000;
+const DEFAULT_CREATOR_PROFILE_TTL_MS = 24 * HOUR_MS;
+
+const configuredCreatorProfileTtlMs = () => {
+  const value = Number(process.env.TIKTOK_CREATOR_PROFILE_TTL_MS ?? DEFAULT_CREATOR_PROFILE_TTL_MS);
+  return Number.isFinite(value) && value >= 0 ? value : DEFAULT_CREATOR_PROFILE_TTL_MS;
+};
+
+const configuredCreatorProfileBatchDelayMs = () => {
+  const value = Number(process.env.TIKTOK_CREATOR_PROFILE_BATCH_DELAY_MS ?? 60 * 1000);
+  return Number.isFinite(value) && value >= 0 ? value : 60 * 1000;
+};
 
 const loadPersistedMarketplaceCooldown = async (shopId, model = TikTokApiCooldown) => {
   const row = await model.findOne({
@@ -142,19 +157,26 @@ const parseCreatorPerformanceWorkbook = (buffer, {
     plan_type: planType,
     currency,
     affiliate_gmv: numeric(row['Affiliate GMV'] ?? row['Creator-attributed GMV']),
-    live_gmv: numeric(row['Affiliate LIVE GMV']),
-    video_gmv: numeric(row['Affiliate shoppable video GMV']),
-    product_card_gmv: numeric(row['Affiliate product card GMV']),
-    affiliate_products_sold: integer(row['Affiliate products sold']),
+    live_gmv: numeric(row['Affiliate LIVE GMV'] ?? row['Creator LIVE-attributed GMV']),
+    video_gmv: numeric(row['Affiliate shoppable video GMV'] ?? row['Creator video-attributed GMV']),
+    product_card_gmv: numeric(row['Affiliate product card GMV'] ?? row['Affiliate product card-attributed GMV']),
+    affiliate_products_sold: integer(row['Affiliate products sold'] ?? row['Products sold']),
+    products_sold: integer(row['Products sold'] ?? row['Affiliate products sold']),
     items_sold: integer(row['Items sold'] ?? row['Creator-attributed items sold']),
     estimated_commission: numeric(row['Est. commission']),
     estimated_flat_fee: nullableNumeric(row['Est. flat fee']),
     average_order_value: numeric(row['Avg. order value'] ?? row.AOV),
-    product_showcase_count: integer(row['Affiliate product showcase'] ?? row['Samples shipped']),
+    product_showcase_count: integer(row['Affiliate product showcase'] ?? row['Products added to showcase']),
+    products_added_to_showcase: integer(row['Products added to showcase'] ?? row['Affiliate product showcase']),
+    total_sample_content: integer(row['Total sample content']),
+    samples_shipped: integer(row['Samples shipped']),
     affiliate_orders: integer(row['Affiliate orders'] ?? row['Attributed orders']),
     ctr: numeric(row.CTR) / 100,
+    ctor: numeric(row.CTOR) / 100,
     product_impressions: integer(row['Product impressions']),
-    average_affiliate_customers: numeric(row['Avg. affiliate customers']),
+    average_affiliate_customers: numeric(row['Avg. affiliate customers'] ?? row.Customers),
+    customers: integer(row.Customers ?? row['Avg. affiliate customers']),
+    video_views: integer(row['Video views']),
     live_streams: integer(row['Affiliate LIVE streams'] ?? row['LIVE streams']),
     shoppable_videos: integer(row['Affiliate shoppable videos'] ?? row.Videos),
     target_gmv: numeric(row['Target collaboration GMV']),
@@ -217,6 +239,10 @@ const normalizeCreatorProfile = (creator = {}) => ({
   creator_open_id: creator.creator_open_id || creator.creator_user_open_id || creator.user_id || null,
 });
 
+const creatorRowHasFetchedProfile = (row = {}) => Boolean(
+  row.nickname || row.avatar_url || row.creator_open_id,
+);
+
 const loadCreatorProfiles = async (shop, searchSamples = searchSellerSampleApplications) => {
   const profiles = new Map();
   let pageToken;
@@ -252,6 +278,7 @@ const loadMarketplaceCreatorProfiles = async (
     now = () => Date.now(),
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     onRateLimit = async () => {},
+    requestGate,
   } = {},
 ) => {
   const scopes = Array.isArray(shop.authorization?.granted_scopes) ? shop.authorization.granted_scopes : [];
@@ -262,6 +289,9 @@ const loadMarketplaceCreatorProfiles = async (
   const requestInterval = Math.max(0, Number(minIntervalMs) || 0);
   const retries = Math.max(0, Math.min(8, Number(retryCount) || 0));
   const cooldownMs = Math.max(0, Number(rateLimitCooldownMs) || 0);
+  const runRequest = requestGate || (searchMarketplace === searchMarketplaceCreators
+    ? runMarketplaceDiscoveryRequest
+    : async (_shopId, operation) => operation());
   let nextIndex = 0;
   let nextRequestAt = 0;
   let stopAllRequests = false;
@@ -311,12 +341,12 @@ const loadMarketplaceCreatorProfiles = async (
           if (stopAllRequests || isShopCoolingDown()) break;
           await waitForRequestSlot();
           if (stopAllRequests || isShopCoolingDown()) break;
-          const payload = await searchMarketplace({
+          const payload = await runRequest(shop.id, () => searchMarketplace({
             authorization: shop.authorization,
             shopCipher: shop.cipher,
             pageSize: 20,
             keyword: username,
-          });
+          }));
           const creators = payload.data?.creators || [];
           const exactMatch = creators.find((creator) => normalizeUsername(creator.username) === username);
           if (exactMatch) profiles.set(username, normalizeCreatorProfile(exactMatch));
@@ -375,6 +405,26 @@ const creatorProfileNeedsRefresh = (row) => !row.avatar_url
   || avatarUrlExpired(row.avatar_url)
   || Number(row.followers) <= 0;
 
+const creatorProfileTtlExpired = (profile, {
+  now = Date.now(),
+  ttlMs = configuredCreatorProfileTtlMs(),
+} = {}) => {
+  if (!profile) return true;
+  const refreshedAt = new Date(profile.refreshed_at || 0).getTime();
+  const currentTime = typeof now === 'function' ? Number(now()) : Number(now);
+  const normalizedTtl = Number.isFinite(Number(ttlMs)) && Number(ttlMs) >= 0
+    ? Number(ttlMs)
+    : DEFAULT_CREATOR_PROFILE_TTL_MS;
+  return !Number.isFinite(refreshedAt)
+    || !Number.isFinite(currentTime)
+    || refreshedAt <= currentTime - normalizedTtl;
+};
+
+const selectCreatorProfileRefreshCandidates = (rows, storedProfiles, options = {}) => rows.filter((row) => {
+  const storedProfile = storedProfiles.get(`username:${normalizeUsername(row.username)}`);
+  return creatorProfileNeedsRefresh(row) || creatorProfileTtlExpired(storedProfile, options);
+});
+
 const enrichCreatorRows = async (shop, rows, {
   searchSamples = searchSellerSampleApplications,
   searchMarketplace = searchMarketplaceCreators,
@@ -399,11 +449,16 @@ const enrichCreatorRows = async (shop, rows, {
   return rows;
 };
 
-const refreshCreatorPerformanceProfiles = async (shop, exportRecord, dependencies = {}) => {
+const runCreatorPerformanceProfileRefresh = async (shop, exportRecord, dependencies = {}) => {
   const {
     searchSamples = searchSellerSampleApplications,
     searchMarketplace = searchMarketplaceCreators,
     marketplaceOptions,
+    profileTtlMs = configuredCreatorProfileTtlMs(),
+    batchSize: requestedBatchSize = Number(process.env.TIKTOK_CREATOR_PROFILE_BATCH_SIZE || 20),
+    batchDelayMs = configuredCreatorProfileBatchDelayMs(),
+    now = () => Date.now(),
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   } = dependencies;
   const snapshots = await TikTokCreatorPerformanceSnapshot.findAll({
     where: {
@@ -436,17 +491,23 @@ const refreshCreatorPerformanceProfiles = async (shop, exportRecord, dependencie
   }
   await persistRows(sampleRows);
 
-  const candidates = rows.filter(creatorProfileNeedsRefresh);
-  const preparedMarketplace = await prepareMarketplaceOptions(shop, searchMarketplace, marketplaceOptions);
-  if (preparedMarketplace.coolingDown) return refreshed.size;
-  const batchSize = Math.max(1, Math.min(50, Number(process.env.TIKTOK_CREATOR_PROFILE_BATCH_SIZE || 20)));
+  const storedProfiles = await loadStoredCreatorProfiles(shop.id, rows);
+  const currentTime = typeof now === 'function' ? Number(now()) : Number(now);
+  const candidates = selectCreatorProfileRefreshCandidates(rows, storedProfiles, {
+    now: currentTime,
+    ttlMs: profileTtlMs,
+  });
+  const batchSize = Math.max(1, Math.min(50, Number(requestedBatchSize) || 20));
+  const normalizedBatchDelayMs = Math.max(0, Number(batchDelayMs) || 0);
   for (let index = 0; index < candidates.length; index += batchSize) {
+    const preparedMarketplace = await prepareMarketplaceOptions(shop, searchMarketplace, marketplaceOptions);
+    if (preparedMarketplace.coolingDown) break;
     const batch = candidates.slice(index, index + batchSize);
     const profiles = await loadMarketplaceCreatorProfiles(
       shop,
       batch.map((row) => row.username),
       searchMarketplace,
-      preparedMarketplace.options,
+      { ...preparedMarketplace.options, concurrency: 1 },
     );
     const enrichedRows = [];
     for (const row of batch) {
@@ -457,8 +518,25 @@ const refreshCreatorPerformanceProfiles = async (shop, exportRecord, dependencie
       refreshed.add(normalizeUsername(row.username));
     }
     await persistRows(enrichedRows);
+    if (Number(marketplaceShopCooldowns.get(String(shop.id)) || 0) > Date.now()) break;
+    if (index + batchSize < candidates.length && normalizedBatchDelayMs > 0) {
+      await sleep(normalizedBatchDelayMs);
+    }
   }
   return refreshed.size;
+};
+
+const refreshCreatorPerformanceProfiles = (shop, exportRecord, dependencies = {}) => {
+  const shopKey = String(shop.id);
+  const previousRun = creatorProfileRefreshRuns.get(shopKey) || Promise.resolve();
+  const run = previousRun
+    .catch(() => {})
+    .then(() => runCreatorPerformanceProfileRefresh(shop, exportRecord, dependencies));
+  const trackedRun = run.finally(() => {
+    if (creatorProfileRefreshRuns.get(shopKey) === trackedRun) creatorProfileRefreshRuns.delete(shopKey);
+  });
+  creatorProfileRefreshRuns.set(shopKey, trackedRun);
+  return trackedRun;
 };
 
 const createCreatorPerformanceExport = async (shop, {
@@ -596,7 +674,7 @@ const processCreatorPerformanceExport = async (shop, exportRecord, {
           currency: REGION_CURRENCY[String(shop.region || '').toUpperCase()] || 'USD',
         });
         await enrichCreatorRows(shop, rows, { searchSamples, searchMarketplace });
-        await saveCreatorProfiles(shop.id, rows, 'performance');
+        await saveCreatorProfiles(shop.id, rows.filter(creatorRowHasFetchedProfile), 'performance');
         const sharedRows = await hydrateCreatorRows(shop.id, rows);
         rows.splice(0, rows.length, ...sharedRows);
         await sequelize.transaction(async (transaction) => {
@@ -691,6 +769,11 @@ module.exports = {
   loadMarketplaceCreatorProfiles,
   loadPersistedMarketplaceCooldown,
   persistMarketplaceCooldown,
+  creatorRowHasFetchedProfile,
+  creatorProfileNeedsRefresh,
+  creatorProfileTtlExpired,
+  selectCreatorProfileRefreshCandidates,
   enrichCreatorRows,
   refreshCreatorPerformanceProfiles,
+  DEFAULT_CREATOR_PROFILE_TTL_MS,
 };

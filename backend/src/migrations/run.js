@@ -38,6 +38,10 @@ const migrations = [
   require('./028_create_tiktok_api_cooldowns'),
   require('./029_allow_booking_deadline_null'),
   require('./030_create_tiktok_marketplace_creator_details'),
+  require('./031_create_tiktok_marketplace_search_snapshots'),
+  require('./032_create_tiktok_marketplace_request_gates'),
+  require('./033_create_tiktok_marketplace_discovery_store'),
+  require('./034_add_creator_performance_full_metrics'),
 ];
 
 const createMigrationRunner = ({

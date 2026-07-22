@@ -52,13 +52,69 @@ const convertUsdMoneyToMyr = (money, exchangeRate) => {
   };
 };
 
+const RANGE_AMOUNT_KEYS = [
+  'minimum_amount', 'maximum_amount', 'min_amount', 'max_amount',
+  'minimum', 'maximum', 'min', 'max',
+];
+
+const compactAmountValue = (value) => {
+  const match = String(value ?? '').trim().match(/^(-?[\d,.]+)\s*([KMB])?$/i);
+  if (!match) return null;
+  const amount = Number(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(amount)) return null;
+  const multiplier = { K: 1e3, M: 1e6, B: 1e9 }[String(match[2] || '').toUpperCase()] || 1;
+  return amount * multiplier;
+};
+
+const formatCompactMyr = (amount) => `RM${new Intl.NumberFormat('en-US', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+}).format(amount)}`;
+
+const convertUsdRangeToMyr = (range, exchangeRate) => {
+  if (!range || typeof range !== 'object') return null;
+  const formattedRange = String(range.formatted_range || '');
+  const currency = String(range.currency || (/US\$|USD|\$/i.test(formattedRange) ? 'USD' : '')).toUpperCase();
+  if (currency === 'MYR') return { ...range, currency: 'MYR' };
+  if (currency !== 'USD') return null;
+
+  const converted = {
+    ...range,
+    currency: 'MYR',
+    source_currency: 'USD',
+    exchange_rate: exchangeRate.rate,
+    exchange_rate_date: exchangeRate.date,
+  };
+  for (const key of RANGE_AMOUNT_KEYS) {
+    if (range[key] === undefined || range[key] === null || range[key] === '') continue;
+    const amount = compactAmountValue(range[key]);
+    if (amount !== null) converted[key] = String(amount * exchangeRate.rate);
+  }
+  if (formattedRange) {
+    converted.source_formatted_range = formattedRange;
+    converted.formatted_range = formattedRange.replace(
+      /(?:US\$|USD|\$)\s*(-?[\d,.]+)\s*([KMB])?/gi,
+      (_, amount, suffix) => {
+        const numeric = compactAmountValue(`${amount}${suffix || ''}`);
+        return numeric === null ? _ : formatCompactMyr(numeric * exchangeRate.rate);
+      },
+    );
+  }
+  return converted;
+};
+
 const addMarketplaceLocalCurrency = async (payload, region, fetchImpl = fetch) => {
   if (String(region || '').toUpperCase() !== 'MY' || !payload?.data) return payload;
   const exchangeRate = await getUsdMyrRate(fetchImpl);
   const addLocalGmv = (creator) => {
     if (!creator) return creator;
     const localGmv = convertUsdMoneyToMyr(creator.gmv, exchangeRate);
-    return localGmv ? { ...creator, local_gmv: localGmv } : creator;
+    const localGmvRange = convertUsdRangeToMyr(creator.gmv_range, exchangeRate);
+    return {
+      ...creator,
+      ...(localGmv ? { local_gmv: localGmv } : {}),
+      ...(localGmvRange ? { local_gmv_range: localGmvRange } : {}),
+    };
   };
   return {
     ...payload,
@@ -79,6 +135,7 @@ module.exports = {
   BNM_EXCHANGE_RATE_URL,
   getUsdMyrRate,
   convertUsdMoneyToMyr,
+  convertUsdRangeToMyr,
   addMarketplaceLocalCurrency,
   clearExchangeRateCache,
 };

@@ -4,6 +4,7 @@ const test = require('node:test');
 const {
   getUsdMyrRate,
   convertUsdMoneyToMyr,
+  convertUsdRangeToMyr,
   addMarketplaceLocalCurrency,
   clearExchangeRateCache,
 } = require('../src/services/exchangeRateService');
@@ -53,4 +54,19 @@ test('converts marketplace USD GMV to MYR and preserves source money', async (t)
 
 test('does not relabel unsupported currencies', () => {
   assert.equal(convertUsdMoneyToMyr({ amount: '100', currency: 'SGD' }, { rate: 4.0895 }), null);
+});
+
+test('converts marketplace USD GMV ranges to MYR instead of only replacing the symbol', () => {
+  const converted = convertUsdRangeToMyr({
+    minimum_amount: '1K',
+    maximum_amount: '5K',
+    currency: 'USD',
+    formatted_range: 'US$1K-US$5K',
+  }, { rate: 4, date: '2026-07-21' });
+
+  assert.equal(converted.currency, 'MYR');
+  assert.equal(converted.minimum_amount, '4000');
+  assert.equal(converted.maximum_amount, '20000');
+  assert.equal(converted.formatted_range, 'RM4K-RM20K');
+  assert.equal(converted.source_formatted_range, 'US$1K-US$5K');
 });

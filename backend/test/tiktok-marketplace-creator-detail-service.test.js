@@ -28,6 +28,8 @@ test('marketplace detail snapshots enrich immediately and stale creators share a
     now: () => currentTime,
     sleep: async (milliseconds) => { currentTime += milliseconds; },
     schedule: () => {},
+    loadCooldown: async () => 0,
+    runRequest: async (_shopId, operation) => operation(),
     fetchDetail: async ({ creatorId }) => {
       fetchedAt.push({ creatorId, at: currentTime });
       return { data: { creator: { creator_open_id: creatorId, engagement_rate: 110 } } };
@@ -73,11 +75,72 @@ test('marketplace detail refresh is complete when every shared snapshot is fresh
     },
     now: () => now,
     schedule: () => {},
+    loadCooldown: async () => 0,
   });
 
   const result = await service.enrichAndQueue({ id: 7 }, [{ creator_open_id: 'creator-1' }]);
 
   assert.equal(result.creators[0].engagement_rate, 110);
   assert.deepEqual(result.detail_refresh, { pending: false, pending_count: 0, poll_after_ms: 0 });
+  assert.equal(service.stateFor(7).queue.length, 0);
+});
+
+test('marketplace detail rate limits persist a shared cooldown and discard the remaining queue', async () => {
+  const now = Date.parse('2026-07-22T03:19:17.000Z');
+  const fetched = [];
+  const persisted = [];
+  const service = createMarketplaceCreatorDetailService({
+    DetailModel: {
+      async findAll() { return []; },
+      async upsert() {},
+    },
+    now: () => now,
+    schedule: () => {},
+    loadCooldown: async () => 0,
+    persistCooldown: async (value) => { persisted.push(value); },
+    runRequest: async (_shopId, operation) => operation(),
+    fetchDetail: async ({ creatorId }) => {
+      fetched.push(creatorId);
+      const error = new Error('Too many requests for downstream.');
+      error.tiktokCode = 36009002;
+      throw error;
+    },
+    logger: { warn() {} },
+  });
+  const shop = { id: 7, cipher: 'cipher', authorization: {} };
+
+  await service.enrichAndQueue(shop, [
+    { creator_open_id: 'creator-1' },
+    { creator_open_id: 'creator-2' },
+    { creator_open_id: 'creator-3' },
+  ]);
+  await service.drain(shop, service.stateFor(shop.id));
+
+  assert.deepEqual(fetched, ['creator-1']);
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].shopId, 7);
+  assert.equal(persisted[0].reason, 'Too many requests for downstream.');
+  assert.equal(service.stateFor(shop.id).queue.length, 0);
+  assert.equal(service.stateFor(shop.id).queuedIds.size, 0);
+});
+
+test('marketplace detail does not queue work while a persisted cooldown is active', async () => {
+  const now = Date.parse('2026-07-22T03:19:17.000Z');
+  const service = createMarketplaceCreatorDetailService({
+    DetailModel: { async findAll() { return []; } },
+    now: () => now,
+    schedule: () => {},
+    loadCooldown: async () => now + 60_000,
+  });
+
+  const result = await service.enrichAndQueue({ id: 7 }, [{ creator_open_id: 'creator-1' }]);
+
+  assert.deepEqual(result.detail_refresh, {
+    pending: false,
+    pending_count: 0,
+    poll_after_ms: 0,
+    cooling_down: true,
+    retry_after_ms: 60_000,
+  });
   assert.equal(service.stateFor(7).queue.length, 0);
 });

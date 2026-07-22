@@ -2,7 +2,8 @@ const { Op } = require('sequelize');
 const {
   sequelize, TikTokShopAuthorization, TikTokShop, TikTokShopAnalyticsSnapshot,
   TikTokCreatorPerformanceExport, TikTokCreatorPerformanceSnapshot,
-  TikTokBasePerformanceSnapshot,
+  TikTokBasePerformanceSnapshot, TikTokMarketplaceCreator,
+  TikTokMarketplaceCreatorDetail, TikTokMarketplaceDiscoveryState,
 } = require('../models');
 const {
   buildShopAuthorizationUrl,
@@ -17,9 +18,6 @@ const {
   attachAffiliateOrderMetadata,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
-  searchMarketplaceCreators,
-  getProductCategories,
-  SELLER_PRODUCT_BASIC_SCOPE,
   getSellerCreatorContentDetails,
   normalizeShopPerformance,
 } = require('../services/tiktokShopService');
@@ -39,44 +37,12 @@ const {
   hydrateCreatorRows,
   syncAndHydrateCollaborationCreators,
 } = require('../services/tiktokCreatorProfileService');
-const { marketplaceCreatorDetailService } = require('../services/tiktokMarketplaceCreatorDetailService');
 
 const affiliateCacheTtlValue = Number(process.env.TIKTOK_SELLER_AFFILIATE_CACHE_TTL_MS ?? 120000);
 const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
   ? 0
   : Math.min(300000, Math.max(60000, affiliateCacheTtlValue || 120000));
 const sellerAffiliateCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs, maxEntries: 1000 });
-// Marketplace polling must only re-read database enrichment, never repeat the
-// upstream search request while creator details are being refreshed.
-const marketplaceSearchCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs || 120000, maxEntries: 500 });
-const marketplaceCategoryCache = createTtlPromiseCache({ ttlMs: 6 * 60 * 60 * 1000, maxEntries: 100 });
-const flattenCategories = (categories = []) => categories.flatMap((category) => [
-  category,
-  ...flattenCategories(category?.children || category?.sub_categories || []),
-]);
-const addMarketplaceCategoryNames = async (payload, shop) => {
-  const scopes = Array.isArray(shop.authorization?.granted_scopes) ? shop.authorization.granted_scopes : [];
-  if (!scopes.includes(SELLER_PRODUCT_BASIC_SCOPE) || !payload?.data) return payload;
-  const { value: categoryPayload } = await marketplaceCategoryCache.getOrLoad(String(shop.id), () => getProductCategories({
-    authorization: shop.authorization,
-    shopCipher: shop.cipher,
-    locale: 'en-US',
-  }));
-  const categoryMap = new Map(flattenCategories(categoryPayload.data?.categories || []).map((category) => [String(category.id), category]));
-  const addCategories = (creator) => {
-    if (!creator) return creator;
-    const categories = (creator.category_ids || []).map((id) => categoryMap.get(String(id))).filter(Boolean);
-    return categories.length ? { ...creator, categories } : creator;
-  };
-  return {
-    ...payload,
-    data: {
-      ...payload.data,
-      ...(Array.isArray(payload.data.creators) ? { creators: payload.data.creators.map(addCategories) } : {}),
-      ...(payload.data.creator ? { creator: addCategories(payload.data.creator) } : {}),
-    },
-  };
-};
 const creatorProfileRefreshJobs = new Map();
 const creatorProfileRefreshKey = (shopId, exportId) => `${shopId}:${exportId}`;
 const startCreatorProfileRefresh = (shop, exportRecord, { force = false } = {}) => {
@@ -484,36 +450,11 @@ const listMarketplaceCreators = async (req, res) => {
   try {
     const shop = await loadAffiliateShop(req, res);
     if (!shop) return;
-    const { value: payload, hit } = await marketplaceSearchCache.getOrLoad(
-      affiliateCacheKey('marketplace-creators', shop, req),
-      async () => {
-        if (isDemoAuthorization(shop.authorization)) {
-          return sellerAffiliateFixture('marketplace-creators', shop, { ...req.query, ...req.params });
-        }
-        let result = await searchMarketplaceCreators({
-          authorization: shop.authorization,
-          shopCipher: shop.cipher,
-          pageToken: req.query.page_token,
-          pageSize: pageSizeValue(req.query.page_size),
-          keyword: req.query.keyword,
-          searchKey: req.query.search_key,
-        });
-        try {
-          result = await addMarketplaceLocalCurrency(result, shop.region);
-        } catch (error) {
-          console.error('[Exchange Rate] Marketplace conversion failed', { shopId: shop.id, message: error.message });
-        }
-        try {
-          result = await addMarketplaceCategoryNames(result, shop);
-        } catch (error) {
-          console.error('[Categories] Marketplace enrichment failed', { shopId: shop.id, message: error.message });
-        }
-        return result;
-      },
-    );
-    let enrichment;
     if (isDemoAuthorization(shop.authorization)) {
-      enrichment = {
+      const payload = sellerAffiliateFixture('marketplace-creators', shop, { ...req.query, ...req.params });
+      res.set('X-Seller-Affiliate-Cache', 'DATABASE');
+      res.json({
+        ...payload.data,
         creators: (payload.data?.creators || []).map((creator) => ({
           ...creator,
           ...sellerAffiliateFixture('marketplace-creator-detail', shop, {
@@ -521,25 +462,74 @@ const listMarketplaceCreators = async (req, res) => {
           }).data.creator,
         })),
         detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 },
-      };
-    } else {
-      enrichment = await marketplaceCreatorDetailService.enrichAndQueue(shop, payload.data?.creators || []);
+        discovery_source: 'DATABASE',
+        request_id: payload.request_id || null,
+      });
+      return;
     }
-    res.set('X-Seller-Affiliate-Cache', hit ? 'HIT' : 'MISS');
+
+    const pageSize = Math.min(50, pageSizeValue(req.query.page_size));
+    const offset = /^\d+$/.test(String(req.query.page_token || ''))
+      ? Math.max(0, Number(req.query.page_token))
+      : 0;
+    const keyword = String(req.query.keyword || '').trim().replace(/^@+/, '');
+    const where = {
+      shop_id: shop.id,
+      ...(keyword ? {
+        [Op.or]: [
+          { username: { [Op.iLike]: `%${keyword}%` } },
+          { nickname: { [Op.iLike]: `%${keyword}%` } },
+        ],
+      } : {}),
+    };
+    const { count, rows } = await TikTokMarketplaceCreator.findAndCountAll({
+      where,
+      order: [['first_seen_at', 'DESC'], ['id', 'DESC']],
+      limit: pageSize,
+      offset,
+    });
+    const creatorIds = rows.map((row) => String(row.creator_open_id));
+    const details = creatorIds.length ? await TikTokMarketplaceCreatorDetail.findAll({
+      where: { shop_id: shop.id, creator_open_id: { [Op.in]: creatorIds } },
+    }) : [];
+    const detailById = new Map(details.map((detail) => [String(detail.creator_open_id), detail.detail || {}]));
+    const state = await TikTokMarketplaceDiscoveryState.findByPk(shop.id);
+    let creators = rows.map((row) => ({
+      ...(row.profile || {}),
+      ...(detailById.get(String(row.creator_open_id)) || {}),
+      creator_open_id: row.creator_open_id,
+      username: row.username || row.profile?.username,
+      nickname: row.nickname || row.profile?.nickname,
+      marketplace_first_seen_at: row.first_seen_at,
+      marketplace_last_seen_at: row.last_seen_at,
+    }));
+    let exchangeRate = null;
+    try {
+      const localized = await addMarketplaceLocalCurrency({ data: { creators } }, shop.region);
+      creators = localized.data.creators;
+      exchangeRate = localized.data.exchange_rate || null;
+    } catch (error) {
+      console.error('[Exchange Rate] Marketplace conversion failed', { shopId: shop.id, message: error.message });
+    }
+    const nextOffset = offset + rows.length;
+    res.set('X-Seller-Affiliate-Cache', 'DATABASE');
     res.json({
-      ...payload.data,
-      creators: enrichment.creators,
-      detail_refresh: enrichment.detail_refresh,
-      request_id: payload.request_id || null,
+      creators,
+      ...(exchangeRate ? { exchange_rate: exchangeRate } : {}),
+      total_count: count,
+      next_page_token: nextOffset < count ? String(nextOffset) : '',
+      search_key: 'database',
+      detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 },
+      discovery_source: 'DATABASE',
+      discovery_sync: state ? {
+        status: state.last_status,
+        last_requested_at: state.last_requested_at,
+        last_succeeded_at: state.last_succeeded_at,
+      } : { status: 'PENDING', last_requested_at: null, last_succeeded_at: null },
+      request_id: null,
     });
   } catch (error) {
-    const permissionError = /grant seller\.(affiliate_collaboration|creator_marketplace)\.read/i.test(error.message);
-    const rateLimited = Number(error.tiktokCode) === 36009002;
-    res.status(permissionError ? 403 : rateLimited ? 429 : 502).json({
-      message: error.message,
-      ...(error.tiktokCode !== undefined && error.tiktokCode !== null ? { tiktok_code: Number(error.tiktokCode) } : {}),
-      ...(error.requestId ? { request_id: error.requestId } : {}),
-    });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -552,12 +542,20 @@ const showMarketplaceCreator = async (req, res) => {
       res.json({ ...payload.data, detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 } });
       return;
     }
-    const enrichment = await marketplaceCreatorDetailService.enrichAndQueue(shop, [{
-      creator_open_id: req.params.creatorId,
-    }]);
-    res.status(enrichment.detail_refresh.pending ? 202 : 200).json({
-      creator: enrichment.creators[0],
-      detail_refresh: enrichment.detail_refresh,
+    const creator = await TikTokMarketplaceCreator.findOne({
+      where: { shop_id: shop.id, creator_open_id: req.params.creatorId },
+    });
+    if (!creator) {
+      res.status(404).json({ message: 'Marketplace creator has not been discovered yet.' });
+      return;
+    }
+    const detail = await TikTokMarketplaceCreatorDetail.findOne({
+      where: { shop_id: shop.id, creator_open_id: req.params.creatorId },
+    });
+    res.json({
+      creator: { ...(creator.profile || {}), ...(detail?.detail || {}) },
+      detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 },
+      discovery_source: 'DATABASE',
     });
   } catch (error) {
     res.status(502).json({ message: error.message });

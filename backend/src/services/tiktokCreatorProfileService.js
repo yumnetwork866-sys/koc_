@@ -117,6 +117,7 @@ const syncAndHydrateCollaborationCreators = async (shopId, rows = []) => {
 module.exports = {
   normalizeUsername,
   normalizeCreatorProfile,
+  loadCreatorProfiles,
   saveCreatorProfiles,
   hydrateCreatorRows,
   syncAndHydrateCollaborationCreators,
