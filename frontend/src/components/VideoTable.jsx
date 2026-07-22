@@ -1,16 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Heart, MessageCircle, Share2 } from 'lucide-react';
-import { fetchChannels, fetchProducts, fetchVideos } from '../lib/api';
+import { fetchChannels, fetchVideos } from '../lib/api';
 import { useI18n } from '../lib/language';
 
 const PAGE_SIZE = 20;
+const getVideoHashtags = (video) => {
+  const provided = Array.isArray(video.hashtags)
+    ? video.hashtags
+    : typeof video.hashtags === 'string'
+      ? video.hashtags.split(/[\s,]+/)
+      : [];
+  const extracted = String(video.title || '').match(/#[\p{L}\p{N}_]+/gu) || [];
+  return [...new Set([...provided, ...extracted]
+    .map((tag) => String(tag || '').trim())
+    .filter(Boolean)
+    .map((tag) => tag.startsWith('#') ? tag : `#${tag}`))];
+};
 
 const VideoTable = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
   const [videos, setVideos] = useState([]);
   const [channels, setChannels] = useState([]);
-  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedChannelId, setSelectedChannelId] = useState('');
@@ -18,15 +29,13 @@ const VideoTable = ({ heroTitle }) => {
   const [page, setPage] = useState(1);
 
   const loadData = async (signal) => {
-    const [loadedVideos, loadedChannels, loadedProducts] = await Promise.all([
+    const [loadedVideos, loadedChannels] = await Promise.all([
       fetchVideos(signal),
       fetchChannels(signal),
-      fetchProducts(signal),
     ]);
 
     setVideos(loadedVideos);
     setChannels(loadedChannels);
-    setProducts(loadedProducts);
     setSelectedChannelId((current) => (
       loadedChannels.some((channel) => String(channel.id) === current)
         ? current
@@ -132,7 +141,6 @@ const VideoTable = ({ heroTitle }) => {
         <div className="section-card__header">
           <div className="chip-row">
             <span className="chip chip--blue">{t('videoLibrary.channels', { count: channels.length })}</span>
-            <span className="chip chip--positive">{t('videoLibrary.products', { count: products.length })}</span>
           </div>
         </div>
 
@@ -214,16 +222,15 @@ const VideoTable = ({ heroTitle }) => {
             <thead>
               <tr>
                 <th>{t('videoLibrary.videos')}</th>
-                <th>{t('videoLibrary.channel')}</th>
+                <th>{t('videoLibrary.hashtags')}</th>
                 <th className="cell-number">{t('videoLibrary.views')}</th>
                 <th className="cell-number">{t('videoLibrary.engagement')}</th>
-                <th className="cell-number">{t('videoLibrary.assignments')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={5}>
+                  <td className="table-state-cell" colSpan={4}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('videoLibrary.loading')}</div>
@@ -231,8 +238,13 @@ const VideoTable = ({ heroTitle }) => {
                   </td>
                 </tr>
               ) : filteredVideos.length ? (
-                paginatedVideos.map((video) => (
-                  <tr key={video.id}>
+                paginatedVideos.map((video) => {
+                  const hashtags = getVideoHashtags(video);
+                  const displayTitle = String(video.title || '')
+                    .replace(/#[\p{L}\p{N}_]+/gu, '')
+                    .replace(/\s+/g, ' ')
+                    .trim() || t('videoLibrary.untitledVideo');
+                  return <tr key={video.id}>
                     <td>
                       <div className="video-cell">
                         {video.thumbnail_url ? (
@@ -242,12 +254,12 @@ const VideoTable = ({ heroTitle }) => {
                               href={video.video_url}
                               target="_blank"
                               rel="noreferrer"
-                              aria-label={t('videoLibrary.openVideo', { title: video.title })}
+                              aria-label={t('videoLibrary.openVideo', { title: displayTitle })}
                             >
                               <img
                                 className="video-cell__thumb"
                                 src={video.thumbnail_url}
-                                alt={video.title}
+                                alt={displayTitle}
                                 loading="lazy"
                               />
                             </a>
@@ -255,7 +267,7 @@ const VideoTable = ({ heroTitle }) => {
                             <img
                               className="video-cell__thumb"
                               src={video.thumbnail_url}
-                              alt={video.title}
+                              alt={displayTitle}
                               loading="lazy"
                             />
                           )
@@ -265,31 +277,17 @@ const VideoTable = ({ heroTitle }) => {
                           </div>
                         )}
                         <div className="video-cell__meta">
-                          <span className="row-title">{video.title}</span>
+                          <span className="row-title">{displayTitle}</span>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <div className="channel-cell">
-                        {video.channel?.avatar_url ? (
-                          <img
-                            className="channel-cell__avatar"
-                            src={video.channel.avatar_url}
-                            alt={video.channel?.display_name || video.channel?.username || t('videoLibrary.channelAvatar')}
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="channel-cell__avatar channel-cell__avatar--empty" aria-hidden="true">
-                            CH
-                          </div>
-                        )}
-                        <div className="channel-cell__meta">
-                          <span className="row-title">{video.channel?.display_name || video.channel?.username || video.channel_id}</span>
-                          {video.channel?.username ? (
-                            <span className="row-subtitle">@{video.channel.username}</span>
-                          ) : null}
+                      {hashtags.length ? (
+                        <div className="video-hashtags" title={hashtags.join(' ')}>
+                          {hashtags.slice(0, 3).map((hashtag) => <span className="chip" key={hashtag}>{hashtag}</span>)}
+                          {hashtags.length > 3 ? <span className="chip">+{hashtags.length - 3}</span> : null}
                         </div>
-                      </div>
+                      ) : '—'}
                     </td>
                     <td className="cell-number">{formatNumber(video.views)}</td>
                     <td className="cell-number">
@@ -308,12 +306,11 @@ const VideoTable = ({ heroTitle }) => {
                         </span>
                       </div>
                     </td>
-                    <td className="cell-number">{video.assignments?.length || 0}</td>
-                  </tr>
-                ))
+                  </tr>;
+                })
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={5}>
+                  <td className="table-state-cell" colSpan={4}>
                     <div className="empty-state empty-state--compact table-empty-state">
                       <div>{t('videoLibrary.noMatch')}</div>
                     </div>
