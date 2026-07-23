@@ -310,7 +310,7 @@ const BookingManagement = ({ heroTitle }) => {
       {error ? <section className="section-card empty-state empty-state--compact" role="alert">{error}</section> : null}
 
       <section className="section-card">
-        <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.createEvaluation')}</h2><p className="section-card__meta">{t('booking.createEvaluationMeta')}</p></div></div>
+        <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.createEvaluation')}</h2></div></div>
         <form className="filter-panel booking-evaluation-form" onSubmit={handleSubmit}>
           <div className="field"><label>{t('booking.targetCreator')}</label><TargetKocCombobox creators={targetKocs} value={form.creator_key} onChange={(value) => setForm((current) => ({ ...current, creator_key: value }))} placeholder={t('booking.searchKoc')} noResults={t('booking.noSyncedCollaboration')} performanceSourceLabel={t('booking.creatorPerformance')} /></div>
           <div className="field"><label htmlFor="booking_cost">{t('booking.bookingCost')}</label><input id="booking_cost" type="number" min="0" step="0.01" inputMode="decimal" value={form.booking_cost} onChange={(event) => setForm((current) => ({ ...current, booking_cost: event.target.value }))} required /></div>
@@ -325,7 +325,7 @@ const BookingManagement = ({ heroTitle }) => {
       </section>
 
       <section className="section-card">
-        <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2><p className="section-card__meta">{t('booking.benchmarkDisclaimer')}</p></div></div>
+        <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div></div>
         <div className="table-wrap"><table className="data-table booking-evaluation-table">
           <thead><tr><th>{t('booking.kocColumn')}</th><th>{t('booking.collaboration')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.bookingCost')}</th><th>{t('booking.benchmark')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr></thead>
           <tbody>
