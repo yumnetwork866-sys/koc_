@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -12,6 +12,8 @@ import {
   disconnectTikTokShop,
   fetchTikTokShopAnalytics,
   fetchTikTokShopConnections,
+  fetchTikTokShopVideoAnalytics,
+  fetchTikTokShopVideoThumbnail,
   fetchTikTokShops,
   startTikTokShopOauth,
   syncTikTokShopAnalytics,
@@ -62,6 +64,68 @@ const AnalyticsIcon = ({ name, className = '' }) => (
   </svg>
 );
 
+const VideoThumbnail = ({ shopId, video, href }) => {
+  const containerRef = useRef(null);
+  const directThumbnail = video?.thumbnail_url
+    || video?.cover_image_url
+    || video?.cover_url
+    || video?.image_url
+    || null;
+  const [thumbnail, setThumbnail] = useState(directThumbnail);
+  const [failed, setFailed] = useState(false);
+  const username = video?.creator?.user_name || video?.username;
+
+  useEffect(() => {
+    setThumbnail(directThumbnail);
+    setFailed(false);
+    if (directThumbnail || !shopId || !video?.id || !username) return undefined;
+    const controller = new AbortController();
+    let requested = false;
+    const loadThumbnail = () => {
+      if (requested) return;
+      requested = true;
+      fetchTikTokShopVideoThumbnail(shopId, video.id, username, controller.signal)
+        .then((payload) => setThumbnail(payload?.thumbnail_url || null))
+        .catch((error) => {
+          if (error.name !== 'AbortError') setFailed(true);
+        });
+    };
+    const element = containerRef.current;
+    if (!element || typeof IntersectionObserver === 'undefined') {
+      loadThumbnail();
+      return () => controller.abort();
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        loadThumbnail();
+        observer.disconnect();
+      }
+    }, { rootMargin: '320px 0px' });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      controller.abort();
+    };
+  }, [directThumbnail, shopId, username, video?.id]);
+
+  const content = thumbnail && !failed ? (
+    <img
+      src={thumbnail}
+      alt={video?.title || ''}
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  ) : (
+    <span className="shop-video-analytics__thumbnail-placeholder" aria-hidden="true">▶</span>
+  );
+
+  return (
+    <span className="shop-video-analytics__thumbnail" ref={containerRef}>
+      {href ? <a href={href} target="_blank" rel="noreferrer">{content}</a> : content}
+    </span>
+  );
+};
+
 const dateOnly = (date) => [
   date.getFullYear(),
   String(date.getMonth() + 1).padStart(2, '0'),
@@ -107,6 +171,15 @@ const formatDisplayDateTime = (value, fallback) => {
   return `${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())} ${padDatePart(date.getDate())}/${padDatePart(date.getMonth() + 1)}/${date.getFullYear()}`;
 };
 
+const formatVideoDateTime = (value, fallback) => {
+  const match = String(value || '').match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/,
+  );
+  return match
+    ? `${match[3]}/${match[2]}/${match[1]}-${match[4]}:${match[5]}:${match[6]}`
+    : fallback;
+};
+
 const scopesOf = (authorization) => {
   if (Array.isArray(authorization?.granted_scopes)) return authorization.granted_scopes;
   return String(authorization?.granted_scopes || '')
@@ -141,7 +214,7 @@ const totalsFor = (rows) => {
 const percentage = (value, total) => (total > 0 ? value / total * 100 : 0);
 const boundedPercentage = (value) => Math.min(100, Math.max(0, value));
 
-const ShopAnalytics = ({ managementOnly = false }) => {
+const ShopAnalytics = ({ managementOnly = false, videoOnly = false }) => {
   const { t, language } = useI18n();
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
   const initialRange = useMemo(() => rangeForDays(7), []);
@@ -154,6 +227,11 @@ const ShopAnalytics = ({ managementOnly = false }) => {
   const currency = 'LOCAL';
   const [chartMetric, setChartMetric] = useState('gmv');
   const [snapshot, setSnapshot] = useState(null);
+  const [videoAnalytics, setVideoAnalytics] = useState(null);
+  const [videoAnalyticsLoading, setVideoAnalyticsLoading] = useState(false);
+  const [videoReloadKey, setVideoReloadKey] = useState(0);
+  const [videoAccountType, setVideoAccountType] = useState('LINKED_ACCOUNTS');
+  const [videoSortField, setVideoSortField] = useState('gmv');
   const [loading, setLoading] = useState(true);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -231,7 +309,7 @@ const ShopAnalytics = ({ managementOnly = false }) => {
   const invalidRange = !startDate || !endDate || startDate >= endDate;
 
   useEffect(() => {
-    if (managementOnly) {
+    if (managementOnly || videoOnly) {
       setSnapshot(null);
       setAnalyticsLoading(false);
       return undefined;
@@ -277,7 +355,7 @@ const ShopAnalytics = ({ managementOnly = false }) => {
     };
     loadRange();
     return () => controller.abort();
-  }, [currency, endDate, invalidRange, managementOnly, selectedShopId, startDate, t]);
+  }, [currency, endDate, invalidRange, managementOnly, selectedShopId, startDate, t, videoOnly]);
 
   const selectedShop = useMemo(
     () => shops.find((shop) => String(shop.id) === String(selectedShopId)) || null,
@@ -292,6 +370,42 @@ const ShopAnalytics = ({ managementOnly = false }) => {
     selectedAuthorization?.refresh_token_expires_at
       && new Date(selectedAuthorization.refresh_token_expires_at).getTime() <= Date.now(),
   );
+
+  useEffect(() => {
+    if (managementOnly || !videoOnly || !selectedShopId || invalidRange
+      || missingAnalyticsScope || tokenExpired) {
+      if (!selectedShopId) setVideoAnalytics(null);
+      setVideoAnalyticsLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setVideoAnalyticsLoading(true);
+    setError('');
+    fetchTikTokShopVideoAnalytics(selectedShopId, {
+      signal: controller.signal,
+      startDate,
+      endDate,
+      currency,
+      accountType: videoAccountType,
+      sortField: videoSortField,
+      sortOrder: 'DESC',
+      pageSize: 100,
+    }).then((payload) => {
+      if (!controller.signal.aborted) setVideoAnalytics(payload);
+    }).catch((requestError) => {
+      if (requestError.name !== 'AbortError') {
+        setVideoAnalytics(null);
+        setError(requestError.message || t('shopAnalytics.videoLoadError'));
+      }
+    }).finally(() => {
+      if (!controller.signal.aborted) setVideoAnalyticsLoading(false);
+    });
+    return () => controller.abort();
+  }, [
+    currency, endDate, invalidRange, managementOnly, missingAnalyticsScope,
+    selectedShopId, startDate, t, tokenExpired, videoAccountType, videoReloadKey, videoSortField,
+    videoOnly,
+  ]);
   const attentionCount = useMemo(() => connections.filter((authorization) => {
     const expired = Boolean(
       authorization.refresh_token_expires_at
@@ -313,23 +427,24 @@ const ShopAnalytics = ({ managementOnly = false }) => {
   const hasData = intervals.length > 0;
   const hasComparison = comparisonIntervals.length > 0;
   const displayCurrency = intervals.find((row) => row?.gmv?.currency)?.gmv?.currency
+    || videoAnalytics?.videos?.find((video) => video?.gmv?.currency)?.gmv?.currency
     || (currency === 'USD' ? 'USD' : 'VND');
 
-  const formatMoney = (value) => {
+  const formatMoney = (value, currencyCode = displayCurrency) => {
     try {
       const formatter = new Intl.NumberFormat(locale, {
         style: 'currency',
-        currency: displayCurrency,
-        maximumFractionDigits: displayCurrency === 'VND' ? 0 : 2,
+        currency: currencyCode,
+        maximumFractionDigits: currencyCode === 'VND' ? 0 : 2,
       });
-      if (displayCurrency === 'MYR') {
+      if (currencyCode === 'MYR') {
         return formatter.formatToParts(numericValue(value))
           .map((part) => part.type === 'currency' ? 'RM' : part.value)
           .join('');
       }
       return formatter.format(numericValue(value));
     } catch {
-      return `${formatNumber(value)} ${displayCurrency}`;
+      return `${formatNumber(value)} ${currencyCode}`;
     }
   };
 
@@ -345,6 +460,30 @@ const ShopAnalytics = ({ managementOnly = false }) => {
     unitsSold: numericValue(row.units_sold),
     buyers: numericValue(row.buyers),
   })), [intervals]);
+  const videoRows = useMemo(
+    () => Array.isArray(videoAnalytics?.videos) ? videoAnalytics.videos : [],
+    [videoAnalytics],
+  );
+  const videoTotals = useMemo(() => videoRows.reduce((total, video) => ({
+    gmv: total.gmv + moneyValue(video.gmv),
+    views: total.views + numericValue(video.views ?? video.video_views),
+    orders: total.orders + numericValue(video.sku_orders ?? video.orders),
+    itemsSold: total.itemsSold + numericValue(video.items_sold ?? video.units_sold),
+  }), { gmv: 0, views: 0, orders: 0, itemsSold: 0 }), [videoRows]);
+  const formatVideoMoney = (value) => formatMoney(
+    moneyValue(value),
+    value?.currency || displayCurrency,
+  );
+  const formatRate = (value) => {
+    const rate = numericValue(value);
+    return formatPercent(rate <= 1 ? rate * 100 : rate);
+  };
+  const videoUrl = (video) => {
+    const username = video?.creator?.user_name || video?.username;
+    return username && video?.id
+      ? `https://www.tiktok.com/@${String(username).replace(/^@/, '')}/video/${video.id}`
+      : null;
+  };
 
   const breakdowns = useMemo(() => {
     const values = new Map();
@@ -403,7 +542,7 @@ const ShopAnalytics = ({ managementOnly = false }) => {
       setConnecting(true);
       setError('');
       const { authorizeUrl } = await startTikTokShopOauth(
-        managementOnly ? '/manage/shops' : '/manage/shop-analytics',
+        managementOnly ? '/manage/shops' : videoOnly ? '/manage/video-analytics' : '/manage/shop-analytics',
       );
       if (!authorizeUrl) throw new Error(t('shopAnalytics.oauthError'));
       window.location.assign(authorizeUrl);
@@ -517,7 +656,11 @@ const ShopAnalytics = ({ managementOnly = false }) => {
         <div className="shop-analytics__hero-row">
           <div className="shop-analytics__hero-copy">
             <h1 className="page__title">
-              {t(managementOnly ? 'shopAnalytics.manageHeroTitle' : 'shopAnalytics.heroTitle')}
+              {t(managementOnly
+                ? 'shopAnalytics.manageHeroTitle'
+                : videoOnly
+                  ? 'shopAnalytics.videoHeroTitle'
+                  : 'shopAnalytics.heroTitle')}
             </h1>
           </div>
         </div>
@@ -574,9 +717,11 @@ const ShopAnalytics = ({ managementOnly = false }) => {
       ) : null}
 
       {!managementOnly ? (
+        <>
         <div
           id="shop-analytics-panel"
           className="shop-analytics__tab-panel"
+          hidden={videoOnly}
         >
           <section className="section-card shop-analytics__filters" aria-labelledby="shop-analytics-filters-title">
             <div className="shop-analytics__filter-heading">
@@ -952,6 +1097,216 @@ const ShopAnalytics = ({ managementOnly = false }) => {
             </>
           ) : null}
         </div>
+        {videoOnly ? <div
+          id="shop-video-analytics-panel"
+          className="shop-analytics__tab-panel"
+        >
+          <section className="section-card shop-analytics__filters" aria-labelledby="shop-video-filters-title">
+            <div className="shop-analytics__filter-heading">
+              <div>
+                <h2 className="section-card__title" id="shop-video-filters-title">
+                  {t('shopAnalytics.videoFiltersTitle')}
+                </h2>
+              </div>
+              <button
+                className="button shop-analytics__sync-button"
+                type="button"
+                disabled={!selectedShopId || invalidRange || missingAnalyticsScope || tokenExpired || videoAnalyticsLoading}
+                onClick={() => setVideoReloadKey((value) => value + 1)}
+              >
+                <AnalyticsIcon name="sync" />
+                {videoAnalyticsLoading ? t('common.loading') : t('shopAnalytics.refreshVideos')}
+              </button>
+            </div>
+            <div className="shop-video-analytics__account-tabs" role="tablist" aria-label={t('shopAnalytics.videoAccountType')}>
+              <button
+                className={videoAccountType === 'LINKED_ACCOUNTS' ? 'is-active' : ''}
+                type="button"
+                role="tab"
+                aria-selected={videoAccountType === 'LINKED_ACCOUNTS'}
+                onClick={() => setVideoAccountType('LINKED_ACCOUNTS')}
+              >
+                {t('shopAnalytics.linkedAccounts')}
+              </button>
+              <button
+                className={videoAccountType === 'AFFILIATE_ACCOUNTS' ? 'is-active' : ''}
+                type="button"
+                role="tab"
+                aria-selected={videoAccountType === 'AFFILIATE_ACCOUNTS'}
+                onClick={() => setVideoAccountType('AFFILIATE_ACCOUNTS')}
+              >
+                {t('shopAnalytics.affiliateAccounts')}
+              </button>
+            </div>
+            <div className="shop-analytics__filter-grid shop-video-analytics__filters">
+              <div className="field">
+                <label htmlFor="video-analytics-shop">{t('shopAnalytics.shop')}</label>
+                <ShopDropdown
+                  id="video-analytics-shop"
+                  value={selectedShopId}
+                  shops={shops}
+                  disabled={loading || !shops.length}
+                  onChange={changeSelectedShop}
+                  placeholder={loading ? t('common.loading') : t('shopAnalytics.selectShop')}
+                  unknownLabel={t('common.unknown')}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="video-analytics-period">{t('shopAnalytics.period')}</label>
+                <select id="video-analytics-period" value={periodPreset} onChange={changePeriodPreset}>
+                  <option value="7d">{t('shopAnalytics.period7d')}</option>
+                  <option value="30d">{t('shopAnalytics.period30d')}</option>
+                  <option value="90d">{t('shopAnalytics.period90d')}</option>
+                  <option value="custom">{t('shopAnalytics.periodCustom')}</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="video-sort-field">{t('shopAnalytics.sortBy')}</label>
+                <select id="video-sort-field" value={videoSortField} onChange={(event) => setVideoSortField(event.target.value)}>
+                  <option value="gmv">{t('shopAnalytics.videoRevenue')}</option>
+                  <option value="views">{t('shopAnalytics.videoViews')}</option>
+                  <option value="sku_orders">{t('shopAnalytics.orders')}</option>
+                  <option value="items_sold">{t('shopAnalytics.unitsSold')}</option>
+                  <option value="click_through_rate">{t('shopAnalytics.videoCtr')}</option>
+                </select>
+              </div>
+              {periodPreset === 'custom' ? (
+                <>
+                  <div className="field">
+                    <label htmlFor="video-start-date">{t('shopAnalytics.startDate')}</label>
+                    <input id="video-start-date" type="date" value={startDate} max={endDate ? shiftDate(endDate, -1) : undefined} onChange={changeCustomDate(setStartDate, startDate)} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="video-end-date">{t('shopAnalytics.endDate')}</label>
+                    <input id="video-end-date" type="date" value={endDate} min={startDate ? shiftDate(startDate, 1) : undefined} max={dateOnly(new Date())} onChange={changeCustomDate(setEndDate, endDate)} />
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </section>
+
+          {selectedShop && (missingAnalyticsScope || tokenExpired) ? (
+            <section className="shop-analytics__permission-banner" role="status">
+              <div>
+                <strong>{t(tokenExpired ? 'shopAnalytics.tokenExpired' : 'shopAnalytics.missingScope')}</strong>
+                <span>{t(tokenExpired ? 'shopAnalytics.tokenExpiredAction' : 'shopAnalytics.missingScopeAction')}</span>
+              </div>
+            </section>
+          ) : null}
+
+          {selectedShop ? (
+            <>
+              <section className="page__stats shop-analytics__stats shop-video-analytics__stats" aria-label={t('shopAnalytics.videoSummary')}>
+                <article className="stat-card shop-analytics__stat shop-analytics__stat--gmv">
+                  <p className="stat-card__label">{t('shopAnalytics.videoRevenue')}</p>
+                  <p className="stat-card__value">{videoAnalyticsLoading && !videoRows.length ? '—' : formatMoney(videoTotals.gmv)}</p>
+                </article>
+                <article className="stat-card shop-analytics__stat">
+                  <p className="stat-card__label">{t('shopAnalytics.videos')}</p>
+                  <p className="stat-card__value">{videoAnalyticsLoading && !videoRows.length ? '—' : formatNumber(videoAnalytics?.total_count ?? videoRows.length)}</p>
+                </article>
+                <article className="stat-card shop-analytics__stat">
+                  <p className="stat-card__label">{t('shopAnalytics.videoViews')}</p>
+                  <p className="stat-card__value">{videoAnalyticsLoading && !videoRows.length ? '—' : formatNumber(videoTotals.views)}</p>
+                </article>
+                <article className="stat-card shop-analytics__stat">
+                  <p className="stat-card__label">{t('shopAnalytics.orders')}</p>
+                  <p className="stat-card__value">{videoAnalyticsLoading && !videoRows.length ? '—' : formatNumber(videoTotals.orders)}</p>
+                </article>
+              </section>
+
+              <section className="section-card shop-video-analytics__table-card">
+                <div className="section-card__header">
+                  <div>
+                    <h2 className="section-card__title">{t('shopAnalytics.videoPerformance')}</h2>
+                  </div>
+                </div>
+                <div className="table-wrap shop-analytics__table-wrap">
+                  <table className="data-table shop-analytics__table shop-video-analytics__table">
+                    <colgroup>
+                      <col className="shop-video-analytics__col-video" />
+                      <col className="shop-video-analytics__col-hashtags" />
+                      <col className="shop-video-analytics__col-gmv" />
+                      <col className="shop-video-analytics__col-views" />
+                      <col className="shop-video-analytics__col-orders" />
+                      <col className="shop-video-analytics__col-sold" />
+                      <col className="shop-video-analytics__col-ctr" />
+                      <col className="shop-video-analytics__col-date" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>{t('shopAnalytics.video')}</th>
+                        <th>{t('videoLibrary.hashtags')}</th>
+                        <th className="cell-number">{t('shopAnalytics.videoRevenue')}</th>
+                        <th className="cell-number">{t('shopAnalytics.videoViews')}</th>
+                        <th className="cell-number">{t('shopAnalytics.orders')}</th>
+                        <th className="cell-number">{t('shopAnalytics.unitsSold')}</th>
+                        <th className="cell-number">{t('shopAnalytics.videoCtr')}</th>
+                        <th>{t('shopAnalytics.postedAt')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {videoAnalyticsLoading && !videoRows.length ? (
+                        <tr><td colSpan={8}><div className="empty-state"><span className="loading-dot" />{t('shopAnalytics.loadingVideos')}</div></td></tr>
+                      ) : null}
+                      {videoRows.map((video, index) => {
+                        const url = videoUrl(video);
+                        const creatorName = video.creator?.nick_name || video.creator?.user_name || video.username || '—';
+                        const hashtags = (video.hash_tags || video.hashtags || [])
+                          .map((hashtag) => String(hashtag || '').trim())
+                          .filter(Boolean)
+                          .map((hashtag) => hashtag.startsWith('#') ? hashtag : `#${hashtag}`);
+                        return (
+                          <tr key={video.id || index}>
+                            <td>
+                              <div className="shop-video-analytics__video">
+                                <VideoThumbnail shopId={selectedShopId} video={video} href={url} />
+                                <span>
+                                  <strong>{video.title || video.id || t('common.unknown')}</strong>
+                                  <span className="shop-video-analytics__creator" title={creatorName}>
+                                    {creatorName}
+                                  </span>
+                                </span>
+                              </div>
+                            </td>
+                            <td>
+                              {hashtags.length ? (
+                                <div className="video-hashtags" title={hashtags.join(' ')}>
+                                  {hashtags.slice(0, 3).map((hashtag, hashtagIndex) => (
+                                    <span className="chip" key={`${hashtag}-${hashtagIndex}`}>{hashtag}</span>
+                                  ))}
+                                  {hashtags.length > 3 ? <span className="chip">+{hashtags.length - 3}</span> : null}
+                                </div>
+                              ) : '—'}
+                            </td>
+                            <td className="cell-number"><strong>{formatVideoMoney(video.gmv)}</strong></td>
+                            <td className="cell-number">{formatNumber(video.views ?? video.video_views)}</td>
+                            <td className="cell-number">{formatNumber(video.sku_orders ?? video.orders)}</td>
+                            <td className="cell-number">{formatNumber(video.items_sold ?? video.units_sold)}</td>
+                            <td className="cell-number">{formatRate(video.click_through_rate ?? video.ctr)}</td>
+                            <td>{formatVideoDateTime(
+                              video.video_post_time || video.post_time,
+                              t('common.noData'),
+                            )}</td>
+                          </tr>
+                        );
+                      })}
+                      {!videoAnalyticsLoading && !videoRows.length ? (
+                        <tr><td colSpan={8}><div className="empty-state">{t('shopAnalytics.noVideoData')}</div></td></tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          ) : (
+            <section className="section-card shop-analytics__empty">
+              <h2>{t('shopAnalytics.noShops')}</h2>
+              <p>{t('shopAnalytics.noShopsMeta')}</p>
+            </section>
+          )}
+        </div> : null}
+        </>
       ) : (
         <div
           id="shop-connections-panel"

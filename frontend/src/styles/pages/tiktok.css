@@ -1228,6 +1228,91 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.booking-stats--evaluation {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.booking-evaluation-form {
+  grid-template-columns: minmax(320px, 2fr) minmax(180px, .7fr) auto;
+  align-items: end;
+}
+
+.booking-source-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+
+.booking-source-preview > div,
+.booking-performance-cell {
+  display: grid;
+  gap: 3px;
+}
+
+.booking-source-preview span,
+.booking-source-preview small,
+.booking-performance-cell small,
+.booking-detail-grid span {
+  color: var(--color-text-soft);
+  font-size: .76rem;
+}
+
+.booking-evaluation-table {
+  min-width: 1120px;
+}
+
+.booking-collaboration-status {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-soft);
+  font-size: .7rem;
+  font-weight: 800;
+}
+
+.booking-collaboration-status.is-ongoing,
+.booking-collaboration-status.is-valid {
+  background: #e8f8ef;
+  color: #177245;
+}
+
+.booking-collaboration-status.is-expiring {
+  background: #fff7dc;
+  color: #8a5b00;
+}
+
+.booking-collaboration-status.is-canceling,
+.booking-collaboration-status.is-completed {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
+.booking-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.booking-detail-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+
+.booking-detail-grid__wide {
+  grid-column: 1 / -1;
+}
+
 .booking-status-select {
   min-width: 132px;
   padding: 7px 30px 7px 10px;
@@ -1307,6 +1392,14 @@
 .booking-detail-form {
     grid-template-columns: 1fr;
   }
+
+.booking-evaluation-form,
+.booking-source-preview,
+.booking-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+.booking-detail-grid__wide { grid-column: auto; }
 
 .booking-detail-form__wide { grid-column: auto; }
 

@@ -1,6 +1,10 @@
 const crypto = require('crypto');
-const { QueryTypes } = require('sequelize');
-const { User, Booking, TikTokPartnerAuthorization, TikTokShop, sequelize } = require('../models');
+const { Op, QueryTypes } = require('sequelize');
+const {
+  User, Booking, TikTokPartnerAuthorization, TikTokShop,
+  TikTokTargetCollaborationSnapshot, TikTokCreatorPerformanceSnapshot, sequelize,
+} = require('../models');
+const { normalizeCreatorProfile } = require('../services/tiktokCreatorProfileService');
 const {
   buildAuthorizationUrl,
   parseAuthorizationState,
@@ -54,68 +58,97 @@ const resolveSellerShopId = async (authorization, requestedShopId) => {
   return String(sellerShop?.platform_shop_id || authorization?.shop_id || '').trim();
 };
 
-const targetCreatorSql = `
-  SELECT DISTINCT ON (h.shop_id, COALESCE(h.creator_open_id, LOWER(h.username)))
-    h.shop_id,
-    h.creator_open_id,
-    h.username,
-    COALESCE(p_open.nickname, p_username.nickname, h.username) AS nickname,
-    COALESCE(p_open.avatar_url, p_username.avatar_url) AS avatar_url,
-    h.last_invited_at
-  FROM tiktok_creator_contact_histories h
-  LEFT JOIN LATERAL (
-    SELECT profile.nickname, profile.avatar_url
-    FROM tiktok_creator_profiles profile
-    WHERE profile.shop_id = h.shop_id
-      AND profile.creator_open_id = h.creator_open_id
-    ORDER BY profile.refreshed_at DESC
-    LIMIT 1
-  ) p_open ON TRUE
-  LEFT JOIN tiktok_creator_profiles p_username
-    ON p_username.shop_id = h.shop_id
-    AND p_username.username = LOWER(h.username)
-  WHERE h.last_invited_at IS NOT NULL
-`;
-
 const getTargetKocs = async (req, res) => {
   try {
     const keyword = String(req.query.keyword || '').trim();
-    const rows = await sequelize.query(`
-      ${targetCreatorSql}
-      ${keyword ? `AND (h.username ILIKE :keyword OR p_open.nickname ILIKE :keyword OR p_username.nickname ILIKE :keyword)` : ''}
-      ORDER BY h.shop_id, COALESCE(h.creator_open_id, LOWER(h.username)), h.last_invited_at DESC
-    `, {
-      replacements: keyword ? { keyword: `%${keyword}%` } : {},
-      type: QueryTypes.SELECT,
+    const collaborations = await TikTokTargetCollaborationSnapshot.findAll({
+      where: { status: { [Op.in]: ['ONGOING', 'VALID', 'EXPIRING'] } },
+      order: [['end_at', 'DESC'], ['synced_at', 'DESC']],
     });
-    rows.sort((left, right) => {
-      const recency = new Date(right.last_invited_at || 0).getTime() - new Date(left.last_invited_at || 0).getTime();
-      return recency || String(left.nickname || left.username).localeCompare(String(right.nickname || right.username));
+    const performanceRows = await sequelize.query(`
+      SELECT DISTINCT ON (shop_id, COALESCE(NULLIF(creator_open_id, ''), LOWER(username))) *
+      FROM tiktok_creator_performance_snapshots
+      ORDER BY shop_id, COALESCE(NULLIF(creator_open_id, ''), LOWER(username)), end_date DESC, synced_at DESC, id DESC
+    `, { type: QueryTypes.SELECT });
+    const performanceByCreator = new Map();
+    for (const performance of performanceRows) {
+      if (performance.creator_open_id) performanceByCreator.set(`${performance.shop_id}:open:${performance.creator_open_id}`, performance);
+      if (performance.username) performanceByCreator.set(`${performance.shop_id}:username:${String(performance.username).toLowerCase()}`, performance);
+    }
+    const candidates = [];
+    for (const instance of collaborations) {
+      const collaboration = instance.toJSON();
+      const raw = collaboration.raw_data || {};
+      for (const creator of raw.creators || []) {
+        const profile = normalizeCreatorProfile(creator);
+        if (!profile.creator_open_id) continue;
+        const searchable = `${profile.nickname || ''} ${profile.username || ''} ${collaboration.name || ''}`.toLowerCase();
+        if (keyword && !searchable.includes(keyword.toLowerCase())) continue;
+        const performance = performanceByCreator.get(`${collaboration.shop_id}:open:${profile.creator_open_id}`)
+          || performanceByCreator.get(`${collaboration.shop_id}:username:${profile.username}`)
+          || null;
+        candidates.push({
+          shop_id: collaboration.shop_id,
+          collaboration_id: collaboration.collaboration_id,
+          collaboration_name: collaboration.name,
+          collaboration_status: collaboration.status,
+          collaboration_start_at: collaboration.start_at,
+          collaboration_end_at: collaboration.end_at,
+          products: Array.isArray(raw.products) ? raw.products : [],
+          creator_open_id: profile.creator_open_id,
+          username: profile.username,
+          nickname: profile.nickname,
+          avatar_url: profile.avatar_url,
+          performance,
+          collaboration_synced_at: collaboration.synced_at,
+        });
+      }
+    }
+    candidates.sort((left, right) => {
+      const active = (value) => ['ONGOING', 'VALID', 'EXPIRING'].includes(value) ? 1 : 0;
+      return active(right.collaboration_status) - active(left.collaboration_status)
+        || new Date(right.collaboration_end_at || 0) - new Date(left.collaboration_end_at || 0)
+        || String(left.nickname || left.username).localeCompare(String(right.nickname || right.username));
     });
-    res.json(rows);
+    res.json(candidates);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-const findTargetCreator = async (shopId, creatorOpenId) => {
-  if (!Number.isInteger(Number(shopId)) || !String(creatorOpenId || '').trim()) return null;
-  const rows = await sequelize.query(`
-    ${targetCreatorSql}
-      AND h.shop_id = :shopId
-      AND h.creator_open_id = :creatorOpenId
-    ORDER BY h.shop_id, COALESCE(h.creator_open_id, LOWER(h.username)), h.last_invited_at DESC
-    LIMIT 1
-  `, {
-    replacements: { shopId: Number(shopId), creatorOpenId: String(creatorOpenId) },
-    type: QueryTypes.SELECT,
+const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenId) => {
+  if (!Number.isInteger(Number(shopId))
+    || !String(collaborationIdValue || '').trim()
+    || !String(creatorOpenId || '').trim()) return null;
+  const snapshot = await TikTokTargetCollaborationSnapshot.findOne({
+    where: { shop_id: Number(shopId), collaboration_id: String(collaborationIdValue) },
   });
-  return rows[0] || null;
+  if (!snapshot) return null;
+  const collaboration = snapshot.toJSON();
+  const raw = collaboration.raw_data || {};
+  const creator = (raw.creators || []).find((item) => {
+    const profile = normalizeCreatorProfile(item);
+    return String(profile.creator_open_id || '') === String(creatorOpenId || '');
+  });
+  if (!creator) return null;
+  const profile = normalizeCreatorProfile(creator);
+  const performance = await TikTokCreatorPerformanceSnapshot.findOne({
+    where: {
+      shop_id: Number(shopId),
+      [Op.or]: [
+        ...(profile.creator_open_id ? [{ creator_open_id: profile.creator_open_id }] : []),
+        ...(profile.username ? [{ username: { [Op.iLike]: profile.username } }] : []),
+      ],
+    },
+    order: [['end_date', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
+  });
+  return { collaboration, raw, profile, performance: performance?.toJSON() || null };
 };
 
 const getBookings = async (req, res) => {
   try {
     const bookings = await Booking.findAll({
+      where: { evaluation_snapshot: { [Op.not]: null } },
       include: bookingInclude,
       order: [['deadline', 'ASC'], ['id', 'DESC']],
     });
@@ -139,26 +172,43 @@ const getBookingById = async (req, res) => {
 
 const createBooking = async (req, res) => {
   try {
-    const staffName = String(req.body.staff_name || '').trim();
-    const targetCreator = await findTargetCreator(req.body.target_shop_id, req.body.creator_open_id);
-    if (!staffName) return res.status(400).json({ message: 'Booking staff name is required.' });
-    if (!targetCreator && !req.body.creator_id) return res.status(400).json({ message: 'Select a KOC from Target Collaboration.' });
+    const cost = Number(req.body.booking_cost);
+    if (!Number.isFinite(cost) || cost < 0) return res.status(400).json({ message: 'Booking cost must be zero or greater.' });
+    const targetCreator = await findTargetCreator(
+      req.body.target_shop_id,
+      req.body.target_collaboration_id,
+      req.body.creator_open_id,
+    );
+    if (!targetCreator) return res.status(400).json({ message: 'Select a KOC from a synced Target Collaboration.' });
+    const { collaboration, raw, profile, performance } = targetCreator;
+    const evaluationSnapshot = {
+      recorded_at: new Date().toISOString(),
+      collaboration: {
+        id: collaboration.collaboration_id,
+        name: collaboration.name,
+        status: collaboration.status,
+        start_at: collaboration.start_at,
+        end_at: collaboration.end_at,
+        products: Array.isArray(raw.products) ? raw.products : [],
+        synced_at: collaboration.synced_at,
+      },
+      performance,
+    };
     const payload = compactPayload({
-      staff_id: req.body.staff_id || null,
-      staff_name: staffName,
-      creator_id: req.body.creator_id || null,
-      creator_open_id: targetCreator?.creator_open_id,
-      creator_username: targetCreator?.username,
-      creator_name: targetCreator?.nickname,
-      creator_avatar_url: targetCreator?.avatar_url,
-      target_shop_id: targetCreator?.shop_id,
-      booking_cost: req.body.booking_cost,
-      status: req.body.status || 'booked',
-      deadline: req.body.deadline,
+      staff_id: null,
+      staff_name: null,
+      creator_id: null,
+      creator_open_id: profile.creator_open_id,
+      creator_username: profile.username,
+      creator_name: profile.nickname,
+      creator_avatar_url: profile.avatar_url,
+      target_shop_id: collaboration.shop_id,
+      target_collaboration_id: collaboration.collaboration_id,
+      evaluation_snapshot: evaluationSnapshot,
+      booking_cost: cost,
+      status: 'draft',
+      deadline: collaboration.end_at ? new Date(collaboration.end_at).toISOString().slice(0, 10) : null,
       note: req.body.note || null,
-      video_platform_id: req.body.video_platform_id || null,
-      video_url: normalizeBookingVideoUrl(req.body.video_url),
-      posted_at: req.body.posted_at || null,
       updated_at: new Date(),
     });
 
@@ -176,6 +226,11 @@ const createBooking = async (req, res) => {
 
 const updateBooking = async (req, res) => {
   try {
+    if (req.body.booking_cost !== undefined) {
+      const cost = Number(req.body.booking_cost);
+      if (!Number.isFinite(cost) || cost < 0) return res.status(400).json({ message: 'Booking cost must be zero or greater.' });
+      req.body.booking_cost = cost;
+    }
     if (req.body.status && !ALLOWED_STATUSES.has(req.body.status)) {
       return res.status(400).json({ message: 'Invalid booking status' });
     }

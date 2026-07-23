@@ -19,6 +19,7 @@ export const sidebarSections = [
     title: 'TikTok Shop',
     items: [
       { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
+      { to: '/manage/video-analytics', labelKey: 'navigation.videoAnalytics' },
       { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
       { to: '/bookings', labelKey: 'navigation.bookings' },
       { to: '/reports', labelKey: 'navigation.reports' },
@@ -101,6 +102,11 @@ export const protectedRouteCards = [
     path: '/manage/shop-analytics',
     component: 'ShopAnalytics',
     props: { heroTitle: 'Shop analytics' },
+  },
+  {
+    path: '/manage/video-analytics',
+    component: 'ShopAnalytics',
+    props: { videoOnly: true },
   },
   {
     path: '/bookings',

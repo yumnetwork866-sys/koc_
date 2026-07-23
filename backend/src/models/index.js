@@ -85,6 +85,8 @@ const Booking = sequelize.define('Booking', {
   creator_name: DataTypes.STRING,
   creator_avatar_url: DataTypes.TEXT,
   target_shop_id: DataTypes.INTEGER,
+  target_collaboration_id: DataTypes.STRING,
+  evaluation_snapshot: DataTypes.JSONB,
   booking_cost: {
     type: DataTypes.DECIMAL(12, 2),
     allowNull: false,
@@ -388,6 +390,25 @@ const TikTokCreatorContactHistory = sequelize.define('TikTokCreatorContactHistor
   indexes: [
     { unique: true, fields: ['shop_id', 'username'] },
     { fields: ['shop_id', 'creator_open_id'] },
+  ],
+});
+
+const TikTokTargetCollaborationSnapshot = sequelize.define('TikTokTargetCollaborationSnapshot', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  collaboration_id: { type: DataTypes.STRING, allowNull: false },
+  name: DataTypes.STRING(500),
+  status: DataTypes.STRING(64),
+  start_at: DataTypes.DATE,
+  end_at: DataTypes.DATE,
+  raw_data: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+  synced_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_target_collaboration_snapshots',
+  timestamps: false,
+  indexes: [
+    { unique: true, fields: ['shop_id', 'collaboration_id'] },
+    { fields: ['shop_id', 'status', 'end_at'] },
   ],
 });
 
@@ -1058,6 +1079,8 @@ TikTokShop.hasMany(TikTokMarketplaceDiscoveryRun, { foreignKey: 'shop_id', as: '
 TikTokMarketplaceDiscoveryRun.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokShop.hasMany(TikTokCreatorContactHistory, { foreignKey: 'shop_id', as: 'creator_contact_histories' });
 TikTokCreatorContactHistory.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(TikTokTargetCollaborationSnapshot, { foreignKey: 'shop_id', as: 'target_collaboration_snapshots' });
+TikTokTargetCollaborationSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokShop.hasMany(TikTokBasePerformanceSnapshot, { foreignKey: 'shop_id', as: 'base_performance_snapshots' });
 TikTokBasePerformanceSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokCreatorPerformanceExport.hasOne(TikTokBasePerformanceSnapshot, { foreignKey: 'export_id', as: 'base_snapshot' });
@@ -1114,6 +1137,7 @@ module.exports = {
   TikTokMarketplaceDiscoveryState,
   TikTokMarketplaceDiscoveryRun,
   TikTokCreatorContactHistory,
+  TikTokTargetCollaborationSnapshot,
   TikTokBasePerformanceSnapshot,
   ScheduledJob,
   ScheduledJobRun,

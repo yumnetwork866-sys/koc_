@@ -123,6 +123,28 @@ export function syncTikTokShopAnalytics(shopId, payload, signal) {
   return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/analytics/sync`, { method: 'POST', body: payload, signal });
 }
 
+export function fetchTikTokShopVideoAnalytics(shopId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.startDate) params.set('start_date', filters.startDate);
+  if (filters.endDate) params.set('end_date', filters.endDate);
+  if (filters.currency) params.set('currency', filters.currency);
+  if (filters.accountType) params.set('account_type', filters.accountType);
+  if (filters.sortField) params.set('sort_field', filters.sortField);
+  if (filters.sortOrder) params.set('sort_order', filters.sortOrder);
+  if (filters.pageSize) params.set('page_size', filters.pageSize);
+  if (filters.pageToken) params.set('page_token', filters.pageToken);
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/video-analytics?${params.toString()}`, {
+    signal: filters.signal,
+  });
+}
+
+export function fetchTikTokShopVideoThumbnail(shopId, videoId, username, signal) {
+  const params = new URLSearchParams({ username });
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/video-thumbnails/${encodeURIComponent(videoId)}?${params.toString()}`, {
+    signal,
+  });
+}
+
 export function fetchSchedules(signal) {
   return apiRequest('/schedules', { signal });
 }

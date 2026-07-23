@@ -44,6 +44,7 @@ const defaultMigrationNames = [
   '035_create_tiktok_creator_contact_histories',
   '036_allow_booking_target_creators',
   '037_add_booking_timestamps',
+  '038_create_booking_evaluations',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

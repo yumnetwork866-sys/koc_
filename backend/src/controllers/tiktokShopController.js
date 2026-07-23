@@ -23,6 +23,7 @@ const {
   SELLER_PRODUCT_BASIC_SCOPE,
   getSellerCreatorContentDetails,
   normalizeShopPerformance,
+  getShopVideoPerformance,
 } = require('../services/tiktokShopService');
 const { loadShopAnalyticsPerformance } = require('../services/tiktokShopAnalyticsSyncService');
 const { addMarketplaceLocalCurrency } = require('../services/exchangeRateService');
@@ -41,6 +42,7 @@ const {
   syncAndHydrateCollaborationCreators,
 } = require('../services/tiktokCreatorProfileService');
 const { recordTargetCollaborationInvites } = require('../services/tiktokCreatorContactHistoryService');
+const { saveTargetCollaborationSnapshots } = require('../services/tiktokTargetCollaborationSnapshotService');
 const { targetCollaborationSyncService } = require('../services/tiktokTargetCollaborationSyncService');
 
 const affiliateCacheTtlValue = Number(process.env.TIKTOK_SELLER_AFFILIATE_CACHE_TTL_MS ?? 120000);
@@ -49,6 +51,7 @@ const affiliateCacheTtlMs = affiliateCacheTtlValue === 0
   : Math.min(300000, Math.max(60000, affiliateCacheTtlValue || 120000));
 const sellerAffiliateCache = createTtlPromiseCache({ ttlMs: affiliateCacheTtlMs, maxEntries: 1000 });
 const marketplaceCategoryCache = createTtlPromiseCache({ ttlMs: 6 * 60 * 60 * 1000, maxEntries: 100 });
+const videoThumbnailCache = createTtlPromiseCache({ ttlMs: 12 * 60 * 60 * 1000, maxEntries: 10000 });
 const flattenMarketplaceCategories = (categories = []) => categories.flatMap((category) => [
   category,
   ...flattenMarketplaceCategories(category?.children || category?.sub_categories || []),
@@ -70,7 +73,7 @@ const addMarketplaceCategoryNames = async (creators, shop) => {
 };
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3005';
 const redirectUrl = (status, message, returnPath = '/manage/shop-analytics') => {
-  const safeReturnPath = ['/manage/shops', '/manage/shop-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
+  const safeReturnPath = ['/manage/shops', '/manage/shop-analytics', '/manage/video-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
   const url = new URL(safeReturnPath, FRONTEND_URL());
   url.searchParams.set('shop_oauth_status', status);
   if (message) url.searchParams.set('shop_oauth_message', message);
@@ -255,6 +258,126 @@ const syncShopAnalytics = async (req, res) => {
   }
 };
 
+const listShopVideoPerformance = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const startDate = dateValue(req.query.start_date);
+    const endDate = dateValue(req.query.end_date);
+    if (!startDate || !endDate || startDate >= endDate) {
+      return res.status(400).json({ message: 'A valid start_date and exclusive end_date are required.' });
+    }
+    const allowedAccountTypes = new Set(['ALL', 'LINKED_ACCOUNTS', 'OFFICIAL_ACCOUNTS', 'MARKETING_ACCOUNTS', 'AFFILIATE_ACCOUNTS']);
+    const allowedSortFields = new Set(['gmv', 'gpm', 'avg_customers', 'sku_orders', 'items_sold', 'views', 'click_through_rate']);
+    const options = {
+      startDate,
+      endDate,
+      currency: req.query.currency === 'USD' ? 'USD' : 'LOCAL',
+      accountType: allowedAccountTypes.has(req.query.account_type) ? req.query.account_type : 'ALL',
+      sortField: allowedSortFields.has(req.query.sort_field) ? req.query.sort_field : 'gmv',
+      sortOrder: req.query.sort_order === 'ASC' ? 'ASC' : 'DESC',
+      pageSize: pageSizeValue(req.query.page_size),
+      pageToken: req.query.page_token,
+    };
+    const loadPerformance = async () => {
+      if (isDemoAuthorization(shop.authorization)) {
+        return sellerAffiliateFixture('shop-video-performance', shop, {
+          ...req.query,
+          ...req.params,
+          account_type: options.accountType,
+        });
+      }
+      const request = (accountType) => getShopVideoPerformance({
+        authorization: shop.authorization,
+        shopCipher: shop.cipher,
+        ...options,
+        accountType,
+      });
+      if (options.accountType !== 'LINKED_ACCOUNTS') return request(options.accountType);
+      const [officialPayload, marketingPayload] = await Promise.all([
+        request('OFFICIAL_ACCOUNTS'),
+        request('MARKETING_ACCOUNTS'),
+      ]);
+      const videosById = new Map();
+      [
+        ...(officialPayload.data?.videos || []),
+        ...(marketingPayload.data?.videos || []),
+      ].forEach((video, index) => videosById.set(String(video.id || `video-${index}`), video));
+      const numericMetric = (video) => {
+        const value = options.sortField === 'gmv' || options.sortField === 'gpm'
+          ? video?.[options.sortField]?.amount
+          : video?.[options.sortField];
+        return Number(value) || 0;
+      };
+      const direction = options.sortOrder === 'ASC' ? 1 : -1;
+      const videos = [...videosById.values()]
+        .sort((left, right) => (numericMetric(left) - numericMetric(right)) * direction)
+        .slice(0, options.pageSize);
+      return {
+        code: 0,
+        data: {
+          videos,
+          total_count: Number(officialPayload.data?.total_count || officialPayload.data?.videos?.length || 0)
+            + Number(marketingPayload.data?.total_count || marketingPayload.data?.videos?.length || 0),
+          next_page_token: null,
+        },
+        request_id: [officialPayload.request_id, marketingPayload.request_id].filter(Boolean).join(',') || null,
+      };
+    };
+    const { value: payload, hit } = await sellerAffiliateCache.getOrLoad(
+      affiliateCacheKey('shop-video-performance', shop, req),
+      loadPerformance,
+    );
+    res.set('X-Shop-Video-Analytics-Cache', hit ? 'HIT' : 'MISS');
+    res.json({ ...payload.data, request_id: payload.request_id || null });
+  } catch (error) {
+    const permissionError = /grant data\.shop_analytics\.public\.read/i.test(error.message);
+    res.status(permissionError ? 403 : 502).json({
+      message: error.message,
+      ...(error.tiktokCode !== undefined && error.tiktokCode !== null ? { tiktok_code: Number(error.tiktokCode) } : {}),
+      ...(error.requestId ? { request_id: error.requestId } : {}),
+    });
+  }
+};
+
+const getShopVideoThumbnail = async (req, res) => {
+  try {
+    const shopId = idValue(req.params.shopId);
+    const videoId = /^\d{10,30}$/.test(String(req.params.videoId || ''))
+      ? String(req.params.videoId)
+      : null;
+    const username = String(req.query.username || '').trim().replace(/^@+/, '');
+    if (!shopId || !videoId || !/^[\w.]{1,64}$/.test(username)) {
+      return res.status(400).json({ message: 'A valid shop, video id and TikTok username are required.' });
+    }
+    const shopExists = await TikTokShop.count({ where: { id: shopId } });
+    if (!shopExists) return res.status(404).json({ message: 'TikTok Shop not found.' });
+    const cacheKey = `${username.toLowerCase()}:${videoId}`;
+    const { value, hit } = await videoThumbnailCache.getOrLoad(cacheKey, async () => {
+      const videoUrl = `https://www.tiktok.com/@${username}/video/${videoId}`;
+      const url = new URL('https://www.tiktok.com/oembed');
+      url.searchParams.set('url', videoUrl);
+      const response = await fetch(url, {
+        headers: { accept: 'application/json' },
+        ...(typeof AbortSignal !== 'undefined' && AbortSignal.timeout
+          ? { signal: AbortSignal.timeout(10000) }
+          : {}),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(`TikTok thumbnail request failed with status ${response.status}.`);
+      return {
+        thumbnail_url: payload?.thumbnail_url || null,
+        width: Number(payload?.thumbnail_width) || null,
+        height: Number(payload?.thumbnail_height) || null,
+      };
+    });
+    res.set('X-TikTok-Thumbnail-Cache', hit ? 'HIT' : 'MISS');
+    res.json(value);
+  } catch (error) {
+    res.status(502).json({ message: error.message });
+  }
+};
+
 const loadAffiliateShop = async (req, res) => {
   const shopId = idValue(req.params.shopId);
   if (!shopId) {
@@ -378,6 +501,7 @@ const listTargetCollaborations = affiliateResponse('target-collaborations', asyn
     }
   });
   const sharedProfileRows = await syncAndHydrateCollaborationCreators(shop.id, detailedRows);
+  await saveTargetCollaborationSnapshots(shop.id, sharedProfileRows);
   await recordTargetCollaborationInvites(shop.id, sharedProfileRows);
   return { ...payload, data: { ...payload.data, target_collaborations: sharedProfileRows } };
 });
@@ -843,6 +967,7 @@ const syncCreatorPerformance = async (req, res) => {
 module.exports = {
   startShopOauth, handleShopOauthCallback, listShopConnections, listShops,
   getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization, disconnectShop,
+  listShopVideoPerformance, getShopVideoThumbnail,
   listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
   listAffiliateCreators, listMarketplaceCreators, showMarketplaceCreator,
   listCreatorContentDetails,

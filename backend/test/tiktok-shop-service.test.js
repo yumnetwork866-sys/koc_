@@ -5,6 +5,7 @@ const test = require('node:test');
 const {
   AUTHORIZED_SHOPS_PATH,
   SHOP_PERFORMANCE_PATH,
+  SHOP_VIDEO_PERFORMANCE_PATH,
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
   TARGET_COLLABORATION_DETAIL_PATH,
@@ -20,6 +21,7 @@ const {
   signature,
   getAuthorizedShops,
   getShopPerformance,
+  getShopVideoPerformance,
   normalizeShopPerformance,
   searchOpenCollaborations,
   searchTargetCollaborations,
@@ -85,6 +87,13 @@ test('seller OAuth preserves the standalone affiliate return page', (t) => {
   const url = new URL(buildShopAuthorizationUrl('/manage/affiliate'));
   const state = parseShopAuthorizationState(url.searchParams.get('state'));
   assert.equal(state.returnPath, '/manage/affiliate');
+});
+
+test('seller OAuth preserves the standalone video analytics return page', (t) => {
+  configure(t);
+  const url = new URL(buildShopAuthorizationUrl('/manage/video-analytics'));
+  const state = parseShopAuthorizationState(url.searchParams.get('state'));
+  assert.equal(state.returnPath, '/manage/video-analytics');
 });
 
 test('seller authorization code is exchanged through the TikTok Shop token endpoint', async (t) => {
@@ -157,6 +166,44 @@ test('shop performance request uses the selected shop cipher and date range', as
     };
   });
   assert.equal(payload.request_id, 'request-1');
+});
+
+test('shop video performance returns per-video GMV with analytics filters', async (t) => {
+  configure(t);
+  const authorization = {
+    granted_scopes: ['data.shop_analytics.public.read'],
+    access_token_encrypted: encryptPartnerToken('seller-token'),
+    access_token_expires_at: new Date(Date.now() + 60 * 60 * 1000),
+  };
+  const payload = await getShopVideoPerformance({
+    authorization,
+    shopCipher: 'cipher-1',
+    startDate: '2026-07-01',
+    endDate: '2026-07-08',
+    currency: 'LOCAL',
+    accountType: 'AFFILIATE_ACCOUNTS',
+    sortField: 'gmv',
+    sortOrder: 'DESC',
+    pageSize: 100,
+  }, async (url, options) => {
+    assert.equal(url.pathname, SHOP_VIDEO_PERFORMANCE_PATH);
+    assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
+    assert.equal(url.searchParams.get('start_date_ge'), '2026-07-01');
+    assert.equal(url.searchParams.get('end_date_lt'), '2026-07-08');
+    assert.equal(url.searchParams.get('account_type'), 'AFFILIATE_ACCOUNTS');
+    assert.equal(url.searchParams.get('sort_field'), 'gmv');
+    assert.equal(url.searchParams.get('page_size'), '100');
+    assert.equal(options.headers['x-tts-access-token'], 'seller-token');
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 0,
+        data: { videos: [{ id: 'video-1', gmv: { amount: '123', currency: 'VND' } }] },
+      }),
+    };
+  });
+  assert.equal(payload.data.videos[0].gmv.amount, '123');
 });
 
 test('shop performance 202509 response is normalized for the existing analytics UI', () => {

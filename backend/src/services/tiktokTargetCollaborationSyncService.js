@@ -2,6 +2,7 @@ const { TikTokApiCooldown } = require('../models');
 const { searchTargetCollaborations, getTargetCollaboration } = require('./tiktokShopService');
 const { syncAndHydrateCollaborationCreators } = require('./tiktokCreatorProfileService');
 const { recordTargetCollaborationInvites } = require('./tiktokCreatorContactHistoryService');
+const { saveTargetCollaborationSnapshots } = require('./tiktokTargetCollaborationSnapshotService');
 
 const TARGET_STATUSES = ['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'];
 const TARGET_PAGE_SIZE = 100;
@@ -75,6 +76,7 @@ const createTargetCollaborationSyncService = ({
   getDetail = getTargetCollaboration,
   hydrate = syncAndHydrateCollaborationCreators,
   recordInvites = recordTargetCollaborationInvites,
+  saveSnapshots = saveTargetCollaborationSnapshots,
   runRequest = createTargetRequestRunner(),
   statuses = TARGET_STATUSES,
   logger = console,
@@ -120,6 +122,7 @@ const createTargetCollaborationSyncService = ({
             logger: { info() {} },
           });
           const creators = hydrated?.creators || [];
+          await saveSnapshots(shop.id, hydrated ? [hydrated] : [detailed]);
           await recordInvites(shop.id, hydrated ? [hydrated] : []);
           statusSummary.collaborations += 1;
           statusSummary.creators += creators.length;

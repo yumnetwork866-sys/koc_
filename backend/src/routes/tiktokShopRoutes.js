@@ -8,6 +8,8 @@ adminRouter.get('/shops', controller.listShops);
 adminRouter.delete('/shops/:shopId', controller.disconnectShop);
 adminRouter.get('/shops/:shopId/analytics', controller.getShopAnalytics);
 adminRouter.post('/shops/:shopId/analytics/sync', controller.syncShopAnalytics);
+adminRouter.get('/shops/:shopId/video-analytics', controller.listShopVideoPerformance);
+adminRouter.get('/shops/:shopId/video-thumbnails/:videoId', controller.getShopVideoThumbnail);
 adminRouter.get('/shops/:shopId/affiliate/open-collaborations', controller.listOpenCollaborations);
 adminRouter.get('/shops/:shopId/affiliate/target-collaborations', controller.listTargetCollaborations);
 adminRouter.get('/shops/:shopId/affiliate/orders', controller.listAffiliateOrders);

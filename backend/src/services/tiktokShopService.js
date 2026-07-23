@@ -5,6 +5,7 @@ const STATE_TTL_MS = 10 * 60 * 1000;
 const TOKEN_SKEW_MS = 5 * 60 * 1000;
 const AUTHORIZED_SHOPS_PATH = '/authorization/202309/shops';
 const SHOP_PERFORMANCE_PATH = '/analytics/202509/shop/performance';
+const SHOP_VIDEO_PERFORMANCE_PATH = '/analytics/202605/shop_videos/performance';
 const SELLER_AFFILIATE_SCOPE = 'seller.affiliate_collaboration.read';
 const SELLER_CREATOR_MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
 const SELLER_PRODUCT_BASIC_SCOPE = 'seller.product.basic';
@@ -49,7 +50,7 @@ const buildShopAuthorizationUrl = (returnPath = '/manage/shop-analytics') => {
   assertConfigured(config, { oauth: true });
   const payload = Buffer.from(JSON.stringify({
     oauthType: 'shop',
-    returnPath: ['/manage/shops', '/manage/shop-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics',
+    returnPath: ['/manage/shops', '/manage/shop-analytics', '/manage/video-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics',
     nonce: crypto.randomBytes(16).toString('hex'),
     expiresAt: Date.now() + STATE_TTL_MS,
   })).toString('base64url');
@@ -485,9 +486,45 @@ const getShopPerformance = async ({ authorization, shopCipher, startDate, endDat
   return payload;
 };
 
+const getShopVideoPerformance = async ({
+  authorization,
+  shopCipher,
+  startDate,
+  endDate,
+  currency = 'LOCAL',
+  accountType = 'ALL',
+  sortField = 'gmv',
+  sortOrder = 'DESC',
+  pageSize = 50,
+  pageToken,
+}, fetchImpl) => {
+  const scopes = Array.isArray(authorization?.granted_scopes) ? authorization.granted_scopes : [];
+  if (!scopes.includes('data.shop_analytics.public.read')) {
+    throw new Error('Reconnect TikTok Shop and grant data.shop_analytics.public.read.');
+  }
+  const accessToken = await getUsableShopToken(authorization, fetchImpl || fetch);
+  return requestShopApi({
+    path: SHOP_VIDEO_PERFORMANCE_PATH,
+    accessToken,
+    fetchImpl: fetchImpl || fetch,
+    query: {
+      shop_cipher: shopCipher,
+      start_date_ge: startDate,
+      end_date_lt: endDate,
+      currency: currency === 'USD' ? 'USD' : 'LOCAL',
+      account_type: accountType,
+      sort_field: sortField,
+      sort_order: sortOrder,
+      page_size: Math.min(100, Math.max(1, Number(pageSize) || 50)),
+      ...(pageToken ? { page_token: pageToken } : {}),
+    },
+  });
+};
+
 module.exports = {
   AUTHORIZED_SHOPS_PATH,
   SHOP_PERFORMANCE_PATH,
+  SHOP_VIDEO_PERFORMANCE_PATH,
   SELLER_AFFILIATE_SCOPE,
   SELLER_CREATOR_MARKETPLACE_SCOPE,
   SELLER_PRODUCT_BASIC_SCOPE,
@@ -509,6 +546,7 @@ module.exports = {
   signature,
   getAuthorizedShops,
   getShopPerformance,
+  getShopVideoPerformance,
   normalizeShopPerformance,
   searchOpenCollaborations,
   searchTargetCollaborations,

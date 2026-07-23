@@ -45,6 +45,7 @@ test('full Target Collaboration sync walks statuses, details, profiles, and invi
       calls.push(['hydrate', shopId, rows[0].id]);
       return rows;
     },
+    saveSnapshots: async (shopId, rows) => calls.push(['snapshots', shopId, rows[0].id]),
     recordInvites: async (shopId, rows) => calls.push(['invites', shopId, rows[0].creators.length]),
     logger: { info() {}, error() {} },
   });
@@ -59,6 +60,7 @@ test('full Target Collaboration sync walks statuses, details, profiles, and invi
   assert.deepEqual(calls, [
     ['search', 'ONGOING', TARGET_PAGE_SIZE],
     ['hydrate', 9, 'collab-1'],
+    ['snapshots', 9, 'collab-1'],
     ['invites', 9, 1],
     ['search', 'COMPLETED', TARGET_PAGE_SIZE],
   ]);

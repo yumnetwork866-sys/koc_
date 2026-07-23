@@ -45,6 +45,7 @@ const migrations = [
   require('./035_create_tiktok_creator_contact_histories'),
   require('./036_allow_booking_target_creators'),
   require('./037_add_booking_timestamps'),
+  require('./038_create_booking_evaluations'),
 ];
 
 const createMigrationRunner = ({

@@ -8,62 +8,31 @@ import {
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 
-const initialForm = {
-  staff_name: '',
-  creator_key: '',
-  booking_cost: '',
-  deadline: '',
-  note: '',
-};
+const initialForm = { creator_key: '', booking_cost: '' };
+const ACTIVE_COLLABORATION_STATUSES = new Set(['ONGOING', 'VALID', 'EXPIRING']);
 
-const BOOKING_STATUSES = ['draft', 'booked', 'waiting_video', 'video_posted', 'done', 'cancelled'];
-const TERMINAL_STATUSES = new Set(['done', 'cancelled']);
-const bookingDeadlineState = (booking) => {
-  if (!booking.deadline || TERMINAL_STATUSES.has(booking.status)) return 'neutral';
-  const deadline = new Date(`${booking.deadline}T23:59:59`);
-  const days = Math.ceil((deadline.getTime() - Date.now()) / 86400000);
-  if (days < 0) return 'overdue';
-  if (days <= 3) return 'soon';
-  return 'active';
-};
-
-const getKocDisplayName = (user) => {
-  const rawName = String(user?.name || user || '').trim();
-  if (!rawName) return '-';
-
-  return rawName
-    .replace(/\s*\(?\s*KOC(?:\s*(?:nữ|nam))?\s*\)?$/iu, '')
-    .trim() || rawName;
-};
-
-const targetKocKey = (creator) => `${creator.shop_id}:${creator.creator_open_id}`;
+const targetKocKey = (creator) => `${creator.shop_id}:${creator.collaboration_id}:${creator.creator_open_id}`;
 const targetKocLabel = (creator) => {
   if (!creator) return '';
   const name = creator.nickname || creator.username || 'KOC';
-  return creator.username ? `${name} (@${creator.username})` : name;
+  const collaboration = creator.collaboration_name ? ` · ${creator.collaboration_name}` : '';
+  return `${name}${creator.username ? ` (@${creator.username})` : ''}${collaboration}`;
+};
+const snapshotOf = (booking) => booking?.evaluation_snapshot || {};
+const collaborationOf = (booking) => snapshotOf(booking).collaboration || {};
+const performanceOf = (booking) => snapshotOf(booking).performance || null;
+const finiteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
 };
 
 const TargetKocAvatar = ({ src, name }) => {
   const [failed, setFailed] = useState(false);
-  const [retry, setRetry] = useState(false);
-  useEffect(() => {
-    setFailed(false);
-    setRetry(false);
-  }, [src]);
+  useEffect(() => setFailed(false), [src]);
   if (!src || failed) {
     return <span className="creator-identity__avatar creator-identity__avatar--fallback">{String(name || 'K').trim().charAt(0).toUpperCase()}</span>;
   }
-  return (
-    <img
-      className="creator-identity__avatar"
-      src={retry ? `${src}#avatar-retry` : src}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
-      onError={() => { if (!retry) setRetry(true); else setFailed(true); }}
-    />
-  );
+  return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
 };
 
 const TargetKocCombobox = ({ creators, value, onChange, placeholder, noResults }) => {
@@ -75,16 +44,13 @@ const TargetKocCombobox = ({ creators, value, onChange, placeholder, noResults }
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    setQuery(targetKocLabel(selectedCreator));
-  }, [selectedCreator]);
-
+  useEffect(() => setQuery(targetKocLabel(selectedCreator)), [selectedCreator]);
   useEffect(() => {
     if (!open) return undefined;
     const close = (event) => {
       if (event.key === 'Escape' || (event.type === 'pointerdown' && !rootRef.current?.contains(event.target))) {
         setOpen(false);
-        if (selectedCreator) setQuery(targetKocLabel(selectedCreator));
+        setQuery(targetKocLabel(selectedCreator));
       }
     };
     window.addEventListener('pointerdown', close);
@@ -98,14 +64,8 @@ const TargetKocCombobox = ({ creators, value, onChange, placeholder, noResults }
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const filteredCreators = useMemo(() => creators.filter((creator) => {
     if (!normalizedQuery || targetKocKey(creator) === value) return true;
-    return `${creator.nickname || ''} ${creator.username || ''}`.toLocaleLowerCase().includes(normalizedQuery);
+    return targetKocLabel(creator).toLocaleLowerCase().includes(normalizedQuery);
   }).slice(0, 50), [creators, normalizedQuery, value]);
-
-  const selectCreator = (creator) => {
-    onChange(targetKocKey(creator));
-    setQuery(targetKocLabel(creator));
-    setOpen(false);
-  };
 
   return (
     <div className="booking-koc-combobox" ref={rootRef}>
@@ -120,18 +80,7 @@ const TargetKocCombobox = ({ creators, value, onChange, placeholder, noResults }
           placeholder={placeholder}
           required
           onFocus={() => setOpen(true)}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            onChange('');
-            setOpen(true);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowDown') {
-              event.preventDefault();
-              setOpen(true);
-              window.requestAnimationFrame(() => rootRef.current?.querySelector('[role="option"]')?.focus());
-            }
-          }}
+          onChange={(event) => { setQuery(event.target.value); onChange(''); setOpen(true); }}
         />
         <button type="button" aria-label={placeholder} aria-expanded={open} onClick={() => setOpen((current) => !current)}>
           <span className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" />
@@ -139,22 +88,22 @@ const TargetKocCombobox = ({ creators, value, onChange, placeholder, noResults }
       </div>
       {open ? (
         <div className="booking-koc-combobox__menu" id="booking-koc-options" role="listbox">
-          {filteredCreators.length ? filteredCreators.map((creator) => {
-            const creatorKey = targetKocKey(creator);
-            return (
-              <button
-                className={`booking-koc-combobox__option${creatorKey === value ? ' booking-koc-combobox__option--active' : ''}`}
-                type="button"
-                role="option"
-                aria-selected={creatorKey === value}
-                key={creatorKey}
-                onClick={() => selectCreator(creator)}
-              >
-                <TargetKocAvatar src={creator.avatar_url} name={creator.nickname || creator.username} />
-                <span><strong>{creator.nickname || creator.username}</strong><small>@{creator.username}</small></span>
-              </button>
-            );
-          }) : <div className="booking-koc-combobox__empty">{noResults}</div>}
+          {filteredCreators.length ? filteredCreators.map((creator) => (
+            <button
+              className={`booking-koc-combobox__option${targetKocKey(creator) === value ? ' booking-koc-combobox__option--active' : ''}`}
+              type="button"
+              role="option"
+              aria-selected={targetKocKey(creator) === value}
+              key={targetKocKey(creator)}
+              onClick={() => { onChange(targetKocKey(creator)); setQuery(targetKocLabel(creator)); setOpen(false); }}
+            >
+              <TargetKocAvatar src={creator.avatar_url} name={creator.nickname || creator.username} />
+              <span>
+                <strong>{creator.nickname || creator.username}</strong>
+                <small>@{creator.username} · {creator.collaboration_name || creator.collaboration_id}</small>
+              </span>
+            </button>
+          )) : <div className="booking-koc-combobox__empty">{noResults}</div>}
         </div>
       ) : null}
     </div>
@@ -171,96 +120,73 @@ const BookingManagement = ({ heroTitle }) => {
   const [deletingId, setDeletingId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
   const [selectedBooking, setSelectedBooking] = useState(null);
-  const [detailForm, setDetailForm] = useState(null);
+  const [detailCost, setDetailCost] = useState('');
   const [error, setError] = useState('');
+
+  const locale = language === 'vi' ? 'vi-VN' : 'en-US';
+  const formatNumber = (value, options) => finiteNumber(value).toLocaleString(locale, options);
+  const formatMoney = (value, currency = 'MYR') => new Intl.NumberFormat(locale, {
+    style: 'currency', currency: currency === 'LOCAL' ? 'MYR' : currency || 'MYR', maximumFractionDigits: 2,
+  }).format(finiteNumber(value));
+  const formatDate = (value) => value
+    ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(value))
+    : '—';
+  const formatCollaborationStatus = (value) => value
+    ? t(`booking.collaborationStatuses.${String(value).toUpperCase()}`)
+    : '—';
 
   const loadData = async (signal) => {
     const [loadedBookings, loadedTargetKocs] = await Promise.all([
       fetchBookings(signal),
       fetchBookingTargetKocs(signal),
     ]);
-
     setBookings(loadedBookings);
     setTargetKocs(loadedTargetKocs);
   };
 
   useEffect(() => {
     const controller = new AbortController();
-
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        await loadData(controller.signal);
-      } catch (err) {
-        if (err.name !== 'AbortError') {
-          setError(err.message || t('booking.errorLoad'));
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    load();
-
+    setLoading(true);
+    setError('');
+    loadData(controller.signal)
+      .catch((err) => { if (err.name !== 'AbortError') setError(err.message || t('booking.errorLoad')); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [t]);
 
-  useEffect(() => {
-    window.history.replaceState({}, '', window.location.pathname);
-  }, []);
+  const selectedKoc = useMemo(
+    () => targetKocs.find((creator) => targetKocKey(creator) === form.creator_key) || null,
+    [form.creator_key, targetKocs],
+  );
+  const stats = useMemo(() => bookings.reduce((result, booking) => {
+    const collaboration = collaborationOf(booking);
+    result.total += 1;
+    result.totalCost += finiteNumber(booking.booking_cost);
+    if (ACTIVE_COLLABORATION_STATUSES.has(collaboration.status)) result.active += 1;
+    if (performanceOf(booking)) result.withPerformance += 1;
+    return result;
+  }, { total: 0, active: 0, withPerformance: 0, totalCost: 0 }), [bookings]);
 
-  const localizedFormatMoney = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
-  const targetKocsByKey = useMemo(() => new Map(
-    targetKocs.map((creator) => [targetKocKey(creator), creator]),
-  ), [targetKocs]);
-
-  const stats = useMemo(() => {
-    return bookings.reduce(
-      (acc, booking) => {
-        acc.total += 1;
-        acc.totalCost += Number(booking.booking_cost || 0);
-        if (!TERMINAL_STATUSES.has(booking.status)) acc.active += 1;
-        if (booking.status === 'waiting_video') acc.waitingVideo += 1;
-        if (booking.status === 'done') acc.done += 1;
-        if (bookingDeadlineState(booking) === 'overdue') acc.overdue += 1;
-        return acc;
-      },
-      { total: 0, active: 0, waitingVideo: 0, overdue: 0, done: 0, totalCost: 0 },
-    );
-  }, [bookings]);
-
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-    setForm((current) => ({
-      ...current,
-      [name]: value,
-    }));
-  };
-
-  const resetForm = () => {
-    setForm(initialForm);
-  };
+  const costBenchmarks = (cost, performance) => ({
+    perThousandViews: performance?.video_views ? finiteNumber(cost) / finiteNumber(performance.video_views) * 1000 : null,
+    perOrder: performance?.affiliate_orders ? finiteNumber(cost) / finiteNumber(performance.affiliate_orders) : null,
+    gmvRatio: performance?.affiliate_gmv ? finiteNumber(cost) / finiteNumber(performance.affiliate_gmv) * 100 : null,
+  });
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
+    if (!selectedKoc) return;
     try {
       setSaving(true);
       setError('');
-      const selectedKoc = targetKocs.find((creator) => `${creator.shop_id}:${creator.creator_open_id}` === form.creator_key);
-      await createBooking({
-        staff_name: form.staff_name.trim(),
-        target_shop_id: selectedKoc?.shop_id,
-        creator_open_id: selectedKoc?.creator_open_id,
+      const created = await createBooking({
+        target_shop_id: selectedKoc.shop_id,
+        target_collaboration_id: selectedKoc.collaboration_id,
+        creator_open_id: selectedKoc.creator_open_id,
         booking_cost: Number(form.booking_cost),
-        deadline: form.deadline || null,
-        note: form.note.trim() || null,
       });
-      resetForm();
-      await loadData();
+      setBookings((items) => [created, ...items]);
+      setForm(initialForm);
     } catch (err) {
       setError(err.message || t('booking.errorCreate'));
     } finally {
@@ -269,20 +195,13 @@ const BookingManagement = ({ heroTitle }) => {
   };
 
   const handleDelete = async (booking) => {
-    const confirmed = window.confirm(t('booking.deleteConfirm', { id: booking.id }));
-    if (!confirmed) {
-      return;
-    }
-
+    if (!window.confirm(t('booking.deleteConfirm', { id: booking.id }))) return;
     try {
       setDeletingId(booking.id);
       setError('');
       await deleteBooking(booking.id);
-      if (selectedBooking?.id === booking.id) {
-        setSelectedBooking(null);
-        setDetailForm(null);
-      }
-      await loadData();
+      setBookings((items) => items.filter((item) => item.id !== booking.id));
+      if (selectedBooking?.id === booking.id) setSelectedBooking(null);
     } catch (err) {
       setError(err.message || t('booking.errorDelete'));
     } finally {
@@ -290,50 +209,13 @@ const BookingManagement = ({ heroTitle }) => {
     }
   };
 
-  const applyBooking = (updated) => {
-    setBookings((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-    setSelectedBooking((current) => (current?.id === updated.id ? updated : current));
-  };
-
-  const changeStatus = async (booking, status) => {
-    try {
-      setUpdatingId(booking.id);
-      setError('');
-      applyBooking(await updateBooking(booking.id, { status }));
-    } catch (err) {
-      setError(err.message || t('booking.errorUpdate'));
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const openDetails = (booking) => {
-    setSelectedBooking(booking);
-    setDetailForm({
-      status: booking.status || 'booked',
-      deadline: booking.deadline || '',
-      staff_name: booking.staff_name || booking.staff?.name || '',
-      note: booking.note || '',
-    });
-  };
-
-  const saveDetails = async (event) => {
+  const saveCost = async (event) => {
     event.preventDefault();
     try {
       setUpdatingId(selectedBooking.id);
-      setError('');
-      const updated = await updateBooking(selectedBooking.id, {
-        ...detailForm,
-        deadline: detailForm.deadline || null,
-        note: detailForm.note.trim() || null,
-      });
-      applyBooking(updated);
-      setDetailForm({
-        status: updated.status,
-        deadline: updated.deadline || '',
-        staff_name: updated.staff_name || '',
-        note: updated.note || '',
-      });
+      const updated = await updateBooking(selectedBooking.id, { booking_cost: Number(detailCost) });
+      setBookings((items) => items.map((item) => item.id === updated.id ? updated : item));
+      setSelectedBooking(updated);
     } catch (err) {
       setError(err.message || t('booking.errorUpdate'));
     } finally {
@@ -341,267 +223,81 @@ const BookingManagement = ({ heroTitle }) => {
     }
   };
 
-  const formatDate = (value, includeTime = false) => value
-    ? new Intl.DateTimeFormat(language === 'vi' ? 'vi-VN' : 'en-US', includeTime
-      ? { dateStyle: 'short', timeStyle: 'short' }
-      : { dateStyle: 'short' }).format(new Date(value))
-    : '—';
-
-  const bookingVideos = (booking) => {
-    const value = booking?.video_url;
-    if (!value) return [];
-    try {
-      const parsed = JSON.parse(value);
-      return (Array.isArray(parsed) ? parsed : [parsed]).map((item) => (
-        typeof item === 'string' ? { title: item, video_url: item } : item
-      ));
-    } catch {
-      return [{ title: value, video_url: value }];
-    }
-  };
-
-  const selectedTargetCreator = selectedBooking
-    ? targetKocsByKey.get(`${selectedBooking.target_shop_id}:${selectedBooking.creator_open_id}`)
-    : null;
-  const selectedCreatorName = selectedBooking ? getKocDisplayName(
-    selectedTargetCreator?.nickname
-    || selectedBooking.creator_name
-    || selectedBooking.creator?.name
-    || selectedTargetCreator?.username
-    || selectedBooking.creator_username
-    || selectedBooking.creator_id,
-  ) : '';
-  const selectedCreatorUsername = selectedTargetCreator?.username || selectedBooking?.creator_username;
-  const selectedCreatorAvatar = selectedTargetCreator?.avatar_url || selectedBooking?.creator_avatar_url;
+  const renderPerformance = (performance) => performance ? (
+    <div className="booking-performance-cell">
+      <strong>{formatMoney(performance.affiliate_gmv, performance.currency)}</strong>
+      <small>{formatNumber(performance.affiliate_orders)} {t('booking.orders')} · {formatNumber(performance.video_views)} {t('booking.views')}</small>
+      <small>{formatDate(performance.start_date)} – {formatDate(performance.end_date)}</small>
+    </div>
+  ) : <span className="chip">{t('booking.noPerformance')}</span>;
 
   return (
     <div className="page">
       <section className="page__hero">
-        <h1 className="page__title">{t('booking.heroTitle') || heroTitle}</h1>
-        <div className="page__stats booking-stats">
-          <article className="stat-card">
-            <p className="stat-card__label">{t('booking.activeBookings')}</p>
-            <p className="stat-card__value">{stats.active}</p>
-          </article>
-          <article className="stat-card">
-            <p className="stat-card__label">{t('booking.waitingVideo')}</p>
-            <p className="stat-card__value">{stats.waitingVideo}</p>
-          </article>
-          <article className="stat-card">
-            <p className="stat-card__label">{t('booking.overdue')}</p>
-            <p className="stat-card__value">{stats.overdue}</p>
-          </article>
-          <article className="stat-card">
-            <p className="stat-card__label">{t('booking.completed')}</p>
-            <p className="stat-card__value">{stats.done}</p>
-          </article>
-          <article className="stat-card">
-            <p className="stat-card__label">{t('booking.totalCost')}</p>
-            <p className="stat-card__value">RM {localizedFormatMoney(stats.totalCost)}</p>
-          </article>
+        <div><h1 className="page__title">{t('booking.heroTitle') || heroTitle}</h1><p className="page__subtitle">{t('booking.evaluationSubtitle')}</p></div>
+        <div className="page__stats booking-stats booking-stats--evaluation">
+          <article className="stat-card"><p className="stat-card__label">{t('booking.evaluations')}</p><p className="stat-card__value">{stats.total}</p></article>
+          <article className="stat-card"><p className="stat-card__label">{t('booking.activeCollaborations')}</p><p className="stat-card__value">{stats.active}</p></article>
+          <article className="stat-card"><p className="stat-card__label">{t('booking.performanceCoverage')}</p><p className="stat-card__value">{stats.total ? Math.round(stats.withPerformance / stats.total * 100) : 0}%</p></article>
+          <article className="stat-card"><p className="stat-card__label">{t('booking.totalCost')}</p><p className="stat-card__value">{formatMoney(stats.totalCost)}</p></article>
         </div>
       </section>
 
-      {error ? (
-        <section className="section-card empty-state empty-state--compact">
-          <div>{error}</div>
-        </section>
-      ) : null}
+      {error ? <section className="section-card empty-state empty-state--compact" role="alert">{error}</section> : null}
 
       <section className="section-card">
-        <div className="section-card__header">
-          <div>
-            <h2 className="section-card__title">{t('booking.createBooking')}</h2>
-          </div>
-        </div>
-
-        <form className="filter-panel" onSubmit={handleSubmit}>
-          <div className="field">
-            <label htmlFor="staff_name">{t('booking.bookingStaff')}</label>
-            <input id="staff_name" name="staff_name" type="text" value={form.staff_name} onChange={handleChange} placeholder={t('booking.enterStaff')} required />
-          </div>
-          <div className="field">
-            <label htmlFor="creator_key">{t('booking.koc')}</label>
-            <TargetKocCombobox creators={targetKocs} value={form.creator_key} onChange={(creatorKey) => setForm((current) => ({ ...current, creator_key: creatorKey }))} placeholder={t('booking.searchKoc')} noResults={t('booking.noKocMatch')} />
-          </div>
-          <div className="field">
-            <label htmlFor="booking_cost">{t('booking.bookingCost')}</label>
-            <input
-              id="booking_cost"
-              name="booking_cost"
-              type="number"
-              min="0"
-              step="0.01"
-              inputMode="decimal"
-              value={form.booking_cost}
-              onChange={handleChange}
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="deadline">{t('booking.deadline')}</label>
-            <input id="deadline" name="deadline" type="date" value={form.deadline} onChange={handleChange} />
-          </div>
-          <div className="field booking-create-note">
-            <label htmlFor="note">{t('booking.note')}</label>
-            <input id="note" name="note" type="text" value={form.note} onChange={handleChange} placeholder={t('booking.notePlaceholder')} />
-          </div>
-          <div className="actions">
-            <button className="button" type="submit" disabled={saving}>
-              {saving ? t('booking.submitting') : t('booking.submit')}
-            </button>
-          </div>
+        <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.createEvaluation')}</h2><p className="section-card__meta">{t('booking.createEvaluationMeta')}</p></div></div>
+        <form className="filter-panel booking-evaluation-form" onSubmit={handleSubmit}>
+          <div className="field"><label>{t('booking.targetCreator')}</label><TargetKocCombobox creators={targetKocs} value={form.creator_key} onChange={(value) => setForm((current) => ({ ...current, creator_key: value }))} placeholder={t('booking.searchKoc')} noResults={t('booking.noSyncedCollaboration')} /></div>
+          <div className="field"><label htmlFor="booking_cost">{t('booking.bookingCost')}</label><input id="booking_cost" type="number" min="0" step="0.01" inputMode="decimal" value={form.booking_cost} onChange={(event) => setForm((current) => ({ ...current, booking_cost: event.target.value }))} required /></div>
+          <div className="actions"><button className="button" type="submit" disabled={saving || !selectedKoc}>{saving ? t('booking.submitting') : t('booking.evaluate')}</button></div>
         </form>
+        {selectedKoc ? (
+          <div className="booking-source-preview">
+            <div><span>{t('booking.collaboration')}</span><strong>{selectedKoc.collaboration_name || selectedKoc.collaboration_id}</strong><small>{formatCollaborationStatus(selectedKoc.collaboration_status)} · {t('booking.validUntil')} {formatDate(selectedKoc.collaboration_end_at)}</small></div>
+            <div><span>{t('booking.creatorPerformance')}</span>{renderPerformance(selectedKoc.performance)}</div>
+          </div>
+        ) : null}
       </section>
 
       <section className="section-card">
-        <div className="section-card__header">
-          <div>
-            <h2 className="section-card__title">{t('booking.list')}</h2>
-          </div>
-        </div>
-
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th className="cell-number">ID</th>
-                <th>{t('booking.kocColumn')}</th>
-                <th>{t('booking.statusColumn')}</th>
-                <th>{t('booking.deadlineColumn')}</th>
-                <th className="cell-number">{t('booking.costColumn')}</th>
-                <th className="cell-actions">{t('booking.actionsColumn')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={6}>
-                    <div className="empty-state table-empty-state">
-                      <div className="loading-dot" />
-                      <div>{t('booking.loading')}</div>
-                    </div>
-                  </td>
-                </tr>
-              ) : bookings.length ? (
-                bookings.map((booking) => {
-                  const currentCreator = targetKocsByKey.get(`${booking.target_shop_id}:${booking.creator_open_id}`);
-                  const creatorName = getKocDisplayName(
-                    currentCreator?.nickname
-                    || booking.creator_name
-                    || booking.creator?.name
-                    || currentCreator?.username
-                    || booking.creator_username
-                    || booking.creator_id,
-                  );
-                  const creatorUsername = currentCreator?.username || booking.creator_username;
-                  const creatorAvatar = currentCreator?.avatar_url || booking.creator_avatar_url;
-
-                  return (
-                    <tr key={booking.id}>
-                      <td className="cell-number"><span className="row-title">#{booking.id}</span></td>
-                      <td>
-                        <div className="booking-koc-identity">
-                          <TargetKocAvatar src={creatorAvatar} name={creatorName} />
-                          <span>
-                            <strong>{creatorName}</strong>
-                            {creatorUsername ? <small>@{creatorUsername}</small> : null}
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <select
-                          className={`booking-status-select is-${booking.status}`}
-                          value={booking.status || 'booked'}
-                          disabled={updatingId === booking.id}
-                          aria-label={t('booking.changeStatus', { id: booking.id })}
-                          onChange={(event) => changeStatus(booking, event.target.value)}
-                        >
-                          {BOOKING_STATUSES.map((status) => <option value={status} key={status}>{t(`booking.statuses.${status}`)}</option>)}
-                        </select>
-                      </td>
-                      <td>
-                        <span className={`booking-deadline is-${bookingDeadlineState(booking)}`}>
-                          {formatDate(booking.deadline)}
-                          {bookingDeadlineState(booking) === 'overdue' ? <small>{t('booking.overdue')}</small> : null}
-                          {bookingDeadlineState(booking) === 'soon' ? <small>{t('booking.dueSoon')}</small> : null}
-                        </span>
-                      </td>
-                      <td className="cell-number">RM {localizedFormatMoney(booking.booking_cost)}</td>
-                      <td className="cell-actions">
-                        <div className="actions actions--inline">
-                          <button type="button" className="button button--ghost button--small" onClick={() => openDetails(booking)}>{t('booking.details')}</button>
-                          <button
-                            type="button"
-                            className="button button--ghost button--small"
-                            onClick={() => handleDelete(booking)}
-                            disabled={deletingId === booking.id}
-                          >
-                            {deletingId === booking.id ? t('booking.deleting') : t('booking.delete')}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={6}>
-                    <div className="empty-state empty-state--compact table-empty-state">{t('booking.noData')}</div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2><p className="section-card__meta">{t('booking.benchmarkDisclaimer')}</p></div></div>
+        <div className="table-wrap"><table className="data-table booking-evaluation-table">
+          <thead><tr><th>{t('booking.kocColumn')}</th><th>{t('booking.collaboration')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.bookingCost')}</th><th>{t('booking.benchmark')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={6}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
+              const collaboration = collaborationOf(booking);
+              const performance = performanceOf(booking);
+              const benchmark = costBenchmarks(booking.booking_cost, performance);
+              return <tr key={booking.id}>
+                <td><div className="booking-koc-identity"><TargetKocAvatar src={booking.creator_avatar_url} name={booking.creator_name || booking.creator_username} /><span><strong>{booking.creator_name || booking.creator_username || 'KOC'}</strong><small>@{booking.creator_username}</small></span></div></td>
+                <td><div className="booking-performance-cell"><strong>{collaboration.name || booking.target_collaboration_id || '—'}</strong><small><span className={`booking-collaboration-status is-${String(collaboration.status || '').toLowerCase()}`}>{formatCollaborationStatus(collaboration.status)}</span></small><small>{t('booking.validUntil')} {formatDate(collaboration.end_at)}</small></div></td>
+                <td>{renderPerformance(performance)}</td>
+                <td className="cell-number"><strong>{formatMoney(booking.booking_cost)}</strong></td>
+                <td><div className="booking-performance-cell"><strong>{benchmark.perThousandViews == null ? '—' : `${formatMoney(benchmark.perThousandViews)}/1K ${t('booking.views')}`}</strong><small>{benchmark.perOrder == null ? '—' : `${formatMoney(benchmark.perOrder)}/${t('booking.order')}`}</small><small>{benchmark.gmvRatio == null ? '—' : `${formatNumber(benchmark.gmvRatio, { maximumFractionDigits: 2 })}% ${t('booking.ofHistoricalGmv')}`}</small></div></td>
+                <td className="cell-actions"><div className="actions actions--inline"><button type="button" className="button button--ghost button--small" onClick={() => { setSelectedBooking(booking); setDetailCost(String(booking.booking_cost)); }}>{t('booking.details')}</button><button type="button" className="button button--ghost button--small" disabled={deletingId === booking.id} onClick={() => handleDelete(booking)}>{deletingId === booking.id ? t('booking.deleting') : t('booking.delete')}</button></div></td>
+              </tr>;
+            }) : <tr><td colSpan={6}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
+          </tbody>
+        </table></div>
       </section>
 
-      {selectedBooking && detailForm ? (
-        <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) {
-            setSelectedBooking(null);
-            setDetailForm(null);
-          }
-        }}>
+      {selectedBooking ? (() => {
+        const collaboration = collaborationOf(selectedBooking);
+        const performance = performanceOf(selectedBooking);
+        const benchmark = costBenchmarks(detailCost, performance);
+        return <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedBooking(null); }}>
           <aside className="koc-drawer booking-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="booking-detail-title">
-            <div className="koc-drawer__header">
-              <div>
-                <h2 id="booking-detail-title">{t('booking.detailTitle', { id: selectedBooking.id })}</h2>
-                <p>{selectedCreatorUsername ? `@${selectedCreatorUsername}` : selectedCreatorName}</p>
-              </div>
-              <button className="button button--ghost" type="button" aria-label={t('common.close')} onClick={() => { setSelectedBooking(null); setDetailForm(null); }}>×</button>
-            </div>
+            <div className="koc-drawer__header"><div><h2 id="booking-detail-title">{t('booking.detailTitle', { id: selectedBooking.id })}</h2><p>@{selectedBooking.creator_username}</p></div><button className="button button--ghost" type="button" aria-label={t('common.close')} onClick={() => setSelectedBooking(null)}>×</button></div>
             <div className="koc-drawer__body">
-              <section className="drawer-section">
-                <div className="drawer-profile">
-                  <TargetKocAvatar src={selectedCreatorAvatar} name={selectedCreatorName} />
-                  <div><strong>{selectedCreatorName}</strong><span>RM {localizedFormatMoney(selectedBooking.booking_cost)}</span></div>
-                </div>
-              </section>
-              <form className="booking-detail-form" onSubmit={saveDetails}>
-                <label className="field"><span>{t('booking.statusColumn')}</span><select value={detailForm.status} onChange={(event) => setDetailForm((current) => ({ ...current, status: event.target.value }))}>{BOOKING_STATUSES.map((status) => <option value={status} key={status}>{t(`booking.statuses.${status}`)}</option>)}</select></label>
-                <label className="field"><span>{t('booking.deadline')}</span><input type="date" value={detailForm.deadline} onChange={(event) => setDetailForm((current) => ({ ...current, deadline: event.target.value }))} /></label>
-                <label className="field"><span>{t('booking.bookingStaff')}</span><input type="text" value={detailForm.staff_name} onChange={(event) => setDetailForm((current) => ({ ...current, staff_name: event.target.value }))} /></label>
-                <label className="field booking-detail-form__wide"><span>{t('booking.note')}</span><textarea rows="5" value={detailForm.note} onChange={(event) => setDetailForm((current) => ({ ...current, note: event.target.value }))} /></label>
-                <div className="actions booking-detail-form__wide"><button className="button" type="submit" disabled={updatingId === selectedBooking.id}>{updatingId === selectedBooking.id ? t('common.loading') : t('booking.saveChanges')}</button></div>
-              </form>
-              <section className="drawer-section">
-                <h3>{t('booking.videoColumn')}</h3>
-                <div className="drawer-list">
-                  {bookingVideos(selectedBooking).map((video, index) => (
-                    <div className="drawer-list__item" key={video.id || video.video_url || index}>
-                      <strong>{video.title || video.platform_video_id || t('booking.videoColumn')}</strong>
-                      {video.video_url ? <a href={video.video_url} target="_blank" rel="noreferrer">{t('booking.openVideo')}</a> : null}
-                    </div>
-                  ))}
-                  {!bookingVideos(selectedBooking).length ? <div className="empty-state empty-state--compact">{t('booking.noVideo')}</div> : null}
-                </div>
-              </section>
+              <section className="drawer-section"><div className="drawer-profile"><TargetKocAvatar src={selectedBooking.creator_avatar_url} name={selectedBooking.creator_name} /><div><strong>{selectedBooking.creator_name || selectedBooking.creator_username}</strong><span>{collaboration.name || selectedBooking.target_collaboration_id}</span></div></div></section>
+              <section className="drawer-section"><h3>{t('booking.collaboration')}</h3><div className="booking-detail-grid"><div><span>{t('booking.partnerStatus')}</span><strong>{formatCollaborationStatus(collaboration.status)}</strong></div><div><span>{t('booking.validUntil')}</span><strong>{formatDate(collaboration.end_at)}</strong></div><div className="booking-detail-grid__wide"><span>{t('booking.products')}</span><strong>{(collaboration.products || []).map((product) => product.title || product.name || product.id).filter(Boolean).join(', ') || '—'}</strong></div></div></section>
+              <section className="drawer-section"><h3>{t('booking.creatorPerformance')}</h3>{renderPerformance(performance)}<p className="section-card__meta">{t('booking.performancePeriodDisclaimer')}</p></section>
+              <form className="booking-detail-form" onSubmit={saveCost}><label className="field booking-detail-form__wide"><span>{t('booking.bookingCost')}</span><input type="number" min="0" step="0.01" value={detailCost} onChange={(event) => setDetailCost(event.target.value)} required /></label><div className="booking-detail-grid booking-detail-form__wide"><div><span>{t('booking.costPerThousandViews')}</span><strong>{benchmark.perThousandViews == null ? '—' : formatMoney(benchmark.perThousandViews)}</strong></div><div><span>{t('booking.costPerOrder')}</span><strong>{benchmark.perOrder == null ? '—' : formatMoney(benchmark.perOrder)}</strong></div><div><span>{t('booking.costGmvRatio')}</span><strong>{benchmark.gmvRatio == null ? '—' : `${formatNumber(benchmark.gmvRatio, { maximumFractionDigits: 2 })}%`}</strong></div></div><div className="actions booking-detail-form__wide"><button className="button" type="submit" disabled={updatingId === selectedBooking.id}>{updatingId === selectedBooking.id ? t('common.loading') : t('booking.saveCost')}</button></div></form>
             </div>
           </aside>
-        </div>
-      ) : null}
-
+        </div>;
+      })() : null}
     </div>
   );
 };

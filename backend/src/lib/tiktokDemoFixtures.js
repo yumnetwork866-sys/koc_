@@ -150,6 +150,40 @@ const sellerAffiliateFixture = (namespace, shop, query = {}) => {
       request_id: requestId,
     };
   }
+  if (namespace === 'shop-video-performance') {
+    const currency = query.currency === 'USD' ? 'USD' : 'VND';
+    const multiplier = currency === 'USD' ? 1 : 25000;
+    const accountType = String(query.account_type || 'ALL');
+    const videos = Array.from({ length: 12 }, (_, index) => ({
+      id: `${7400000000000000000n + BigInt(index)}`,
+      title: `${['Routine dưỡng sáng', 'Review serum 7 ngày', 'Get ready with me', 'Mẹo chăm tóc'][index % 4]} · ${shopName}`,
+      username: `demo.creator.${index % 5 + 1}`,
+      creator: {
+        user_name: `demo.creator.${index % 5 + 1}`,
+        nick_name: `Demo Creator ${index % 5 + 1}`,
+        author_type: index % 3 === 0 ? 'OFFICIAL' : index % 3 === 1 ? 'MARKETING' : 'AFFILIATE',
+      },
+      video_post_time: `2026-07-${String(Math.max(1, 20 - index)).padStart(2, '0')} 10:30:00`,
+      duration: 24 + index * 3,
+      gmv: { amount: String((820 - index * 37) * multiplier), currency },
+      gpm: { amount: String((18.5 - index * 0.55) * multiplier), currency },
+      avg_customers: 62 + index * 4,
+      sku_orders: 74 + index * 5,
+      items_sold: 81 + index * 6,
+      views: 42000 + index * 7300,
+      click_through_rate: 0.071 + index * 0.002,
+    })).filter((video) => {
+      if (accountType === 'LINKED_ACCOUNTS') return ['OFFICIAL', 'MARKETING'].includes(video.creator.author_type);
+      if (accountType === 'OFFICIAL_ACCOUNTS') return video.creator.author_type === 'OFFICIAL';
+      if (accountType === 'MARKETING_ACCOUNTS') return video.creator.author_type === 'MARKETING';
+      if (accountType === 'AFFILIATE_ACCOUNTS') return video.creator.author_type === 'AFFILIATE';
+      return true;
+    });
+    return {
+      data: { total_count: videos.length, next_page_token: null, videos },
+      request_id: requestId,
+    };
+  }
   const orders = Array.from({ length: 12 }, (_, index) => ({
     order_id: `${DEMO_PREFIX}order_${String(index + 1).padStart(3, '0')}`,
     product_id: products[index % products.length].id,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  fetchTikTokSellerMarketplaceCreator, fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
+  fetchTikTokSellerMarketplaceCreator, fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchTikTokShopVideoAnalytics, fetchTikTokShopVideoThumbnail, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
 } from '../src/lib/api.js';
 import { getStoredSession, saveStoredSession } from '../src/lib/session.js';
 
@@ -96,15 +96,19 @@ test('TikTok Shop API helpers preserve analytics filters, sync payload and abort
 
     await startTikTokShopOauth();
     await fetchTikTokShopAnalytics(7, { startDate: '2026-06-01', endDate: '2026-07-01', currency: 'LOCAL' });
+    await fetchTikTokShopVideoAnalytics(7, {
+      startDate: '2026-06-01', endDate: '2026-07-01', currency: 'LOCAL', accountType: 'ALL', sortField: 'gmv', sortOrder: 'DESC', pageSize: 100,
+    });
     const controller = new AbortController();
     await syncTikTokShopAnalytics(7, { start_date: '2026-06-01', end_date: '2026-07-01', currency: 'LOCAL' }, controller.signal);
 
     assert.equal(calls[0].url, '/api/tiktok-shop/oauth/start');
     assert.equal(calls[1].url, '/api/tiktok-shop/shops/7/analytics?start_date=2026-06-01&end_date=2026-07-01&currency=LOCAL');
-    assert.equal(calls[2].url, '/api/tiktok-shop/shops/7/analytics/sync');
-    assert.equal(calls[2].options.method, 'POST');
-    assert.equal(calls[2].options.signal, controller.signal);
-    assert.deepEqual(JSON.parse(calls[2].options.body), {
+    assert.equal(calls[2].url, '/api/tiktok-shop/shops/7/video-analytics?start_date=2026-06-01&end_date=2026-07-01&currency=LOCAL&account_type=ALL&sort_field=gmv&sort_order=DESC&page_size=100');
+    assert.equal(calls[3].url, '/api/tiktok-shop/shops/7/analytics/sync');
+    assert.equal(calls[3].options.method, 'POST');
+    assert.equal(calls[3].options.signal, controller.signal);
+    assert.deepEqual(JSON.parse(calls[3].options.body), {
       start_date: '2026-06-01', end_date: '2026-07-01', currency: 'LOCAL',
     });
   });
@@ -127,6 +131,24 @@ test('Creator OAuth helper sends either creator_id or the explicit create_koc in
 
     assert.equal(calls[0], '/api/bookings/tiktok-partner/oauth/start?return_path=%2Fmanage%2Fkoc-performance&creator_id=42');
     assert.equal(calls[1], '/api/bookings/tiktok-partner/oauth/start?return_path=%2Fmanage%2Fkoc-performance&create_koc=true');
+  });
+});
+
+test('Video thumbnail helper encodes the TikTok identity and preserves abort signal', async () => {
+  await withBrowser(async () => {
+    saveStoredSession(createSession('thumbnail-admin'));
+    let request;
+    globalThis.fetch = async (url, options) => {
+      request = { url, options };
+      return new Response(JSON.stringify({ thumbnail_url: 'https://example.test/cover.webp' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    const controller = new AbortController();
+    await fetchTikTokShopVideoThumbnail(7, '7657874522896436487', 'creator.name', controller.signal);
+    assert.equal(request.url, '/api/tiktok-shop/shops/7/video-thumbnails/7657874522896436487?username=creator.name');
+    assert.equal(request.options.signal, controller.signal);
   });
 });
 

@@ -200,6 +200,7 @@ const Header = () => {
         '/manage/affiliate',
         '/manage/koc-performance',
         '/manage/shop-analytics',
+        '/manage/video-analytics',
         '/bookings',
         '/reports',
       ].some((prefix) => location.pathname.startsWith(prefix));
