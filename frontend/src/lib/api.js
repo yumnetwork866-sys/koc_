@@ -233,6 +233,10 @@ export function fetchReports(signal) {
   return apiRequest('/reports', { signal });
 }
 
+export function fetchPublicReport(token, signal) {
+  return apiRequest(`/public/reports/${encodeURIComponent(token)}`, { signal });
+}
+
 export function fetchKpis(signal, role, filters = {}) {
   const params = new URLSearchParams();
   if (role) params.set('role', role);
@@ -422,6 +426,10 @@ export function generateWeeklyReport(payload) {
     method: 'POST',
     body: payload,
   });
+}
+
+export function shareReport(reportId) {
+  return apiRequest(`/reports/${encodeURIComponent(reportId)}/share`, { method: 'POST' });
 }
 
 export function loginAdmin(payload) {

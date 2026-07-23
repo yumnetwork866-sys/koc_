@@ -46,6 +46,7 @@ const migrations = [
   require('./036_allow_booking_target_creators'),
   require('./037_add_booking_timestamps'),
   require('./038_create_booking_evaluations'),
+  require('./039_add_weekly_report_public_sharing'),
 ];
 
 const createMigrationRunner = ({

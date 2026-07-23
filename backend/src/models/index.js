@@ -777,6 +777,11 @@ const WeeklyReport = sequelize.define('WeeklyReport', {
     type: DataTypes.TEXT,
     allowNull: false,
   },
+  public_share_token: {
+    type: DataTypes.STRING(64),
+    allowNull: true,
+    unique: true,
+  },
 }, {
   tableName: 'weekly_reports',
   timestamps: false,

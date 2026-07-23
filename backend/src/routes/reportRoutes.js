@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getReports,
   getReportById,
+  shareReport,
   createReport,
   updateReport,
   deleteReport,
@@ -17,6 +18,7 @@ router.get('/koc/:creatorId/detail', getKocDetail);
 
 // POST /api/reports/generate
 router.post('/generate', generateWeeklyReport);
+router.post('/:id/share', shareReport);
 
 // GET /api/reports
 router.get('/', getReports);

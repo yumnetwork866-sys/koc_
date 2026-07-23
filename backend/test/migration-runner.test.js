@@ -45,6 +45,7 @@ const defaultMigrationNames = [
   '036_allow_booking_target_creators',
   '037_add_booking_timestamps',
   '038_create_booking_evaluations',
+  '039_add_weekly_report_public_sharing',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

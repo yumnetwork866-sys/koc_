@@ -12,6 +12,7 @@ const roleRoutes = require('./routes/roleRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const videoRoutes = require('./routes/videoRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const publicReportRoutes = require('./routes/publicReportRoutes');
 const channelRoutes = require('./routes/channelRoutes');
 const productRoutes = require('./routes/productRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
@@ -51,6 +52,7 @@ const createApp = () => {
   app.use(chatbotRoutes.publicRouter);
   app.use(whatsappRoutes.publicRouter);
   app.use('/api/bookings/tiktok-partner', tiktokPartnerPublicRoutes);
+  app.use('/api/public/reports', publicReportRoutes);
 
   app.get('/', (req, res) => {
     res.json({ message: 'Welcome to Content Performance Reporting API' });

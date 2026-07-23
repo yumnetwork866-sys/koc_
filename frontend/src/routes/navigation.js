@@ -136,7 +136,7 @@ export const protectedRouteCards = [
     path: '/reports',
     component: 'ReportFilter',
     props: {
-      heroTitle: 'AI weekly report',
+      heroTitle: 'Automated reports',
       heroSubtitle: '',
     },
   },

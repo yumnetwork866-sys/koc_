@@ -1,32 +1,34 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { fetchReports, generateWeeklyReport } from '../lib/api';
+import {
+  Check,
+  ChevronDown,
+  FileText,
+  Link2,
+} from 'lucide-react';
+import { fetchReports, generateWeeklyReport, shareReport } from '../lib/api';
 import { useI18n } from '../lib/language';
 
-const getMonday = () => {
-  const date = new Date();
-  const day = date.getDay() || 7;
-  date.setDate(date.getDate() - day + 1);
-  return date.toISOString().slice(0, 10);
-};
-
-const addDays = (dateText, days) => {
-  const date = new Date(dateText);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-};
+const toDateInputValue = (date) => [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, '0'),
+  String(date.getDate()).padStart(2, '0'),
+].join('-');
 
 const ReportFilter = ({ heroTitle }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [reports, setReports] = useState([]);
-  const [weekStart, setWeekStart] = useState(getMonday());
-  const [weekEnd, setWeekEnd] = useState(addDays(getMonday(), 6));
+  const [periodDays, setPeriodDays] = useState(7);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [expandedReportId, setExpandedReportId] = useState(null);
+  const [sharingReportId, setSharingReportId] = useState(null);
+  const [copiedLinkReportId, setCopiedLinkReportId] = useState(null);
 
   const loadReports = async (signal) => {
     const loadedReports = await fetchReports(signal);
     setReports(loadedReports);
+    setExpandedReportId((current) => current ?? loadedReports[0]?.id ?? null);
   };
 
   useEffect(() => {
@@ -53,7 +55,28 @@ const ReportFilter = ({ heroTitle }) => {
     return () => controller.abort();
   }, [t]);
 
-  const latestReport = useMemo(() => reports[0] || null, [reports]);
+  const locale = language === 'vi' ? 'vi-VN' : 'en-US';
+  const formatDate = (value) => {
+    if (!value) return '—';
+    return new Intl.DateTimeFormat(locale, {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(new Date(`${String(value).slice(0, 10)}T00:00:00`));
+  };
+  const selectedDays = useMemo(() => {
+    const days = Number(periodDays);
+    return Number.isFinite(days) && days > 0 ? days : 7;
+  }, [periodDays]);
+  const { weekStart, weekEnd } = useMemo(() => {
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(start.getDate() - selectedDays + 1);
+    return {
+      weekStart: toDateInputValue(start),
+      weekEnd: toDateInputValue(end),
+    };
+  }, [selectedDays]);
 
   const handleGenerate = async (event) => {
     event.preventDefault();
@@ -73,56 +96,74 @@ const ReportFilter = ({ heroTitle }) => {
     }
   };
 
+  const copyText = async (value) => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    if (!copied) throw new Error('Copy failed');
+  };
+
+  const copyShareLink = async (report) => {
+    try {
+      setSharingReportId(report.id);
+      setError('');
+      const response = await shareReport(report.id);
+      const url = `${window.location.origin}/shared/reports/${encodeURIComponent(response.share_token)}`;
+      await copyText(url);
+      setCopiedLinkReportId(report.id);
+      window.setTimeout(() => {
+        setCopiedLinkReportId((current) => current === report.id ? null : current);
+      }, 1800);
+    } catch (err) {
+      setError(err.message || t('reports.shareError'));
+    } finally {
+      setSharingReportId(null);
+    }
+  };
+
   return (
-    <div className="page">
-      <section className="page__hero">
-        <h1 className="page__title">{t('reports.heroTitle') || heroTitle}</h1>
-        <div className="page__stats">
-          <article className="stat-card">
-            <p className="stat-card__label">{t('reports.count')}</p>
-            <p className="stat-card__value">{reports.length}</p>
-          </article>
-          <article className="stat-card">
-            <p className="stat-card__label">{t('reports.latestStart')}</p>
-            <p className="stat-card__value stat-card__value--small">{latestReport?.week_start || '-'}</p>
-          </article>
-          <article className="stat-card">
-            <p className="stat-card__label">{t('reports.latestEnd')}</p>
-            <p className="stat-card__value stat-card__value--small">{latestReport?.week_end || '-'}</p>
-          </article>
-        </div>
-      </section>
-
-      {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
-
-      <section className="section-card">
-        <div className="section-card__header">
+    <div className="page reports-page">
+      <section className="page__hero reports-hero report-generator">
+        <div className="reports-hero__heading">
           <div>
-            <h2 className="section-card__title">{t('reports.generateTitle')}</h2>
+            <h1 className="page__title">{t('reports.heroTitle') || heroTitle}</h1>
+            <p className="page__subtitle">{t('reports.subtitle')}</p>
           </div>
         </div>
-
-        <form className="filter-panel" onSubmit={handleGenerate}>
-          <div className="field">
-            <label htmlFor="week_start">{t('reports.weekStart')}</label>
-            <input id="week_start" type="date" value={weekStart} onChange={(event) => setWeekStart(event.target.value)} />
-          </div>
-          <div className="field">
-            <label htmlFor="week_end">{t('reports.weekEnd')}</label>
-            <input id="week_end" type="date" value={weekEnd} onChange={(event) => setWeekEnd(event.target.value)} />
-          </div>
-          <div className="actions">
-            <button className="button" type="submit" disabled={generating}>
+        <div className="report-generator__embedded">
+          <form className="report-generator__form" onSubmit={handleGenerate}>
+            <label className="field report-generator__period" htmlFor="report_period">
+              <span>{t('reports.periodLabel')}</span>
+              <select id="report_period" value={periodDays} onChange={(event) => setPeriodDays(Number(event.target.value))}>
+                <option value={7}>{t('reports.last7Days')}</option>
+                <option value={30}>{t('reports.last30Days')}</option>
+                <option value={90}>{t('reports.last90Days')}</option>
+              </select>
+            </label>
+            <button className="button report-generator__submit" type="submit" disabled={generating}>
               {generating ? t('reports.generating') : t('reports.generate')}
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
       </section>
 
-      <section className="section-card">
+      {error ? <section className="section-card empty-state empty-state--compact reports-alert" role="alert">{error}</section> : null}
+
+      <section className="section-card reports-list-section">
         <div className="section-card__header">
           <div>
             <h2 className="section-card__title">{t('reports.list')}</h2>
+            <p className="section-card__meta">{t('reports.listMeta', { count: reports.length })}</p>
           </div>
         </div>
 
@@ -132,19 +173,62 @@ const ReportFilter = ({ heroTitle }) => {
             <div>{t('reports.loading')}</div>
           </div>
         ) : reports.length ? (
-          <div className="metric-list">
-            {reports.map((report) => (
-              <article className="metric-item report-block" key={report.id}>
-                <div className="metric-item__head">
-                  <span>{report.week_start} - {report.week_end}</span>
-                  <span className="chip chip--blue">{t('reports.type')}</span>
-                </div>
-                <pre className="report-content">{report.generated_content}</pre>
-              </article>
-            ))}
+          <div className="reports-list">
+            {reports.map((report, index) => {
+              const expanded = expandedReportId === report.id;
+              return (
+                <article className={`report-card${expanded ? ' report-card--expanded' : ''}`} key={report.id}>
+                  <div className="report-card__header">
+                    <button
+                      className="report-card__toggle"
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={`report-content-${report.id}`}
+                      onClick={() => setExpandedReportId(expanded ? null : report.id)}
+                    >
+                      <span className="report-card__document" aria-hidden="true"><FileText size={20} /></span>
+                      <span className="report-card__identity">
+                        <strong>{t('reports.reportNumber', { number: reports.length - index })}</strong>
+                        <small>{formatDate(report.week_start)} – {formatDate(report.week_end)}</small>
+                      </span>
+                    </button>
+                    <button
+                      className="report-card__share"
+                      type="button"
+                      disabled={sharingReportId === report.id}
+                      aria-label={t('reports.copyShareLink')}
+                      title={t('reports.copyShareLink')}
+                      onClick={() => copyShareLink(report)}
+                    >
+                      {copiedLinkReportId === report.id ? <Check size={17} /> : <Link2 size={17} />}
+                      <span>{copiedLinkReportId === report.id ? t('reports.linkCopied') : t('reports.copyLink')}</span>
+                    </button>
+                    <button
+                      className="report-card__expand"
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls={`report-content-${report.id}`}
+                      aria-label={expanded ? t('reports.collapse') : t('reports.expand')}
+                      onClick={() => setExpandedReportId(expanded ? null : report.id)}
+                    >
+                      <ChevronDown className="report-card__chevron" size={19} aria-hidden="true" />
+                    </button>
+                  </div>
+                  {expanded ? (
+                    <div className="report-card__body" id={`report-content-${report.id}`}>
+                      <pre className="report-content">{report.generated_content}</pre>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
           </div>
         ) : (
-          <div className="empty-state">{t('reports.empty')}</div>
+          <div className="empty-state reports-empty">
+            <span className="reports-empty__icon" aria-hidden="true"><FileText size={24} /></span>
+            <strong>{t('reports.empty')}</strong>
+            <span>{t('reports.emptyMeta')}</span>
+          </div>
         )}
       </section>
     </div>

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { Op, QueryTypes } = require('sequelize');
 const { Product, User, Video, VideoAssignment, WeeklyReport, sequelize } = require('../models');
 
@@ -23,6 +24,37 @@ const getReportById = async (req, res) => {
     if (!report) {
       return res.status(404).json({ message: 'Weekly report not found' });
     }
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const shareReport = async (req, res) => {
+  try {
+    const report = await WeeklyReport.findByPk(req.params.id);
+    if (!report) return res.status(404).json({ message: 'Report not found' });
+    if (!report.public_share_token) {
+      report.public_share_token = crypto.randomBytes(24).toString('hex');
+      await report.save();
+    }
+    res.json({ share_token: report.public_share_token });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const getPublicReport = async (req, res) => {
+  try {
+    const token = String(req.params.token || '').trim();
+    if (!/^[a-f0-9]{48}$/i.test(token)) {
+      return res.status(404).json({ message: 'Shared report not found' });
+    }
+    const report = await WeeklyReport.findOne({
+      where: { public_share_token: token },
+      attributes: ['id', 'week_start', 'week_end', 'generated_content'],
+    });
+    if (!report) return res.status(404).json({ message: 'Shared report not found' });
     res.json(report);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -363,7 +395,7 @@ const generateWeeklyReport = async (req, res) => {
       .join('\n');
 
     const content = [
-      `Báo cáo tuần ${toDateOnly(weekStart)} - ${toDateOnly(weekEnd)}`,
+      `Báo cáo ${toDateOnly(weekStart)} - ${toDateOnly(weekEnd)}`,
       '',
       `Tổng video: ${videos.length}`,
       `Tổng views: ${totalViews.toLocaleString()}`,
@@ -372,7 +404,7 @@ const generateWeeklyReport = async (req, res) => {
       'Top video:',
       topVideos.length
         ? topVideos.map((video, index) => `${index + 1}. ${video.title} - ${Number(video.views || 0).toLocaleString()} views`).join('\n')
-        : '- Chưa có video trong tuần này',
+        : '- Chưa có video trong khoảng thời gian này',
       '',
       'Sản phẩm nổi bật:',
       productLines || '- Chưa có dữ liệu sản phẩm',
@@ -380,7 +412,7 @@ const generateWeeklyReport = async (req, res) => {
       'Nhận định AI:',
       videos.length
         ? 'Tập trung nhân rộng format của top video, ưu tiên các sản phẩm đang có view trung bình cao và rà soát lại nhóm video dưới 10k view để cải thiện hook 3 giây đầu.'
-        : 'Tuần này chưa có dữ liệu video, cần import hoặc đồng bộ nguồn dữ liệu trước khi đánh giá hiệu suất.',
+        : 'Khoảng thời gian này chưa có dữ liệu video, cần import hoặc đồng bộ nguồn dữ liệu trước khi đánh giá hiệu suất.',
     ].join('\n');
 
     const report = await WeeklyReport.create({
@@ -398,6 +430,8 @@ const generateWeeklyReport = async (req, res) => {
 module.exports = {
   getReports,
   getReportById,
+  getPublicReport,
+  shareReport,
   createReport,
   updateReport,
   deleteReport,

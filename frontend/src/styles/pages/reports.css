@@ -1,0 +1,321 @@
+.reports-page,
+.public-report-page {
+  --reports-accent: #6d5dfc;
+  --reports-accent-soft: rgba(109, 93, 252, 0.1);
+}
+
+.reports-hero__heading,
+.report-generator__intro {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.reports-empty__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--reports-accent-soft);
+  color: var(--reports-accent);
+}
+
+.reports-hero__heading .page__subtitle {
+  margin-top: 5px;
+}
+
+.reports-hero {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.report-generator {
+  display: grid;
+  gap: 20px;
+  overflow: hidden;
+  border-color: rgba(109, 93, 252, 0.2);
+  background:
+    radial-gradient(circle at 100% 0, rgba(109, 93, 252, 0.09), transparent 34%),
+    var(--color-surface);
+}
+
+.report-generator__embedded {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.report-generator__form {
+  display: grid;
+  grid-template-columns: minmax(240px, 360px) auto;
+  justify-content: start;
+  gap: 12px;
+  align-items: end;
+}
+
+.report-generator__period {
+  width: 100%;
+}
+
+.report-generator__submit {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  min-width: 136px;
+  padding: 11px 16px;
+}
+
+.reports-list-section {
+  min-width: 0;
+}
+
+.reports-list {
+  display: grid;
+  gap: 10px;
+}
+
+.report-card {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.report-card:hover,
+.report-card--expanded {
+  border-color: rgba(109, 93, 252, 0.28);
+}
+
+.report-card--expanded {
+  box-shadow: 0 12px 30px rgba(30, 35, 60, 0.06);
+}
+
+.report-card__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 42px;
+  gap: 8px;
+  align-items: center;
+  padding-right: 10px;
+}
+
+.report-card__toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 15px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.report-card__share,
+.report-card__expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-soft);
+  font: inherit;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.report-card__share {
+  gap: 7px;
+  padding: 0 11px;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.report-card__share:hover,
+.report-card__expand:hover {
+  border-color: rgba(109, 93, 252, 0.25);
+  background: var(--reports-accent-soft);
+  color: var(--reports-accent);
+}
+
+.report-card__share:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.report-card__expand {
+  width: 38px;
+  padding: 0;
+}
+
+.report-card__document {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--color-surface-subtle);
+  color: var(--reports-accent);
+}
+
+.report-card__identity {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.report-card__identity strong,
+.report-card__identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-card__identity strong {
+  font-size: 0.96rem;
+}
+
+.report-card__identity small {
+  color: var(--color-muted);
+}
+
+.report-card__chevron {
+  color: var(--color-muted);
+  transition: transform 160ms ease;
+}
+
+.report-card--expanded .report-card__chevron {
+  transform: rotate(180deg);
+}
+
+.report-card__body {
+  padding: 4px 20px 20px 70px;
+}
+
+.report-card__body .report-content {
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+
+.reports-empty {
+  gap: 8px;
+}
+
+.reports-empty strong {
+  color: var(--color-text);
+}
+
+.reports-empty > span:last-child {
+  color: var(--color-muted);
+}
+
+.public-report-page {
+  width: min(920px, calc(100% - 32px));
+  margin: 32px auto 72px;
+}
+
+.public-report-card {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.public-report-card__header {
+  padding: clamp(24px, 4vw, 42px);
+  border-bottom: 1px solid var(--color-border);
+  background:
+    radial-gradient(circle at 100% 0, rgba(109, 93, 252, 0.1), transparent 42%),
+    var(--color-surface);
+}
+
+.public-report-card__header p {
+  margin: 0 0 8px;
+  color: var(--reports-accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.public-report-card__header h1 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: clamp(1.7rem, 4vw, 2.45rem);
+  line-height: 1.15;
+}
+
+.public-report-card__header span {
+  display: block;
+  margin-top: 12px;
+  color: var(--color-muted);
+  font-size: 0.92rem;
+}
+
+.public-report-card__content {
+  padding: clamp(24px, 4vw, 42px);
+  line-height: 1.75;
+}
+
+@media (max-width: 640px) {
+  .report-generator__form {
+    grid-template-columns: 1fr;
+  }
+
+  .report-generator__submit {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+
+  .reports-hero__heading {
+    align-items: flex-start;
+  }
+
+  .report-card__toggle {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 13px;
+  }
+
+  .report-card__header {
+    grid-template-columns: minmax(0, 1fr) 40px 40px;
+    gap: 5px;
+    padding-right: 8px;
+  }
+
+  .report-card__toggle {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .report-card__share {
+    width: 38px;
+    padding: 0;
+  }
+
+  .report-card__share span {
+    display: none;
+  }
+
+  .report-card__body {
+    padding: 0 13px 13px;
+  }
+
+  .public-report-page {
+    width: min(100% - 20px, 920px);
+    margin-top: 16px;
+  }
+}
