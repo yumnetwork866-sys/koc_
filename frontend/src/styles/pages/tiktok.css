@@ -1266,6 +1266,51 @@
   min-width: 1120px;
 }
 
+.booking-evaluation-table .cell-actions > .booking-action-menu {
+  width: 100%;
+  justify-content: center;
+}
+
+.booking-evaluation-table .cell-actions {
+  width: 72px;
+  min-width: 72px;
+  padding-inline: 12px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.booking-action-menu .action-menu__trigger {
+  display: grid;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  aspect-ratio: 1;
+  place-items: center;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 25% !important;
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.booking-action-menu__popover {
+  z-index: 10000;
+  width: 172px;
+  min-width: 172px;
+  gap: 2px;
+  padding: 7px;
+  border-radius: 14px;
+}
+
+.booking-action-menu__popover .action-menu__item {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 11px;
+  border-radius: 9px;
+}
+
 .booking-collaboration-status {
   display: inline-flex;
   width: fit-content;

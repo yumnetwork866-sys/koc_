@@ -58,9 +58,19 @@ const resolveSellerShopId = async (authorization, requestedShopId) => {
   return String(sellerShop?.platform_shop_id || authorization?.shop_id || '').trim();
 };
 
+const creatorIdentityKeys = (shopId, creator = {}) => {
+  const keys = [];
+  const creatorOpenId = String(creator.creator_open_id || '').trim();
+  const username = String(creator.username || '').trim().toLowerCase();
+  if (creatorOpenId) keys.push(`${shopId}:open:${creatorOpenId}`);
+  if (username) keys.push(`${shopId}:username:${username}`);
+  return keys;
+};
+
 const getTargetKocs = async (req, res) => {
   try {
     const keyword = String(req.query.keyword || '').trim();
+    const normalizedKeyword = keyword.toLowerCase();
     const collaborations = await TikTokTargetCollaborationSnapshot.findAll({
       where: { status: { [Op.in]: ['ONGOING', 'VALID', 'EXPIRING'] } },
       order: [['end_at', 'DESC'], ['synced_at', 'DESC']],
@@ -76,18 +86,20 @@ const getTargetKocs = async (req, res) => {
       if (performance.username) performanceByCreator.set(`${performance.shop_id}:username:${String(performance.username).toLowerCase()}`, performance);
     }
     const candidates = [];
+    const collaborationCreatorKeys = new Set();
     for (const instance of collaborations) {
       const collaboration = instance.toJSON();
       const raw = collaboration.raw_data || {};
       for (const creator of raw.creators || []) {
         const profile = normalizeCreatorProfile(creator);
-        if (!profile.creator_open_id) continue;
+        const identityKeys = creatorIdentityKeys(collaboration.shop_id, profile);
+        if (!identityKeys.length) continue;
+        identityKeys.forEach((key) => collaborationCreatorKeys.add(key));
         const searchable = `${profile.nickname || ''} ${profile.username || ''} ${collaboration.name || ''}`.toLowerCase();
-        if (keyword && !searchable.includes(keyword.toLowerCase())) continue;
-        const performance = performanceByCreator.get(`${collaboration.shop_id}:open:${profile.creator_open_id}`)
-          || performanceByCreator.get(`${collaboration.shop_id}:username:${profile.username}`)
-          || null;
+        if (normalizedKeyword && !searchable.includes(normalizedKeyword)) continue;
+        const performance = identityKeys.map((key) => performanceByCreator.get(key)).find(Boolean) || null;
         candidates.push({
+          source: 'TARGET_COLLABORATION',
           shop_id: collaboration.shop_id,
           collaboration_id: collaboration.collaboration_id,
           collaboration_name: collaboration.name,
@@ -104,6 +116,28 @@ const getTargetKocs = async (req, res) => {
         });
       }
     }
+    for (const performance of performanceRows) {
+      const identityKeys = creatorIdentityKeys(performance.shop_id, performance);
+      if (!identityKeys.length || identityKeys.some((key) => collaborationCreatorKeys.has(key))) continue;
+      const searchable = `${performance.nickname || ''} ${performance.username || ''}`.toLowerCase();
+      if (normalizedKeyword && !searchable.includes(normalizedKeyword)) continue;
+      candidates.push({
+        source: 'CREATOR_PERFORMANCE',
+        shop_id: performance.shop_id,
+        collaboration_id: null,
+        collaboration_name: null,
+        collaboration_status: null,
+        collaboration_start_at: null,
+        collaboration_end_at: null,
+        products: [],
+        creator_open_id: performance.creator_open_id || null,
+        username: performance.username,
+        nickname: performance.nickname,
+        avatar_url: performance.avatar_url,
+        performance,
+        performance_synced_at: performance.synced_at,
+      });
+    }
     candidates.sort((left, right) => {
       const active = (value) => ['ONGOING', 'VALID', 'EXPIRING'].includes(value) ? 1 : 0;
       return active(right.collaboration_status) - active(left.collaboration_status)
@@ -116,33 +150,66 @@ const getTargetKocs = async (req, res) => {
   }
 };
 
-const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenId) => {
-  if (!Number.isInteger(Number(shopId))
-    || !String(collaborationIdValue || '').trim()
-    || !String(creatorOpenId || '').trim()) return null;
-  const snapshot = await TikTokTargetCollaborationSnapshot.findOne({
-    where: { shop_id: Number(shopId), collaboration_id: String(collaborationIdValue) },
-  });
-  if (!snapshot) return null;
-  const collaboration = snapshot.toJSON();
-  const raw = collaboration.raw_data || {};
-  const creator = (raw.creators || []).find((item) => {
-    const profile = normalizeCreatorProfile(item);
-    return String(profile.creator_open_id || '') === String(creatorOpenId || '');
-  });
-  if (!creator) return null;
-  const profile = normalizeCreatorProfile(creator);
+const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValue, creatorUsernameValue) => {
+  const normalizedShopId = Number(shopId);
+  const collaborationId = String(collaborationIdValue || '').trim();
+  const creatorOpenId = String(creatorOpenIdValue || '').trim();
+  const creatorUsername = String(creatorUsernameValue || '').trim();
+  if (!Number.isInteger(normalizedShopId) || (!creatorOpenId && !creatorUsername)) return null;
+
+  if (collaborationId) {
+    const snapshot = await TikTokTargetCollaborationSnapshot.findOne({
+      where: { shop_id: normalizedShopId, collaboration_id: collaborationId },
+    });
+    if (snapshot) {
+      const collaboration = snapshot.toJSON();
+      const raw = collaboration.raw_data || {};
+      const creator = (raw.creators || []).find((item) => {
+        const profile = normalizeCreatorProfile(item);
+        return (creatorOpenId && String(profile.creator_open_id || '') === creatorOpenId)
+          || (creatorUsername && String(profile.username || '').toLowerCase() === creatorUsername.toLowerCase());
+      });
+      if (creator) {
+        const profile = normalizeCreatorProfile(creator);
+        const performance = await TikTokCreatorPerformanceSnapshot.findOne({
+          where: {
+            shop_id: normalizedShopId,
+            [Op.or]: [
+              ...(profile.creator_open_id ? [{ creator_open_id: profile.creator_open_id }] : []),
+              ...(profile.username ? [{ username: { [Op.iLike]: profile.username } }] : []),
+            ],
+          },
+          order: [['end_date', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
+        });
+        return { collaboration, raw, profile, performance: performance?.toJSON() || null };
+      }
+    }
+  }
+
+  const creatorConditions = [
+    ...(creatorOpenId ? [{ creator_open_id: creatorOpenId }] : []),
+    ...(creatorUsername ? [{ username: { [Op.iLike]: creatorUsername } }] : []),
+  ];
   const performance = await TikTokCreatorPerformanceSnapshot.findOne({
     where: {
-      shop_id: Number(shopId),
-      [Op.or]: [
-        ...(profile.creator_open_id ? [{ creator_open_id: profile.creator_open_id }] : []),
-        ...(profile.username ? [{ username: { [Op.iLike]: profile.username } }] : []),
-      ],
+      shop_id: normalizedShopId,
+      [Op.or]: creatorConditions,
     },
     order: [['end_date', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
   });
-  return { collaboration, raw, profile, performance: performance?.toJSON() || null };
+  if (!performance) return null;
+  const performanceData = performance.toJSON();
+  return {
+    collaboration: null,
+    raw: null,
+    profile: {
+      creator_open_id: performanceData.creator_open_id || null,
+      username: performanceData.username,
+      nickname: performanceData.nickname || performanceData.username,
+      avatar_url: performanceData.avatar_url || null,
+    },
+    performance: performanceData,
+  };
 };
 
 const getBookings = async (req, res) => {
@@ -178,12 +245,13 @@ const createBooking = async (req, res) => {
       req.body.target_shop_id,
       req.body.target_collaboration_id,
       req.body.creator_open_id,
+      req.body.creator_username,
     );
-    if (!targetCreator) return res.status(400).json({ message: 'Select a KOC from a synced Target Collaboration.' });
+    if (!targetCreator) return res.status(400).json({ message: 'Select a KOC from synced Target Collaboration or Creator Performance data.' });
     const { collaboration, raw, profile, performance } = targetCreator;
     const evaluationSnapshot = {
       recorded_at: new Date().toISOString(),
-      collaboration: {
+      collaboration: collaboration ? {
         id: collaboration.collaboration_id,
         name: collaboration.name,
         status: collaboration.status,
@@ -191,7 +259,7 @@ const createBooking = async (req, res) => {
         end_at: collaboration.end_at,
         products: Array.isArray(raw.products) ? raw.products : [],
         synced_at: collaboration.synced_at,
-      },
+      } : null,
       performance,
     };
     const payload = compactPayload({
@@ -202,12 +270,12 @@ const createBooking = async (req, res) => {
       creator_username: profile.username,
       creator_name: profile.nickname,
       creator_avatar_url: profile.avatar_url,
-      target_shop_id: collaboration.shop_id,
-      target_collaboration_id: collaboration.collaboration_id,
+      target_shop_id: collaboration?.shop_id || performance.shop_id,
+      target_collaboration_id: collaboration?.collaboration_id || null,
       evaluation_snapshot: evaluationSnapshot,
       booking_cost: cost,
       status: 'draft',
-      deadline: collaboration.end_at ? new Date(collaboration.end_at).toISOString().slice(0, 10) : null,
+      deadline: collaboration?.end_at ? new Date(collaboration.end_at).toISOString().slice(0, 10) : null,
       note: req.body.note || null,
       updated_at: new Date(),
     });
