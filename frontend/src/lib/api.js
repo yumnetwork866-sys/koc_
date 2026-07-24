@@ -432,6 +432,10 @@ export function shareReport(reportId) {
   return apiRequest(`/reports/${encodeURIComponent(reportId)}/share`, { method: 'POST' });
 }
 
+export function deleteReport(reportId) {
+  return apiRequest(`/reports/${encodeURIComponent(reportId)}`, { method: 'DELETE' });
+}
+
 export function loginAdmin(payload) {
   return apiRequest('/auth/login', {
     method: 'POST',

@@ -1,11 +1,304 @@
 const crypto = require('crypto');
 const { Op, QueryTypes } = require('sequelize');
-const { Product, User, Video, VideoAssignment, WeeklyReport, sequelize } = require('../models');
+const {
+  Booking,
+  User,
+  WeeklyReport,
+  sequelize,
+} = require('../models');
 
 const toDateOnly = (date) => date.toISOString().slice(0, 10);
+const REPORT_OLLAMA_HOST = String(
+  process.env.REPORT_OLLAMA_HOST
+    || process.env.AI_CHAT_OLLAMA_HOST
+    || process.env.OLLAMA_HOST
+    || 'http://127.0.0.1:11434',
+).trim().replace(/\/+$/, '');
+const REPORT_OLLAMA_MODEL = String(
+  process.env.REPORT_OLLAMA_MODEL
+    || process.env.AI_CHAT_MODEL
+    || 'llama3.1:8b',
+).trim().replace(/^ollama:/i, '');
+const REPORT_OLLAMA_TIMEOUT_MS = Math.max(1000, Number(process.env.REPORT_OLLAMA_TIMEOUT_MS) || 90000);
 const toNumbers = (row, fields) => Object.fromEntries(
   Object.entries(row).map(([key, value]) => [key, fields.includes(key) ? Number(value) : value]),
 );
+const number = (value) => Number(value || 0);
+const formatNumber = (value) => number(value).toLocaleString('vi-VN');
+const normalizeAiContent = (value) => String(value || '')
+  .trim()
+  .replace(/^```(?:markdown|md)?\s*/i, '')
+  .replace(/\s*```$/, '')
+  .replace(/^#{1,6}\s*/gm, '')
+  .replace(/\*\*([^*]+)\*\*/g, '$1')
+  .trim();
+
+const validateReportPeriod = (startValue, endValue) => {
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  const startText = String(startValue || '');
+  const endText = String(endValue || '');
+  if (!datePattern.test(startText) || !datePattern.test(endText)) {
+    const error = new Error('Khoảng thời gian báo cáo không hợp lệ.');
+    error.status = 400;
+    throw error;
+  }
+
+  const start = new Date(`${startText}T00:00:00.000Z`);
+  const end = new Date(`${endText}T23:59:59.999Z`);
+  if (
+    Number.isNaN(start.getTime())
+    || Number.isNaN(end.getTime())
+    || toDateOnly(start) !== startText
+    || toDateOnly(end) !== endText
+    || start > end
+  ) {
+    const error = new Error('Khoảng thời gian báo cáo không hợp lệ.');
+    error.status = 400;
+    throw error;
+  }
+  if ((end.getTime() - start.getTime()) / 86400000 > 366) {
+    const error = new Error('Khoảng thời gian báo cáo không được vượt quá 366 ngày.');
+    error.status = 400;
+    throw error;
+  }
+  return { start, end, startText, endText };
+};
+
+const buildKocReportSnapshot = (bookings, startText, endText) => {
+  const activeCollaborationStatuses = new Set(['ONGOING', 'VALID', 'EXPIRING']);
+  const terminalBookingStatuses = new Set(['done', 'cancelled']);
+  const endOfPeriod = new Date(`${endText}T23:59:59.999Z`);
+  const kocStats = new Map();
+  let activeCollaborations = 0;
+  let performanceEvaluations = 0;
+
+  bookings.forEach((booking) => {
+    const evaluation = booking.evaluation_snapshot || {};
+    const performance = evaluation.performance || null;
+    const collaboration = evaluation.collaboration || null;
+    const identity = String(
+      booking.creator_open_id
+        || (booking.creator_username ? `username:${booking.creator_username.toLowerCase()}` : '')
+        || (booking.creator_id ? `user:${booking.creator_id}` : '')
+        || `booking:${booking.id}`,
+    );
+    if (!kocStats.has(identity)) {
+      kocStats.set(identity, {
+        identity,
+        name: booking.creator_name || booking.creator_username || 'KOC',
+        username: booking.creator_username || null,
+        bookings: 0,
+        bookingCost: 0,
+        activeBookings: 0,
+        completedBookings: 0,
+        cancelledBookings: 0,
+        overdueBookings: 0,
+        statuses: {},
+        latestPerformance: null,
+        evaluations: [],
+      });
+    }
+    const current = kocStats.get(identity);
+    const bookingCost = number(booking.booking_cost);
+    const videoViews = number(performance?.video_views);
+    const affiliateOrders = number(performance?.affiliate_orders);
+    const affiliateGmv = number(performance?.affiliate_gmv);
+    const benchmark = {
+      costPerThousandViews: videoViews > 0 ? Number((bookingCost / videoViews * 1000).toFixed(2)) : null,
+      costPerOrder: affiliateOrders > 0 ? Number((bookingCost / affiliateOrders).toFixed(2)) : null,
+      costToHistoricalGmvRate: affiliateGmv > 0 ? Number((bookingCost / affiliateGmv * 100).toFixed(2)) : null,
+    };
+
+    current.bookings += 1;
+    current.bookingCost += bookingCost;
+    current.statuses[booking.status] = (current.statuses[booking.status] || 0) + 1;
+    if (!terminalBookingStatuses.has(booking.status)) current.activeBookings += 1;
+    if (['video_posted', 'done'].includes(booking.status)) current.completedBookings += 1;
+    if (booking.status === 'cancelled') current.cancelledBookings += 1;
+    const overdue = Boolean(
+      booking.deadline
+      && !terminalBookingStatuses.has(booking.status)
+      && new Date(`${booking.deadline}T23:59:59.999Z`) < endOfPeriod
+    );
+    if (overdue) current.overdueBookings += 1;
+    if (activeCollaborationStatuses.has(String(collaboration?.status || '').toUpperCase())) {
+      activeCollaborations += 1;
+    }
+    if (performance) performanceEvaluations += 1;
+
+    const normalizedPerformance = performance ? {
+      startDate: performance.start_date || null,
+      endDate: performance.end_date || null,
+      currency: performance.currency || null,
+      affiliateGmv,
+      affiliateOrders,
+      itemsSold: number(performance.items_sold),
+      videoViews,
+      shoppableVideos: number(performance.shoppable_videos),
+      ctr: number(performance.ctr),
+      ctor: number(performance.ctor),
+      estimatedCommission: number(performance.estimated_commission),
+      syncedAt: performance.synced_at || null,
+    } : null;
+    const latestEndDate = current.latestPerformance?.endDate || '';
+    if (normalizedPerformance && String(normalizedPerformance.endDate || '') >= String(latestEndDate)) {
+      current.latestPerformance = normalizedPerformance;
+    }
+    current.evaluations.push({
+      bookingId: booking.id,
+      bookingCost,
+      status: booking.status,
+      deadline: booking.deadline,
+      overdue,
+      collaboration: collaboration ? {
+        name: collaboration.name || null,
+        status: collaboration.status || null,
+        endAt: collaboration.end_at || null,
+      } : null,
+      performance: normalizedPerformance,
+      benchmark,
+    });
+  });
+
+  const rankings = Array.from(kocStats.values()).map((koc) => ({
+      ...koc,
+      bookingCompletionRate: koc.bookings
+        ? Number(((koc.completedBookings / koc.bookings) * 100).toFixed(1))
+        : 0,
+      averageBookingCost: koc.bookings ? Math.round(koc.bookingCost / koc.bookings) : 0,
+    })).sort((a, b) => (
+      number(b.latestPerformance?.affiliateGmv) - number(a.latestPerformance?.affiliateGmv)
+      || b.bookingCost - a.bookingCost
+      || a.name.localeCompare(b.name)
+    ));
+  const totalBookingCost = rankings.reduce((sum, koc) => sum + koc.bookingCost, 0);
+  const completedBookings = rankings.reduce((sum, koc) => sum + koc.completedBookings, 0);
+  const overdueBookings = rankings.reduce((sum, koc) => sum + koc.overdueBookings, 0);
+
+  return {
+    period: { start: startText, end: endText },
+    bookingCurrency: 'MYR',
+    overview: {
+      evaluations: bookings.length,
+      totalKocs: rankings.length,
+      activeCollaborations,
+      performanceCoverage: bookings.length
+        ? Number(((performanceEvaluations / bookings.length) * 100).toFixed(1))
+        : 0,
+      bookings: bookings.length,
+      bookingCost: totalBookingCost,
+      completedBookings,
+      overdueBookings,
+      bookingCompletionRate: bookings.length
+        ? Number(((completedBookings / bookings.length) * 100).toFixed(1))
+        : 0,
+    },
+    kocs: rankings,
+  };
+};
+
+const buildKocFactualReport = (snapshot) => {
+  const {
+    period,
+    overview,
+    kocs,
+  } = snapshot;
+  const formatBenchmark = (benchmark) => {
+    const values = [
+      benchmark.costPerThousandViews == null
+        ? '—/1K views'
+        : `RM ${formatNumber(benchmark.costPerThousandViews)}/1K views`,
+      benchmark.costPerOrder == null
+        ? '—/đơn'
+        : `RM ${formatNumber(benchmark.costPerOrder)}/đơn`,
+      benchmark.costToHistoricalGmvRate == null
+        ? '—% GMV lịch sử'
+        : `${benchmark.costToHistoricalGmvRate.toLocaleString('vi-VN')}% GMV lịch sử`,
+    ];
+    return values.join(' · ');
+  };
+  return [
+    'BÁO CÁO ĐÁNH GIÁ HIỆU QUẢ KOC',
+    `Kỳ đánh giá: ${period.start} - ${period.end}`,
+    '',
+    'TỔNG QUAN',
+    `- Đánh giá booking trong kỳ: ${formatNumber(overview.evaluations)}`,
+    `- KOC được đánh giá: ${formatNumber(overview.totalKocs)}`,
+    `- Hợp tác đang hoạt động: ${formatNumber(overview.activeCollaborations)}`,
+    `- Độ phủ Creator Performance: ${overview.performanceCoverage.toLocaleString('vi-VN')}%`,
+    `- Tổng chi phí booking: RM ${formatNumber(overview.bookingCost)}`,
+    `- Booking quá hạn: ${formatNumber(overview.overdueBookings)}`,
+    '',
+    'ĐÁNH GIÁ THEO KOC',
+    kocs.length ? kocs.map((koc, index) => {
+      const performance = koc.latestPerformance;
+      const latestEvaluation = koc.evaluations[0];
+      return [
+        `${index + 1}. ${koc.name}`,
+        `   Booking: ${formatNumber(koc.bookings)} đánh giá · chi phí RM ${formatNumber(koc.bookingCost)} · quá hạn ${formatNumber(koc.overdueBookings)}`,
+        performance
+          ? `   Creator Performance (${performance.startDate || '—'} - ${performance.endDate || '—'}): GMV ${formatNumber(performance.affiliateGmv)} ${performance.currency || ''} · ${formatNumber(performance.affiliateOrders)} đơn · ${formatNumber(performance.videoViews)} video views · ${formatNumber(performance.shoppableVideos)} video có gắn sản phẩm`
+          : '   Creator Performance: Chưa có dữ liệu.',
+        !latestEvaluation || Object.values(latestEvaluation.benchmark).every((value) => value == null)
+          ? '   Benchmark chi phí: Chưa đủ dữ liệu.'
+          : `   Benchmark chi phí: ${formatBenchmark(latestEvaluation.benchmark)}`,
+      ].join('\n');
+    }).join('\n\n') : '- Chưa có đánh giá booking trong khoảng thời gian đã chọn.',
+    '',
+    'LƯU Ý DỮ LIỆU',
+    '- Nguồn dữ liệu giống page Quản lý booking: booking có evaluation_snapshot, lọc theo ngày tạo trong kỳ.',
+    '- Creator Performance là dữ liệu tổng của KOC được lưu tại lúc tạo đánh giá, không phải kết quả trực tiếp hay ROI của booking.',
+  ].join('\n');
+};
+
+const generateOllamaAnalysis = async (snapshot) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REPORT_OLLAMA_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${REPORT_OLLAMA_HOST}/api/chat`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: REPORT_OLLAMA_MODEL,
+        stream: false,
+        options: { temperature: 0.2 },
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'Bạn là chuyên gia đánh giá hiệu quả KOC cho YUM Network.',
+              'Chỉ sử dụng đúng dữ liệu JSON được cung cấp, tuyệt đối không tự tạo số liệu hoặc suy đoán doanh thu.',
+              'Viết tiếng Việt dạng văn bản thuần, ngắn gọn, gồm ba phần: "ĐIỂM NỔI BẬT", "ĐIỂM CẦN CẢI THIỆN", "ĐỀ XUẤT HÀNH ĐỘNG".',
+              'Đánh giá KOC theo Creator Performance và benchmark giống page Quản lý booking: GMV, đơn hàng, video views, chi phí/1K views, chi phí/đơn và tỷ lệ chi phí trên GMV lịch sử.',
+              'Không được xem Creator Performance tổng là kết quả trực tiếp hay ROI của booking.',
+              'Nếu thiếu Creator Performance hoặc benchmark thì nói rõ giới hạn, không đưa kết luận vô căn cứ.',
+              'Không lặp lại toàn bộ bảng KPI và không thêm lời chào.',
+            ].join(' '),
+          },
+          {
+            role: 'user',
+            content: `Đánh giá hiệu quả KOC từ snapshot sau:\n${JSON.stringify(snapshot)}`,
+          },
+        ],
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || payload.message || `Ollama trả về HTTP ${response.status}`);
+    }
+    const content = normalizeAiContent(payload.message?.content || payload.response);
+    if (!content) throw new Error('Ollama không trả về nội dung phân tích.');
+    return content;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(`Ollama không phản hồi sau ${REPORT_OLLAMA_TIMEOUT_MS / 1000} giây.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 const getReports = async (req, res) => {
   try {
@@ -356,74 +649,56 @@ const getKocDetail = async (req, res) => {
 
 const generateWeeklyReport = async (req, res) => {
   try {
-    const weekStart = req.body.week_start ? new Date(req.body.week_start) : new Date();
-    const weekEnd = req.body.week_end ? new Date(req.body.week_end) : new Date(weekStart);
+    const today = toDateOnly(new Date());
+    const requestedStart = req.body.week_start || today;
+    const requestedEnd = req.body.week_end || requestedStart;
+    const {
+      start: weekStart,
+      end: weekEnd,
+      startText,
+      endText,
+    } = validateReportPeriod(requestedStart, requestedEnd);
 
-    if (!req.body.week_end) {
-      weekEnd.setDate(weekStart.getDate() + 6);
-    }
-
-    const videos = await Video.findAll({
+    const bookings = await Booking.findAll({
       where: {
-        published_at: {
-          [Op.between]: [weekStart, new Date(`${toDateOnly(weekEnd)}T23:59:59.999Z`)],
-        },
+        evaluation_snapshot: { [Op.not]: null },
+        created_at: { [Op.between]: [weekStart, weekEnd] },
       },
-      include: [
-        { model: Product, as: 'products', through: { attributes: [] } },
-        { model: VideoAssignment, as: 'assignments', include: [{ model: User, as: 'user' }] },
+      attributes: [
+        'id',
+        'creator_id',
+        'creator_open_id',
+        'creator_username',
+        'creator_name',
+        'booking_cost',
+        'status',
+        'deadline',
+        'created_at',
+        'evaluation_snapshot',
       ],
-      order: [['views', 'DESC']],
+      order: [['created_at', 'DESC'], ['id', 'DESC']],
+      raw: true,
     });
 
-    const totalViews = videos.reduce((sum, video) => sum + Number(video.views || 0), 0);
-    const topVideos = videos.slice(0, 3);
-    const strongProducts = new Map();
-
-    videos.forEach((video) => {
-      video.products?.forEach((product) => {
-        const current = strongProducts.get(product.name) || { videos: 0, views: 0 };
-        current.videos += 1;
-        current.views += Number(video.views || 0);
-        strongProducts.set(product.name, current);
-      });
-    });
-
-    const productLines = Array.from(strongProducts.entries())
-      .sort((a, b) => b[1].views - a[1].views)
-      .map(([name, stat]) => `- ${name}: ${stat.videos} video, ${stat.views.toLocaleString()} views`)
-      .join('\n');
-
-    const content = [
-      `Báo cáo ${toDateOnly(weekStart)} - ${toDateOnly(weekEnd)}`,
-      '',
-      `Tổng video: ${videos.length}`,
-      `Tổng views: ${totalViews.toLocaleString()}`,
-      `Avg view/video: ${videos.length ? Math.round(totalViews / videos.length).toLocaleString() : 0}`,
-      '',
-      'Top video:',
-      topVideos.length
-        ? topVideos.map((video, index) => `${index + 1}. ${video.title} - ${Number(video.views || 0).toLocaleString()} views`).join('\n')
-        : '- Chưa có video trong khoảng thời gian này',
-      '',
-      'Sản phẩm nổi bật:',
-      productLines || '- Chưa có dữ liệu sản phẩm',
-      '',
-      'Nhận định AI:',
-      videos.length
-        ? 'Tập trung nhân rộng format của top video, ưu tiên các sản phẩm đang có view trung bình cao và rà soát lại nhóm video dưới 10k view để cải thiện hook 3 giây đầu.'
-        : 'Khoảng thời gian này chưa có dữ liệu video, cần import hoặc đồng bộ nguồn dữ liệu trước khi đánh giá hiệu suất.',
-    ].join('\n');
+    const snapshot = buildKocReportSnapshot(bookings, startText, endText);
+    const factualContent = buildKocFactualReport(snapshot);
+    const aiAnalysis = await generateOllamaAnalysis(snapshot);
+    const content = `${factualContent}\n\n${aiAnalysis}`;
 
     const report = await WeeklyReport.create({
-      week_start: toDateOnly(weekStart),
-      week_end: toDateOnly(weekEnd),
+      week_start: startText,
+      week_end: endText,
       generated_content: content,
     });
 
     res.status(201).json(report);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    const isOllamaError = /Ollama/i.test(error.message);
+    res.status(error.status || (isOllamaError ? 502 : 500)).json({
+      message: isOllamaError
+        ? `Không thể tạo phân tích AI: ${error.message}`
+        : error.message,
+    });
   }
 };
 
@@ -438,4 +713,10 @@ module.exports = {
   getKpis,
   getKocDetail,
   generateWeeklyReport,
+  __test: {
+    buildKocReportSnapshot,
+    buildKocFactualReport,
+    validateReportPeriod,
+    generateOllamaAnalysis,
+  },
 };

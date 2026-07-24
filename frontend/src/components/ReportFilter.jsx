@@ -4,8 +4,14 @@ import {
   ChevronDown,
   FileText,
   Link2,
+  Trash2,
 } from 'lucide-react';
-import { fetchReports, generateWeeklyReport, shareReport } from '../lib/api';
+import {
+  deleteReport,
+  fetchReports,
+  generateWeeklyReport,
+  shareReport,
+} from '../lib/api';
 import { useI18n } from '../lib/language';
 
 const toDateInputValue = (date) => [
@@ -23,6 +29,7 @@ const ReportFilter = ({ heroTitle }) => {
   const [error, setError] = useState('');
   const [expandedReportId, setExpandedReportId] = useState(null);
   const [sharingReportId, setSharingReportId] = useState(null);
+  const [deletingReportId, setDeletingReportId] = useState(null);
   const [copiedLinkReportId, setCopiedLinkReportId] = useState(null);
 
   const loadReports = async (signal) => {
@@ -131,6 +138,23 @@ const ReportFilter = ({ heroTitle }) => {
     }
   };
 
+  const handleDeleteReport = async (report) => {
+    if (!window.confirm(t('reports.deleteConfirm'))) return;
+
+    try {
+      setDeletingReportId(report.id);
+      setError('');
+      await deleteReport(report.id);
+      setReports((current) => current.filter((item) => item.id !== report.id));
+      setExpandedReportId((current) => (current === report.id ? null : current));
+      setCopiedLinkReportId((current) => (current === report.id ? null : current));
+    } catch (err) {
+      setError(err.message || t('reports.deleteError'));
+    } finally {
+      setDeletingReportId(null);
+    }
+  };
+
   return (
     <div className="page reports-page">
       <section className="page__hero reports-hero report-generator">
@@ -202,6 +226,17 @@ const ReportFilter = ({ heroTitle }) => {
                     >
                       {copiedLinkReportId === report.id ? <Check size={17} /> : <Link2 size={17} />}
                       <span>{copiedLinkReportId === report.id ? t('reports.linkCopied') : t('reports.copyLink')}</span>
+                    </button>
+                    <button
+                      className="report-card__delete"
+                      type="button"
+                      disabled={deletingReportId === report.id}
+                      aria-label={t('reports.delete')}
+                      title={t('reports.delete')}
+                      onClick={() => handleDeleteReport(report)}
+                    >
+                      <Trash2 size={17} aria-hidden="true" />
+                      <span>{deletingReportId === report.id ? t('reports.deleting') : t('reports.delete')}</span>
                     </button>
                     <button
                       className="report-card__expand"
