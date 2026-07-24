@@ -47,6 +47,8 @@ const migrations = [
   require('./037_add_booking_timestamps'),
   require('./038_create_booking_evaluations'),
   require('./039_add_weekly_report_public_sharing'),
+  require('./040_create_booking_video_performance'),
+  require('./041_create_shop_video_catalog'),
 ];
 
 const createMigrationRunner = ({

@@ -492,6 +492,39 @@
     "evaluationList": "Evaluation list",
     "benchmarkDisclaimer": "These ratios benchmark the creator's aggregate performance period; they are not the booking's actual ROI.",
     "benchmark": "Cost benchmark",
+    "benchmarkHelpLabel": "Explain the cost benchmark",
+    "benchmarkHelp": "Cost/1,000 views = booking cost ÷ video views × 1,000; cost/order = booking cost ÷ affiliate orders; GMV percentage = booking cost ÷ affiliate GMV × 100. This is a historical-performance reference, not actual ROI.",
+    "preBookingBenchmark": "Pre-booking benchmark",
+    "actualResults": "Actual post-booking results",
+    "actualPerformance": "Video-attributed performance",
+    "grossRoas": "Gross ROAS",
+    "netRoas": "Net ROAS",
+    "netGmvPending": "Net GMV is waiting for refund data",
+    "roiInsufficient": "ROI: Missing cost and COGS data",
+    "awaitingVideo": "Waiting for a linked video",
+    "awaitingFirstSync": "Linked; waiting for TikTok sync",
+    "actualAttributionDisclaimer": "Metrics only come from the linked video within its 30-day attribution window. Gross ROAS uses GMV before refunds; Net ROAS appears only when refund data is available.",
+    "actualStatuses": {
+      "AWAITING_VIDEO": "Waiting for video",
+      "COLLECTING": "Collecting",
+      "SYNC_FAILED": "Sync failed",
+      "FINALIZED": "Finalized"
+    },
+    "matchedVideo": "Booking video",
+    "videoLinked": "Linked",
+    "findVideo": "Find video",
+    "findingVideo": "Finding",
+    "videoMatchNone": "No affiliate video matched this KOC within the booking date range.",
+    "videoRefreshNone": "The linked video is no longer present in TikTok data for this date range.",
+    "videoMatchError": "Unable to find a video for this booking.",
+    "videoCandidatesTitle": "Choose the booking video",
+    "videoCandidatesMeta": "Multiple videos were found for {{name}}. Select the video that belongs to this booking.",
+    "openMatchedVideo": "Open linked video",
+    "refreshVideo": "Refresh metrics",
+    "refreshingVideo": "Refreshing",
+    "manualVideoUrl": "Or paste a TikTok video URL",
+    "linkVideo": "Link video",
+    "linkingVideo": "Linking",
     "orders": "orders",
     "order": "order",
     "views": "views",
@@ -1138,6 +1171,14 @@
       },
       "tiktok_channel_metrics": {
         "name": "TikTok Channel Metrics",
+        "description": ""
+      },
+      "booking_video_performance": {
+        "name": "Booking Video Performance",
+        "description": ""
+      },
+      "tiktok_shop_video_catalog": {
+        "name": "TikTok Shop Video Catalog",
         "description": ""
       }
     }

@@ -18,11 +18,15 @@ const {
 } = require('./tiktokShopAnalyticsSyncService');
 const { run: syncTikTokChannels } = require('../jobs/syncTiktokChannels');
 const { targetCollaborationSyncService } = require('./tiktokTargetCollaborationSyncService');
+const { syncActiveBookingVideos } = require('./bookingVideoPerformanceService');
+const { syncShopVideoCatalog } = require('./shopVideoCatalogService');
 
 const JOB_KEYS = new Set([
   'tiktok_creator_performance',
   'tiktok_shop_analytics',
   'tiktok_channel_metrics',
+  'booking_video_performance',
+  'tiktok_shop_video_catalog',
 ]);
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const activeRunControllers = new Map();
@@ -160,6 +164,11 @@ const jobHandlers = {
     }
     return summary;
   },
+  booking_video_performance: ({ signal } = {}) => syncActiveBookingVideos({ signal }),
+  tiktok_shop_video_catalog: ({ signal } = {}) => runForShops(
+    (shop) => syncShopVideoCatalog(shop, { signal }),
+    signal,
+  ),
 };
 
 const processScheduledJobRun = async (job, run) => {

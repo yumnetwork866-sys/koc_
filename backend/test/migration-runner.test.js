@@ -46,6 +46,8 @@ const defaultMigrationNames = [
   '037_add_booking_timestamps',
   '038_create_booking_evaluations',
   '039_add_weekly_report_public_sharing',
+  '040_create_booking_video_performance',
+  '041_create_shop_video_catalog',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

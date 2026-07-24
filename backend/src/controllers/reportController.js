@@ -2,10 +2,13 @@ const crypto = require('crypto');
 const { Op, QueryTypes } = require('sequelize');
 const {
   Booking,
+  BookingVideo,
+  BookingVideoPerformanceSnapshot,
   User,
   WeeklyReport,
   sequelize,
 } = require('../models');
+const { serializeBookingWithActual } = require('../services/bookingVideoPerformanceService');
 
 const toDateOnly = (date) => date.toISOString().slice(0, 10);
 const REPORT_OLLAMA_HOST = String(
@@ -95,6 +98,12 @@ const buildKocReportSnapshot = (bookings, startText, endText) => {
         overdueBookings: 0,
         statuses: {},
         latestPerformance: null,
+        actualGrossGmv: 0,
+        actualNetGmv: 0,
+        actualNetGmvAvailable: true,
+        actualOrders: 0,
+        actualViews: 0,
+        attributedVideos: 0,
         evaluations: [],
       });
     }
@@ -108,6 +117,7 @@ const buildKocReportSnapshot = (bookings, startText, endText) => {
       costPerOrder: affiliateOrders > 0 ? Number((bookingCost / affiliateOrders).toFixed(2)) : null,
       costToHistoricalGmvRate: affiliateGmv > 0 ? Number((bookingCost / affiliateGmv * 100).toFixed(2)) : null,
     };
+    const actual = booking.actual_performance || {};
 
     current.bookings += 1;
     current.bookingCost += bookingCost;
@@ -125,6 +135,12 @@ const buildKocReportSnapshot = (bookings, startText, endText) => {
       activeCollaborations += 1;
     }
     if (performance) performanceEvaluations += 1;
+    current.actualGrossGmv += number(actual.gross_gmv);
+    current.actualOrders += number(actual.orders);
+    current.actualViews += number(actual.views);
+    current.attributedVideos += number(actual.video_count);
+    if (actual.net_gmv === null || actual.net_gmv === undefined) current.actualNetGmvAvailable = false;
+    else current.actualNetGmv += number(actual.net_gmv);
 
     const normalizedPerformance = performance ? {
       startDate: performance.start_date || null,
@@ -157,6 +173,19 @@ const buildKocReportSnapshot = (bookings, startText, endText) => {
       } : null,
       performance: normalizedPerformance,
       benchmark,
+      actual: {
+        status: actual.status || 'AWAITING_VIDEO',
+        videoCount: number(actual.video_count),
+        grossGmv: number(actual.gross_gmv),
+        refundedGmv: actual.refunded_gmv ?? null,
+        netGmv: actual.net_gmv ?? null,
+        orders: number(actual.orders),
+        views: number(actual.views),
+        grossRoas: actual.gross_roas ?? null,
+        netRoas: actual.net_roas ?? null,
+        roi: null,
+        roiStatus: 'MISSING_COST_DATA',
+      },
     });
   });
 
@@ -166,14 +195,23 @@ const buildKocReportSnapshot = (bookings, startText, endText) => {
         ? Number(((koc.completedBookings / koc.bookings) * 100).toFixed(1))
         : 0,
       averageBookingCost: koc.bookings ? Math.round(koc.bookingCost / koc.bookings) : 0,
+      actualGrossRoas: koc.bookingCost > 0 && koc.attributedVideos
+        ? Number((koc.actualGrossGmv / koc.bookingCost).toFixed(2))
+        : null,
+      actualNetRoas: koc.bookingCost > 0 && koc.attributedVideos && koc.actualNetGmvAvailable
+        ? Number((koc.actualNetGmv / koc.bookingCost).toFixed(2))
+        : null,
     })).sort((a, b) => (
-      number(b.latestPerformance?.affiliateGmv) - number(a.latestPerformance?.affiliateGmv)
+      b.actualGrossGmv - a.actualGrossGmv
+      || number(b.latestPerformance?.affiliateGmv) - number(a.latestPerformance?.affiliateGmv)
       || b.bookingCost - a.bookingCost
       || a.name.localeCompare(b.name)
     ));
   const totalBookingCost = rankings.reduce((sum, koc) => sum + koc.bookingCost, 0);
   const completedBookings = rankings.reduce((sum, koc) => sum + koc.completedBookings, 0);
   const overdueBookings = rankings.reduce((sum, koc) => sum + koc.overdueBookings, 0);
+  const actualGrossGmv = rankings.reduce((sum, koc) => sum + koc.actualGrossGmv, 0);
+  const attributedVideos = rankings.reduce((sum, koc) => sum + koc.attributedVideos, 0);
 
   return {
     period: { start: startText, end: endText },
@@ -192,6 +230,11 @@ const buildKocReportSnapshot = (bookings, startText, endText) => {
       bookingCompletionRate: bookings.length
         ? Number(((completedBookings / bookings.length) * 100).toFixed(1))
         : 0,
+      attributedVideos,
+      actualGrossGmv,
+      actualGrossRoas: totalBookingCost > 0 && attributedVideos
+        ? Number((actualGrossGmv / totalBookingCost).toFixed(2))
+        : null,
     },
     kocs: rankings,
   };
@@ -228,6 +271,9 @@ const buildKocFactualReport = (snapshot) => {
     `- Độ phủ Creator Performance: ${overview.performanceCoverage.toLocaleString('vi-VN')}%`,
     `- Tổng chi phí booking: RM ${formatNumber(overview.bookingCost)}`,
     `- Booking quá hạn: ${formatNumber(overview.overdueBookings)}`,
+    `- Video đã quy gán: ${formatNumber(overview.attributedVideos)}`,
+    `- Gross GMV thực tế từ video: RM ${formatNumber(overview.actualGrossGmv)}`,
+    `- Gross ROAS thực tế: ${overview.actualGrossRoas == null ? 'Chưa đủ dữ liệu' : `${overview.actualGrossRoas.toLocaleString('vi-VN')}x`}`,
     '',
     'ĐÁNH GIÁ THEO KOC',
     kocs.length ? kocs.map((koc, index) => {
@@ -242,12 +288,17 @@ const buildKocFactualReport = (snapshot) => {
         !latestEvaluation || Object.values(latestEvaluation.benchmark).every((value) => value == null)
           ? '   Benchmark chi phí: Chưa đủ dữ liệu.'
           : `   Benchmark chi phí: ${formatBenchmark(latestEvaluation.benchmark)}`,
+        koc.attributedVideos
+          ? `   Kết quả thực tế (${formatNumber(koc.attributedVideos)} video): Gross GMV RM ${formatNumber(koc.actualGrossGmv)} · ${formatNumber(koc.actualOrders)} đơn · Gross ROAS ${koc.actualGrossRoas == null ? '—' : `${koc.actualGrossRoas.toLocaleString('vi-VN')}x`} · Net ROAS ${koc.actualNetRoas == null ? 'chờ dữ liệu hoàn trả' : `${koc.actualNetRoas.toLocaleString('vi-VN')}x`} · ROI chưa đủ dữ liệu giá vốn`
+          : '   Kết quả thực tế: Chưa liên kết video booking.',
       ].join('\n');
     }).join('\n\n') : '- Chưa có đánh giá booking trong khoảng thời gian đã chọn.',
     '',
     'LƯU Ý DỮ LIỆU',
     '- Nguồn dữ liệu giống page Quản lý booking: booking có evaluation_snapshot, lọc theo ngày tạo trong kỳ.',
     '- Creator Performance là dữ liệu tổng của KOC được lưu tại lúc tạo đánh giá, không phải kết quả trực tiếp hay ROI của booking.',
+    '- Kết quả thực tế chỉ lấy snapshot của video đã liên kết trong cửa sổ ghi nhận 30 ngày.',
+    '- ROI không được tính khi chưa có giá vốn và các chi phí liên quan.',
   ].join('\n');
 };
 
@@ -270,9 +321,11 @@ const generateOllamaAnalysis = async (snapshot) => {
               'Bạn là chuyên gia đánh giá hiệu quả KOC cho YUM Network.',
               'Chỉ sử dụng đúng dữ liệu JSON được cung cấp, tuyệt đối không tự tạo số liệu hoặc suy đoán doanh thu.',
               'Viết tiếng Việt dạng văn bản thuần, ngắn gọn, gồm ba phần: "ĐIỂM NỔI BẬT", "ĐIỂM CẦN CẢI THIỆN", "ĐỀ XUẤT HÀNH ĐỘNG".',
-              'Đánh giá KOC theo Creator Performance và benchmark giống page Quản lý booking: GMV, đơn hàng, video views, chi phí/1K views, chi phí/đơn và tỷ lệ chi phí trên GMV lịch sử.',
+              'Tách rõ benchmark trước booking và kết quả thực tế sau booking.',
+              'Benchmark dùng Creator Performance lịch sử. Kết quả thực tế chỉ dùng actual của video đã liên kết: Gross/Net GMV, đơn hàng, views và Gross/Net ROAS.',
               'Không được xem Creator Performance tổng là kết quả trực tiếp hay ROI của booking.',
-              'Nếu thiếu Creator Performance hoặc benchmark thì nói rõ giới hạn, không đưa kết luận vô căn cứ.',
+              'Không gọi ROAS là ROI. Nếu ROI có trạng thái MISSING_COST_DATA thì phải nói chưa đủ giá vốn và chi phí để tính ROI.',
+              'Nếu thiếu Creator Performance, benchmark, refund hoặc actual thì nói rõ giới hạn, không đưa kết luận vô căn cứ.',
               'Không lặp lại toàn bộ bảng KPI và không thêm lời chào.',
             ].join(' '),
           },
@@ -659,7 +712,7 @@ const generateWeeklyReport = async (req, res) => {
       endText,
     } = validateReportPeriod(requestedStart, requestedEnd);
 
-    const bookings = await Booking.findAll({
+    const bookingInstances = await Booking.findAll({
       where: {
         evaluation_snapshot: { [Op.not]: null },
         created_at: { [Op.between]: [weekStart, weekEnd] },
@@ -676,9 +729,19 @@ const generateWeeklyReport = async (req, res) => {
         'created_at',
         'evaluation_snapshot',
       ],
+      include: [{
+        model: BookingVideo,
+        as: 'booking_videos',
+        required: false,
+        include: [{
+          model: BookingVideoPerformanceSnapshot,
+          as: 'performance_snapshots',
+          required: false,
+        }],
+      }],
       order: [['created_at', 'DESC'], ['id', 'DESC']],
-      raw: true,
     });
+    const bookings = bookingInstances.map(serializeBookingWithActual);
 
     const snapshot = buildKocReportSnapshot(bookings, startText, endText);
     const factualContent = buildKocFactualReport(snapshot);

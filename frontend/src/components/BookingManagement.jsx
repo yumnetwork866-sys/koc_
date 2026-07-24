@@ -5,6 +5,7 @@ import {
   deleteBooking,
   fetchBookingTargetKocs,
   fetchBookings,
+  matchBookingVideo,
   updateBooking,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
@@ -26,6 +27,7 @@ const targetKocLabel = (creator) => {
 const snapshotOf = (booking) => booking?.evaluation_snapshot || {};
 const collaborationOf = (booking) => snapshotOf(booking).collaboration || {};
 const performanceOf = (booking) => snapshotOf(booking).performance || null;
+const videoMatchOf = (booking) => snapshotOf(booking).video_match || null;
 const finiteNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -124,6 +126,9 @@ const BookingManagement = ({ heroTitle }) => {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
+  const [matchingVideoId, setMatchingVideoId] = useState(null);
+  const [videoMatchDialog, setVideoMatchDialog] = useState(null);
+  const [manualVideoUrl, setManualVideoUrl] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [detailCost, setDetailCost] = useState('');
   const [error, setError] = useState('');
@@ -274,6 +279,39 @@ const BookingManagement = ({ heroTitle }) => {
     }
   };
 
+  const replaceBooking = (updated) => {
+    setBookings((items) => items.map((item) => item.id === updated.id ? updated : item));
+    setSelectedBooking((current) => current?.id === updated.id ? updated : current);
+  };
+
+  const findBookingVideo = async (booking, videoId, videoUrl) => {
+    try {
+      setMatchingVideoId(booking.id);
+      setError('');
+      const result = await matchBookingVideo(booking.id, { videoId, videoUrl });
+      if (result.status === 'matched') {
+        replaceBooking(result.booking);
+        setVideoMatchDialog(null);
+        return;
+      }
+      if (result.status === 'needs_confirmation') {
+        setVideoMatchDialog({ booking, candidates: result.candidates || [], range: result.range });
+        setManualVideoUrl('');
+        return;
+      }
+      if (booking.video_platform_id) {
+        setError(t('booking.videoRefreshNone'));
+      } else {
+        setVideoMatchDialog({ booking, candidates: [], range: result.range });
+        setManualVideoUrl('');
+      }
+    } catch (err) {
+      setError(err.message || t('booking.videoMatchError'));
+    } finally {
+      setMatchingVideoId(null);
+    }
+  };
+
   const saveCost = async (event) => {
     event.preventDefault();
     try {
@@ -294,6 +332,23 @@ const BookingManagement = ({ heroTitle }) => {
       <small>{formatNumber(performance.affiliate_orders)} {t('booking.orders')} · {formatNumber(performance.video_views)} {t('booking.views')}</small>
     </div>
   ) : <span className="chip">{t('booking.noPerformance')}</span>;
+
+  const renderActualPerformance = (booking) => {
+    const actual = booking.actual_performance || {};
+    if (!actual.video_count) return <span className="chip">{t('booking.awaitingVideo')}</span>;
+    if (!actual.snapshot_count) {
+      return <div className="booking-performance-cell"><strong>{t(`booking.actualStatuses.${actual.status}`)}</strong><small>{t('booking.awaitingFirstSync')}</small></div>;
+    }
+    return (
+      <div className="booking-performance-cell">
+        <strong>{formatMoney(actual.gross_gmv, actual.currency)} · {actual.gross_roas == null ? '—' : `${formatNumber(actual.gross_roas, { maximumFractionDigits: 2 })}x`} {t('booking.grossRoas')}</strong>
+        <small>{formatNumber(actual.orders)} {t('booking.orders')} · {formatNumber(actual.views)} {t('booking.views')}</small>
+        <small>{actual.net_gmv == null ? t('booking.netGmvPending') : `${formatMoney(actual.net_gmv, actual.currency)} · ${formatNumber(actual.net_roas, { maximumFractionDigits: 2 })}x ${t('booking.netRoas')}`}</small>
+        <small>{t('booking.roiInsufficient')}</small>
+        <span className={`booking-actual-status is-${String(actual.status || '').toLowerCase()}`}>{t(`booking.actualStatuses.${actual.status}`)}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="page">
@@ -327,18 +382,24 @@ const BookingManagement = ({ heroTitle }) => {
       <section className="section-card">
         <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div></div>
         <div className="table-wrap"><table className="data-table booking-evaluation-table">
-          <thead><tr><th>{t('booking.kocColumn')}</th><th>{t('booking.collaboration')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.bookingCost')}</th><th>{t('booking.benchmark')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr></thead>
+          <thead>
+            <tr className="booking-table-groups"><th rowSpan={2}>{t('booking.kocColumn')}</th><th colSpan={4}>{t('booking.preBookingBenchmark')}</th><th colSpan={2}>{t('booking.actualResults')}</th><th rowSpan={2} className="cell-actions">{t('booking.actionsColumn')}</th></tr>
+            <tr><th>{t('booking.collaboration')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.bookingCost')}</th><th><span className="booking-column-heading">{t('booking.benchmark')}<span className="booking-help"><button className="booking-help__trigger" type="button" aria-label={t('booking.benchmarkHelpLabel')} aria-describedby="booking-benchmark-tooltip">?</button><span className="booking-help__tooltip" id="booking-benchmark-tooltip" role="tooltip">{t('booking.benchmarkHelp')}</span></span></span></th><th>{t('booking.matchedVideo')}</th><th>{t('booking.actualPerformance')}</th></tr>
+          </thead>
           <tbody>
-            {loading ? <tr><td colSpan={6}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
+            {loading ? <tr><td colSpan={8}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
               const collaboration = collaborationOf(booking);
               const performance = performanceOf(booking);
               const benchmark = costBenchmarks(booking.booking_cost, performance);
+              const videoMatch = videoMatchOf(booking);
               return <tr key={booking.id}>
                 <td><div className="booking-koc-identity"><TargetKocAvatar src={booking.creator_avatar_url} name={booking.creator_name || booking.creator_username} /><span><strong>{booking.creator_name || booking.creator_username || 'KOC'}</strong><small>@{booking.creator_username}</small></span></div></td>
                 <td>{collaboration.id ? <div className="booking-performance-cell"><small><span className={`booking-collaboration-status is-${String(collaboration.status || '').toLowerCase()}`}>{formatCollaborationStatus(collaboration.status)}</span></small><small>{t('booking.validUntil')} {formatDate(collaboration.end_at)}</small></div> : <span className="chip">{t('booking.creatorPerformance')}</span>}</td>
                 <td>{renderPerformance(performance)}</td>
                 <td className="cell-number"><strong>{formatMoney(booking.booking_cost)}</strong></td>
                 <td><div className="booking-performance-cell"><strong>{benchmark.perThousandViews == null ? '—' : `${formatMoney(benchmark.perThousandViews)}/1K ${t('booking.views')}`}</strong><small>{benchmark.perOrder == null ? '—' : `${formatMoney(benchmark.perOrder)}/${t('booking.order')}`}</small><small>{benchmark.gmvRatio == null ? '—' : `${formatNumber(benchmark.gmvRatio, { maximumFractionDigits: 2 })}% ${t('booking.ofHistoricalGmv')}`}</small></div></td>
+                <td>{booking.video_platform_id ? <div className="booking-performance-cell"><strong>{t('booking.videoLinked')}</strong>{booking.video_url ? <a href={booking.video_url} target="_blank" rel="noreferrer">{videoMatch?.title || booking.video_platform_id} ↗</a> : <small>{videoMatch?.title || booking.video_platform_id}</small>}<small>{formatDate(booking.posted_at)}</small><button className="booking-video-refresh" type="button" disabled={matchingVideoId === booking.id} onClick={() => findBookingVideo(booking)}>{matchingVideoId === booking.id ? t('booking.refreshingVideo') : t('booking.refreshVideo')}</button></div> : <button className="button button--small button--ghost" type="button" disabled={matchingVideoId === booking.id} onClick={() => findBookingVideo(booking)}>{matchingVideoId === booking.id ? t('booking.findingVideo') : t('booking.findVideo')}</button>}</td>
+                <td>{renderActualPerformance(booking)}</td>
                 <td className="cell-actions">
                   <div className="action-menu booking-action-menu">
                     <button
@@ -393,14 +454,30 @@ const BookingManagement = ({ heroTitle }) => {
                   </div>
                 </td>
               </tr>;
-            }) : <tr><td colSpan={6}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
+            }) : <tr><td colSpan={8}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
           </tbody>
         </table></div>
       </section>
 
+      {videoMatchDialog ? (
+        <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setVideoMatchDialog(null); }}>
+          <aside className="koc-drawer booking-video-match-drawer" role="dialog" aria-modal="true" aria-labelledby="booking-video-match-title">
+            <div className="koc-drawer__header"><div><h2 id="booking-video-match-title">{t('booking.videoCandidatesTitle')}</h2></div><button className="button button--ghost" type="button" aria-label={t('common.close')} onClick={() => setVideoMatchDialog(null)}>×</button></div>
+            <div className="koc-drawer__body">
+              {videoMatchDialog.candidates.length ? <div className="booking-video-candidates">{videoMatchDialog.candidates.map((candidate) => <button className="booking-video-candidate" type="button" key={candidate.id} disabled={matchingVideoId === videoMatchDialog.booking.id} onClick={() => findBookingVideo(videoMatchDialog.booking, candidate.id)}><span><strong>{candidate.title || candidate.id}</strong><small>@{candidate.username} · {formatDate(candidate.posted_at)}</small></span><span><strong>{formatMoney(candidate.gmv?.amount, candidate.gmv?.currency)}</strong><small>{formatNumber(candidate.views)} {t('booking.views')} · {formatNumber(candidate.orders)} {t('booking.orders')}</small></span></button>)}</div> : <p className="section-card__meta">{t('booking.videoMatchNone')}</p>}
+              <form className="booking-video-manual" onSubmit={(event) => { event.preventDefault(); findBookingVideo(videoMatchDialog.booking, null, manualVideoUrl); }}>
+                <label className="field"><span>{t('booking.manualVideoUrl')}</span><input type="url" required value={manualVideoUrl} placeholder="https://www.tiktok.com/@username/video/..." onChange={(event) => setManualVideoUrl(event.target.value)} /></label>
+                <button className="button" type="submit" disabled={matchingVideoId === videoMatchDialog.booking.id}>{matchingVideoId === videoMatchDialog.booking.id ? t('booking.linkingVideo') : t('booking.linkVideo')}</button>
+              </form>
+            </div>
+          </aside>
+        </div>
+      ) : null}
+
       {selectedBooking ? (() => {
         const collaboration = collaborationOf(selectedBooking);
         const performance = performanceOf(selectedBooking);
+        const videoMatch = videoMatchOf(selectedBooking);
         const benchmark = costBenchmarks(detailCost, performance);
         return <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedBooking(null); }}>
           <aside className="koc-drawer booking-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="booking-detail-title">
@@ -409,6 +486,8 @@ const BookingManagement = ({ heroTitle }) => {
               <section className="drawer-section"><div className="drawer-profile"><TargetKocAvatar src={selectedBooking.creator_avatar_url} name={selectedBooking.creator_name} /><div><strong>{selectedBooking.creator_name || selectedBooking.creator_username}</strong><span>{collaboration.name || selectedBooking.target_collaboration_id || t('booking.creatorPerformance')}</span></div></div></section>
               {collaboration.id ? <section className="drawer-section"><h3>{t('booking.collaboration')}</h3><div className="booking-detail-grid"><div><span>{t('booking.partnerStatus')}</span><strong>{formatCollaborationStatus(collaboration.status)}</strong></div><div><span>{t('booking.validUntil')}</span><strong>{formatDate(collaboration.end_at)}</strong></div><div className="booking-detail-grid__wide"><span>{t('booking.products')}</span><strong>{(collaboration.products || []).map((product) => product.title || product.name || product.id).filter(Boolean).join(', ') || '—'}</strong></div></div></section> : null}
               <section className="drawer-section"><h3>{t('booking.creatorPerformance')}</h3>{renderPerformance(performance)}<p className="section-card__meta">{t('booking.performancePeriodDisclaimer')}</p></section>
+              <section className="drawer-section"><h3>{t('booking.matchedVideo')}</h3>{selectedBooking.video_platform_id ? <div className="booking-performance-cell"><strong>{videoMatch?.title || selectedBooking.video_platform_id}</strong>{selectedBooking.video_url ? <a href={selectedBooking.video_url} target="_blank" rel="noreferrer">{t('booking.openMatchedVideo')} ↗</a> : null}{videoMatch ? <small>{formatMoney(videoMatch.gmv?.amount, videoMatch.gmv?.currency)} · {formatNumber(videoMatch.views)} {t('booking.views')} · {formatNumber(videoMatch.orders)} {t('booking.orders')}</small> : null}<small>{formatDate(selectedBooking.posted_at)}</small><button className="button button--ghost" type="button" disabled={matchingVideoId === selectedBooking.id} onClick={() => findBookingVideo(selectedBooking)}>{matchingVideoId === selectedBooking.id ? t('booking.refreshingVideo') : t('booking.refreshVideo')}</button></div> : <button className="button button--ghost" type="button" disabled={matchingVideoId === selectedBooking.id} onClick={() => findBookingVideo(selectedBooking)}>{matchingVideoId === selectedBooking.id ? t('booking.findingVideo') : t('booking.findVideo')}</button>}</section>
+              <section className="drawer-section"><h3>{t('booking.actualResults')}</h3>{renderActualPerformance(selectedBooking)}<p className="section-card__meta">{t('booking.actualAttributionDisclaimer')}</p></section>
               <form className="booking-detail-form" onSubmit={saveCost}><label className="field booking-detail-form__wide"><span>{t('booking.bookingCost')}</span><input type="number" min="0" step="0.01" value={detailCost} onChange={(event) => setDetailCost(event.target.value)} required /></label><div className="booking-detail-grid booking-detail-form__wide"><div><span>{t('booking.costPerThousandViews')}</span><strong>{benchmark.perThousandViews == null ? '—' : formatMoney(benchmark.perThousandViews)}</strong></div><div><span>{t('booking.costPerOrder')}</span><strong>{benchmark.perOrder == null ? '—' : formatMoney(benchmark.perOrder)}</strong></div><div><span>{t('booking.costGmvRatio')}</span><strong>{benchmark.gmvRatio == null ? '—' : `${formatNumber(benchmark.gmvRatio, { maximumFractionDigits: 2 })}%`}</strong></div></div><div className="actions booking-detail-form__wide"><button className="button" type="submit" disabled={updatingId === selectedBooking.id}>{updatingId === selectedBooking.id ? t('common.loading') : t('booking.saveCost')}</button></div></form>
             </div>
           </aside>

@@ -225,7 +225,6 @@ const ScheduleManagement = () => {
                       onChange={(event) => patchSchedule(schedule.job_key, { enabled: event.target.checked })}
                     />
                     <span className="schedule-switch__track" aria-hidden="true"><i /></span>
-                    <span>{schedule.enabled ? t('schedule.enabled') : t('schedule.disabled')}</span>
                   </label>
                 </header>
 
@@ -283,11 +282,7 @@ const ScheduleManagement = () => {
                   </div>
                 </div>
 
-                <div className="schedule-latest schedule-latest--compact">
-                  <div><span>{t('schedule.latestRun')}</span><strong>{formatDateTime(latest?.started_at, locale)}</strong></div>
-                  <div><span>{t('schedule.status')}</span><strong className={`schedule-run-status is-${String(latest?.status || 'EMPTY').toLowerCase()}`}><ScheduleStatusIcon status={latest?.status} />{statusLabel(latest?.status)}</strong></div>
-                  <div><span>{t('schedule.result')}</span><strong>{resultLabel(latest || {})}</strong></div>
-                </div>
+
                 {latest?.error ? <p className="schedule-card__error" title={latest.error}>{latest.error}</p> : null}
 
                 <footer className="schedule-card__actions">

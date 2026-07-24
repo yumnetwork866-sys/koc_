@@ -133,6 +133,91 @@ const Booking = sequelize.define('Booking', {
   ],
 });
 
+const BookingVideo = sequelize.define('BookingVideo', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+  booking_id: { type: DataTypes.INTEGER, allowNull: false },
+  platform_video_id: { type: DataTypes.STRING(64), allowNull: false },
+  video_url: DataTypes.TEXT,
+  creator_username: DataTypes.STRING,
+  title: DataTypes.TEXT,
+  posted_at: DataTypes.DATE,
+  attribution_start: { type: DataTypes.DATEONLY, allowNull: false },
+  attribution_end: { type: DataTypes.DATEONLY, allowNull: false },
+  mapping_source: { type: DataTypes.STRING(64), allowNull: false, defaultValue: 'MANUAL_URL' },
+  status: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'COLLECTING' },
+  last_synced_at: DataTypes.DATE,
+  last_sync_error: DataTypes.TEXT,
+  created_at: DataTypes.DATE,
+  updated_at: DataTypes.DATE,
+}, {
+  tableName: 'booking_videos',
+  timestamps: false,
+  indexes: [
+    { unique: true, fields: ['booking_id', 'platform_video_id'] },
+    { fields: ['status', 'attribution_end'] },
+  ],
+});
+
+const BookingVideoPerformanceSnapshot = sequelize.define('BookingVideoPerformanceSnapshot', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+  booking_video_id: { type: DataTypes.BIGINT, allowNull: false },
+  snapshot_date: { type: DataTypes.DATEONLY, allowNull: false },
+  gross_gmv: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  refunded_gmv: DataTypes.DECIMAL(20, 4),
+  net_gmv: DataTypes.DECIMAL(20, 4),
+  orders: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  items_sold: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  views: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  ctr: DataTypes.DECIMAL(12, 6),
+  currency: DataTypes.STRING(16),
+  raw_metrics: DataTypes.JSONB,
+  synced_at: DataTypes.DATE,
+}, {
+  tableName: 'booking_video_performance_snapshots',
+  timestamps: false,
+  indexes: [{ unique: true, fields: ['booking_video_id', 'snapshot_date'] }],
+});
+
+const ShopVideo = sequelize.define('ShopVideo', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  platform_video_id: { type: DataTypes.STRING(64), allowNull: false },
+  account_type: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'AFFILIATE_ACCOUNTS' },
+  creator_username: DataTypes.STRING,
+  title: DataTypes.TEXT,
+  video_url: DataTypes.TEXT,
+  posted_at: DataTypes.DATE,
+  first_seen_at: DataTypes.DATE,
+  last_seen_at: DataTypes.DATE,
+  raw_data: DataTypes.JSONB,
+  created_at: DataTypes.DATE,
+  updated_at: DataTypes.DATE,
+}, {
+  tableName: 'shop_videos',
+  timestamps: false,
+  indexes: [{ unique: true, fields: ['shop_id', 'platform_video_id'] }],
+});
+
+const ShopVideoPerformanceSnapshot = sequelize.define('ShopVideoPerformanceSnapshot', {
+  id: { type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true },
+  shop_video_id: { type: DataTypes.BIGINT, allowNull: false },
+  snapshot_date: { type: DataTypes.DATEONLY, allowNull: false },
+  window_start: { type: DataTypes.DATEONLY, allowNull: false },
+  window_end: { type: DataTypes.DATEONLY, allowNull: false },
+  gross_gmv: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  orders: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  items_sold: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  views: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  ctr: DataTypes.DECIMAL(12, 6),
+  currency: DataTypes.STRING(16),
+  raw_metrics: DataTypes.JSONB,
+  synced_at: DataTypes.DATE,
+}, {
+  tableName: 'shop_video_performance_snapshots',
+  timestamps: false,
+  indexes: [{ unique: true, fields: ['shop_video_id', 'snapshot_date'] }],
+});
+
 const TikTokPartnerAuthorization = sequelize.define('TikTokPartnerAuthorization', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   creator_id: { type: DataTypes.INTEGER, allowNull: false, unique: true },
@@ -1056,12 +1141,20 @@ User.hasMany(Booking, { foreignKey: 'staff_id', as: 'staff_bookings' });
 Booking.belongsTo(User, { foreignKey: 'staff_id', as: 'staff' });
 User.hasMany(Booking, { foreignKey: 'creator_id', as: 'creator_bookings' });
 Booking.belongsTo(User, { foreignKey: 'creator_id', as: 'creator' });
+Booking.hasMany(BookingVideo, { foreignKey: 'booking_id', as: 'booking_videos' });
+BookingVideo.belongsTo(Booking, { foreignKey: 'booking_id', as: 'booking' });
+BookingVideo.hasMany(BookingVideoPerformanceSnapshot, { foreignKey: 'booking_video_id', as: 'performance_snapshots' });
+BookingVideoPerformanceSnapshot.belongsTo(BookingVideo, { foreignKey: 'booking_video_id', as: 'booking_video' });
 User.hasOne(TikTokPartnerAuthorization, { foreignKey: 'creator_id', as: 'tiktok_partner_authorization' });
 TikTokPartnerAuthorization.belongsTo(User, { foreignKey: 'creator_id', as: 'creator' });
 TikTokShopAuthorization.hasMany(TikTokShop, { foreignKey: 'authorization_id', as: 'shops' });
 TikTokShop.belongsTo(TikTokShopAuthorization, { foreignKey: 'authorization_id', as: 'authorization' });
 TikTokShop.hasMany(TikTokShopAnalyticsSnapshot, { foreignKey: 'shop_id', as: 'analytics_snapshots' });
 TikTokShopAnalyticsSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+TikTokShop.hasMany(ShopVideo, { foreignKey: 'shop_id', as: 'shop_videos' });
+ShopVideo.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
+ShopVideo.hasMany(ShopVideoPerformanceSnapshot, { foreignKey: 'shop_video_id', as: 'performance_snapshots' });
+ShopVideoPerformanceSnapshot.belongsTo(ShopVideo, { foreignKey: 'shop_video_id', as: 'shop_video' });
 TikTokShop.hasMany(TikTokCreatorPerformanceExport, { foreignKey: 'shop_id', as: 'creator_performance_exports' });
 TikTokCreatorPerformanceExport.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokShop.hasMany(TikTokCreatorPerformanceSnapshot, { foreignKey: 'shop_id', as: 'creator_performance_snapshots' });
@@ -1128,6 +1221,10 @@ module.exports = {
   User,
   Role,
   Booking,
+  BookingVideo,
+  BookingVideoPerformanceSnapshot,
+  ShopVideo,
+  ShopVideoPerformanceSnapshot,
   TikTokPartnerAuthorization,
   TikTokShopAuthorization,
   TikTokShop,

@@ -487,6 +487,39 @@
     "evaluationList": "Danh sách đánh giá",
     "benchmarkDisclaimer": "Các tỷ lệ bên dưới là benchmark từ hiệu suất tổng của creator trong kỳ, không phải ROI thực tế của booking.",
     "benchmark": "Benchmark chi phí",
+    "benchmarkHelpLabel": "Giải thích benchmark chi phí",
+    "benchmarkHelp": "Chi phí/1.000 views = giá booking ÷ video views × 1.000; chi phí/đơn = giá booking ÷ affiliate orders; % GMV = giá booking ÷ affiliate GMV × 100. Đây là tham chiếu từ hiệu suất lịch sử, không phải ROI thực tế.",
+    "preBookingBenchmark": "Benchmark trước booking",
+    "actualResults": "Kết quả thực tế sau booking",
+    "actualPerformance": "Hiệu quả được quy cho video",
+    "grossRoas": "Gross ROAS",
+    "netRoas": "Net ROAS",
+    "netGmvPending": "Net GMV đang chờ dữ liệu hoàn trả",
+    "roiInsufficient": "ROI: Chưa đủ dữ liệu giá vốn và chi phí",
+    "awaitingVideo": "Chờ liên kết video",
+    "awaitingFirstSync": "Đã liên kết, chờ đồng bộ TikTok",
+    "actualAttributionDisclaimer": "Số liệu chỉ lấy từ video đã liên kết trong cửa sổ ghi nhận 30 ngày. Gross ROAS dùng GMV trước hoàn trả; Net ROAS chỉ xuất hiện khi có dữ liệu hoàn trả.",
+    "actualStatuses": {
+      "AWAITING_VIDEO": "Chờ video",
+      "COLLECTING": "Đang ghi nhận",
+      "SYNC_FAILED": "Đồng bộ lỗi",
+      "FINALIZED": "Đã chốt"
+    },
+    "matchedVideo": "Video booking",
+    "videoLinked": "Đã liên kết",
+    "findVideo": "Tìm video",
+    "findingVideo": "Đang tìm",
+    "videoMatchNone": "Không tìm thấy video affiliate phù hợp với KOC trong khoảng thời gian booking.",
+    "videoRefreshNone": "Video đã liên kết không còn xuất hiện trong dữ liệu TikTok của khoảng thời gian này.",
+    "videoMatchError": "Không thể tìm video cho booking.",
+    "videoCandidatesTitle": "Chọn video cho booking",
+    "videoCandidatesMeta": "Tìm thấy nhiều video của {{name}}. Chọn đúng video thuộc booking này.",
+    "openMatchedVideo": "Mở video đã liên kết",
+    "refreshVideo": "Cập nhật số liệu",
+    "refreshingVideo": "Đang cập nhật",
+    "manualVideoUrl": "Hoặc dán URL video TikTok",
+    "linkVideo": "Liên kết video",
+    "linkingVideo": "Đang liên kết",
     "orders": "đơn",
     "order": "đơn",
     "views": "lượt xem",
@@ -1100,7 +1133,6 @@
     "running": "Đang chạy",
     "stop": "Dừng",
     "stopping": "Đang dừng…",
-    "latestRun": "Lần chạy gần nhất",
     "status": "Trạng thái",
     "result": "Kết quả",
     "succeeded": "thành công",
@@ -1134,10 +1166,18 @@
       },
       "tiktok_shop_analytics": {
         "name": "TikTok Shop Analytics",
-        "description": "Đồng bộ GMV, đơn hàng, người mua, traffic và hoàn tiền cho tất cả Shop."
+        "description": ""
       },
       "tiktok_channel_metrics": {
         "name": "TikTok Channel Metrics",
+        "description": ""
+      },
+      "booking_video_performance": {
+        "name": "Booking Video Performance",
+        "description": ""
+      },
+      "tiktok_shop_video_catalog": {
+        "name": "TikTok Shop Video Catalog",
         "description": ""
       }
     }

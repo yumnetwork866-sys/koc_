@@ -2,7 +2,9 @@ const crypto = require('crypto');
 const { Op, QueryTypes } = require('sequelize');
 const {
   User, Booking, TikTokPartnerAuthorization, TikTokShop,
-  TikTokTargetCollaborationSnapshot, TikTokCreatorPerformanceSnapshot, sequelize,
+  TikTokTargetCollaborationSnapshot, TikTokCreatorPerformanceSnapshot,
+  BookingVideo, BookingVideoPerformanceSnapshot,
+  ShopVideo, ShopVideoPerformanceSnapshot, sequelize,
 } = require('../models');
 const { normalizeCreatorProfile } = require('../services/tiktokCreatorProfileService');
 const {
@@ -16,11 +18,18 @@ const {
   grantedScopesOf,
   CREATOR_PROFILE_SCOPE,
 } = require('../services/tiktokPartnerService');
+const { getShopVideoPerformance } = require('../services/tiktokShopService');
+const {
+  recordBookingVideoMatch,
+  serializeBookingWithActual,
+  syncBookingVideo,
+} = require('../services/bookingVideoPerformanceService');
 const { handleShopOauthCallback } = require('./tiktokShopController');
 const {
   creatorCollaborationsFixture,
   creatorOverviewFixture,
   isDemoAuthorization,
+  sellerAffiliateFixture,
 } = require('../lib/tiktokDemoFixtures');
 
 const ALLOWED_STATUSES = new Set(['draft', 'booked', 'waiting_video', 'video_posted', 'done', 'cancelled']);
@@ -46,9 +55,191 @@ const normalizeBookingVideoUrl = (value) => {
   return String(value);
 };
 
+const dateOnly = (value) => new Date(value).toISOString().slice(0, 10);
+const normalizedUsername = (value) => String(value || '').trim().replace(/^@+/, '').toLowerCase();
+const tiktokVideoIdFromUrl = (value) => {
+  const text = String(value || '').trim();
+  if (!/^https?:\/\/(?:www\.)?tiktok\.com\//i.test(text)) return null;
+  return text.match(/\/video\/(\d{10,30})(?:[/?#]|$)/i)?.[1] || null;
+};
+const videoUsername = (video) => normalizedUsername(
+  video?.creator?.user_name || video?.creator?.username || video?.username,
+);
+const videoPostedAt = (video) => {
+  const raw = String(video?.video_post_time || video?.post_time || '').trim();
+  if (!raw) return null;
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const parsed = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+};
+const normalizeVideoCandidate = (video) => {
+  const id = String(video?.id || video?.video_id || '').trim();
+  const username = videoUsername(video);
+  const gmv = video?.gmv && typeof video.gmv === 'object'
+    ? video.gmv
+    : { amount: String(video?.gmv || 0), currency: null };
+  return {
+    id,
+    title: String(video?.title || id || 'TikTok video'),
+    username,
+    posted_at: videoPostedAt(video),
+    video_url: id && username ? `https://www.tiktok.com/@${encodeURIComponent(username)}/video/${encodeURIComponent(id)}` : null,
+    gmv: {
+      amount: Number(gmv?.amount || 0),
+      currency: gmv?.currency || null,
+    },
+    views: Number(video?.views ?? video?.video_views ?? 0),
+    orders: Number(video?.sku_orders ?? video?.orders ?? 0),
+    items_sold: Number(video?.items_sold ?? video?.units_sold ?? 0),
+    ctr: Number(video?.click_through_rate ?? video?.ctr ?? 0),
+  };
+};
+
+const normalizeCachedVideoCandidate = (videoInstance) => {
+  const video = typeof videoInstance?.toJSON === 'function' ? videoInstance.toJSON() : videoInstance;
+  const latest = [...(video.performance_snapshots || [])].sort((left, right) => (
+    String(right.snapshot_date || '').localeCompare(String(left.snapshot_date || ''))
+    || new Date(right.synced_at || 0) - new Date(left.synced_at || 0)
+  ))[0] || {};
+  return {
+    id: String(video.platform_video_id),
+    title: video.title || video.platform_video_id,
+    username: normalizedUsername(video.creator_username),
+    posted_at: video.posted_at || null,
+    video_url: video.video_url || null,
+    gmv: {
+      amount: Number(latest.gross_gmv || 0),
+      currency: latest.currency || null,
+    },
+    views: Number(latest.views || 0),
+    orders: Number(latest.orders || 0),
+    items_sold: Number(latest.items_sold || 0),
+    ctr: Number(latest.ctr || 0),
+    cached_catalog: true,
+    catalog_synced_at: latest.synced_at || video.last_seen_at || null,
+  };
+};
+
+const bookingVideoDateRange = (booking, now = new Date()) => {
+  const earliest = new Date(now);
+  earliest.setUTCDate(earliest.getUTCDate() - 89);
+  const bookingDate = new Date(booking.created_at || booking.evaluation_snapshot?.recorded_at || earliest);
+  const start = bookingDate > earliest ? bookingDate : earliest;
+  const end = new Date(now);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { startDate: dateOnly(start), endDate: dateOnly(end) };
+};
+
+const findBookingVideoCandidates = async (booking) => {
+  const username = normalizedUsername(booking.creator_username);
+  if (!username) {
+    const error = new Error('Booking does not have a creator username for video matching.');
+    error.status = 400;
+    throw error;
+  }
+  if (!booking.target_shop_id) {
+    const error = new Error('Booking is not linked to a TikTok Shop.');
+    error.status = 400;
+    throw error;
+  }
+
+  const shop = await TikTokShop.findByPk(booking.target_shop_id, {
+    include: [{ association: 'authorization' }],
+  });
+  if (!shop?.authorization) {
+    const error = new Error('TikTok Shop is not connected.');
+    error.status = 409;
+    throw error;
+  }
+
+  const range = bookingVideoDateRange(booking);
+  if (ShopVideo?.findAll) {
+    const cached = await ShopVideo.findAll({
+      where: {
+        shop_id: booking.target_shop_id,
+        creator_username: { [Op.iLike]: username },
+        posted_at: {
+          [Op.gte]: new Date(`${range.startDate}T00:00:00.000Z`),
+          [Op.lt]: new Date(`${range.endDate}T00:00:00.000Z`),
+        },
+      },
+      include: [{
+        model: ShopVideoPerformanceSnapshot,
+        as: 'performance_snapshots',
+        required: false,
+      }],
+      order: [['posted_at', 'DESC']],
+    });
+    if (cached.length) {
+      return {
+        candidates: cached.map(normalizeCachedVideoCandidate),
+        range,
+        source: 'SHOP_VIDEO_CATALOG',
+      };
+    }
+  }
+  const videos = [];
+  let pageToken = null;
+  const configuredMaxPages = Number(process.env.BOOKING_VIDEO_MATCH_MAX_PAGES);
+  const maxPages = Number.isInteger(configuredMaxPages)
+    ? Math.min(500, Math.max(1, configuredMaxPages))
+    : 200;
+  for (let page = 0; page < maxPages; page += 1) {
+    const payload = isDemoAuthorization(shop.authorization)
+      ? sellerAffiliateFixture('shop-video-performance', shop, {
+        account_type: 'AFFILIATE_ACCOUNTS',
+        currency: 'LOCAL',
+      })
+      : await getShopVideoPerformance({
+        authorization: shop.authorization,
+        shopCipher: shop.cipher,
+        startDate: range.startDate,
+        endDate: range.endDate,
+        currency: 'LOCAL',
+        accountType: 'AFFILIATE_ACCOUNTS',
+        sortField: 'gmv',
+        sortOrder: 'DESC',
+        pageSize: 100,
+        pageToken,
+      });
+    videos.push(...(payload.data?.videos || []));
+    pageToken = payload.data?.next_page_token || null;
+    if (!pageToken) break;
+    if (page === maxPages - 1) {
+      const error = new Error(`Booking video matching reached the safety limit of ${maxPages} pages before TikTok pagination ended.`);
+      error.status = 424;
+      throw error;
+    }
+  }
+
+  const candidatesById = new Map();
+  videos
+    .filter((video) => videoUsername(video) === username)
+    .map(normalizeVideoCandidate)
+    .filter((video) => video.id)
+    .forEach((video) => candidatesById.set(video.id, video));
+  return {
+    candidates: [...candidatesById.values()].sort((left, right) => (
+      new Date(right.posted_at || 0) - new Date(left.posted_at || 0)
+      || right.gmv.amount - left.gmv.amount
+    )),
+    range,
+  };
+};
+
 const bookingInclude = [
   { model: User, as: 'staff' },
   { model: User, as: 'creator' },
+  {
+    model: BookingVideo,
+    as: 'booking_videos',
+    required: false,
+    include: [{
+      model: BookingVideoPerformanceSnapshot,
+      as: 'performance_snapshots',
+      required: false,
+    }],
+  },
 ];
 
 const resolveSellerShopId = async (authorization, requestedShopId) => {
@@ -219,7 +410,7 @@ const getBookings = async (req, res) => {
       include: bookingInclude,
       order: [['deadline', 'ASC'], ['id', 'DESC']],
     });
-    res.json(bookings);
+    res.json(bookings.map(serializeBookingWithActual));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -231,7 +422,7 @@ const getBookingById = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
-    res.json(booking);
+    res.json(serializeBookingWithActual(booking));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -286,7 +477,7 @@ const createBooking = async (req, res) => {
 
     const booking = await Booking.create(payload);
     const createdBooking = await Booking.findByPk(booking.id, { include: bookingInclude });
-    res.status(201).json(createdBooking);
+    res.status(201).json(serializeBookingWithActual(createdBooking));
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -328,9 +519,92 @@ const updateBooking = async (req, res) => {
     }
 
     const booking = await Booking.findByPk(req.params.id, { include: bookingInclude });
-    res.json(booking);
+    res.json(serializeBookingWithActual(booking));
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+const matchBookingVideo = async (req, res) => {
+  try {
+    const booking = await Booking.findByPk(req.params.id);
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    const manualVideoUrl = String(req.body?.video_url || '').trim();
+    const manualVideoId = manualVideoUrl ? tiktokVideoIdFromUrl(manualVideoUrl) : null;
+    if (manualVideoUrl && !manualVideoId) {
+      return res.status(400).json({ message: 'Enter a valid TikTok video URL.' });
+    }
+    const { candidates, range } = manualVideoId
+      ? { candidates: [], range: bookingVideoDateRange(booking) }
+      : await findBookingVideoCandidates(booking);
+    const requestedVideoId = String(req.body?.video_id || manualVideoId || booking.video_platform_id || '').trim();
+    let selected = requestedVideoId
+      ? candidates.find((candidate) => candidate.id === requestedVideoId)
+      : candidates.length === 1 ? candidates[0] : null;
+    if (!selected && manualVideoId) {
+      selected = {
+        id: manualVideoId,
+        title: 'TikTok video',
+        username: normalizedUsername(booking.creator_username),
+        posted_at: null,
+        video_url: manualVideoUrl,
+        gmv: { amount: 0, currency: null },
+        views: 0,
+        orders: 0,
+        items_sold: 0,
+        ctr: 0,
+        manually_confirmed: true,
+      };
+    }
+
+    if (!selected) {
+      return res.json({
+        status: requestedVideoId ? 'no_match' : candidates.length ? 'needs_confirmation' : 'no_match',
+        candidates: requestedVideoId ? [] : candidates,
+        range,
+      });
+    }
+
+    const mappingSource = selected.manually_confirmed
+      ? 'MANUAL_URL'
+      : selected.cached_catalog ? 'SHOP_VIDEO_CATALOG' : 'TIKTOK_SHOP_VIDEO_PERFORMANCE';
+    const evaluationSnapshot = {
+      ...(booking.evaluation_snapshot || {}),
+      video_match: {
+        source: mappingSource,
+        matched_at: new Date().toISOString(),
+        ...selected,
+      },
+    };
+    await booking.update({
+      video_platform_id: selected.id,
+      video_url: selected.video_url,
+      posted_at: selected.posted_at,
+      evaluation_snapshot: evaluationSnapshot,
+      updated_at: new Date(),
+    });
+    const linkedVideo = await recordBookingVideoMatch(
+      booking,
+      selected,
+      mappingSource,
+    );
+    let syncWarning = null;
+    if (linkedVideo && (selected.cached_catalog || selected.manually_confirmed)) {
+      linkedVideo.booking = booking;
+      await syncBookingVideo(linkedVideo).catch((syncError) => {
+        syncWarning = syncError.message;
+      });
+    }
+    const updated = await Booking.findByPk(booking.id, { include: bookingInclude });
+    return res.json({
+      status: 'matched',
+      booking: serializeBookingWithActual(updated),
+      candidate: selected,
+      range,
+      ...(syncWarning ? { sync_warning: syncWarning } : {}),
+    });
+  } catch (error) {
+    res.status(error.status || 502).json({ message: error.message });
   }
 };
 
@@ -574,6 +848,7 @@ module.exports = {
   getBookingById,
   createBooking,
   updateBooking,
+  matchBookingVideo,
   deleteBooking,
   getTargetKocs,
   getTikTokPartnerCollaborations,
@@ -582,4 +857,9 @@ module.exports = {
   handleTikTokPartnerOauthCallback,
   disconnectTikTokPartner,
   getTikTokPartnerCreatorOverview,
+  __test: {
+    bookingVideoDateRange,
+    normalizeVideoCandidate,
+    tiktokVideoIdFromUrl,
+  },
 };

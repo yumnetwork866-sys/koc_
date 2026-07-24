@@ -5,6 +5,7 @@ const {
   getBookingById,
   createBooking,
   updateBooking,
+  matchBookingVideo,
   deleteBooking,
   getTargetKocs,
   getTikTokPartnerCollaborations,
@@ -23,6 +24,7 @@ router.get('/tiktok-partner/creators/:creatorId/overview', getTikTokPartnerCreat
 router.delete('/tiktok-partner/:creatorId', disconnectTikTokPartner);
 router.get('/:id', getBookingById);
 router.post('/', createBooking);
+router.post('/:id/video-match', matchBookingVideo);
 router.put('/:id', updateBooking);
 router.delete('/:id', deleteBooking);
 

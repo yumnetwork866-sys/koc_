@@ -374,6 +374,16 @@ export function updateBooking(bookingId, payload) {
   });
 }
 
+export function matchBookingVideo(bookingId, { videoId, videoUrl } = {}) {
+  return apiRequest(`/bookings/${encodeURIComponent(bookingId)}/video-match`, {
+    method: 'POST',
+    body: {
+      ...(videoId ? { video_id: videoId } : {}),
+      ...(videoUrl ? { video_url: videoUrl } : {}),
+    },
+  });
+}
+
 export function deleteBooking(bookingId) {
   return apiRequest(`/bookings/${bookingId}`, {
     method: 'DELETE',
