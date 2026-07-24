@@ -43,8 +43,20 @@ test('KOC search includes Creator Performance-only creators and avoids duplicate
   ];
   const { getTargetKocs } = loadController(t, {
     TikTokTargetCollaborationSnapshot: {
-      findAll: async () => [{
-        toJSON: () => ({
+      findAll: async () => [
+        {
+          toJSON: () => ({
+            shop_id: 1,
+            collaboration_id: 'collab-2',
+            name: 'Second active campaign',
+            status: 'ONGOING',
+            raw_data: {
+              creators: [{ creator_open_id: 'different-open-id', username: 'shared', nickname: 'Shared creator' }],
+            },
+          }),
+        },
+        {
+          toJSON: () => ({
           shop_id: 1,
           collaboration_id: 'collab-1',
           name: 'Active campaign',
@@ -52,8 +64,9 @@ test('KOC search includes Creator Performance-only creators and avoids duplicate
           raw_data: {
             creators: [{ creator_open_id: 'in-collab', username: 'shared', nickname: 'Shared creator' }],
           },
-        }),
-      }],
+          }),
+        },
+      ],
     },
     TikTokCreatorPerformanceSnapshot: {},
     sequelize: { query: async () => performanceRows },
@@ -67,6 +80,7 @@ test('KOC search includes Creator Performance-only creators and avoids duplicate
 
   assert.equal(response.length, 2);
   assert.equal(response[0].source, 'TARGET_COLLABORATION');
+  assert.equal(response[0].collaborations.length, 2);
   assert.equal(response[1].source, 'CREATOR_PERFORMANCE');
   assert.equal(response[1].username, 'performance_only');
   assert.equal(response[1].collaboration_id, null);

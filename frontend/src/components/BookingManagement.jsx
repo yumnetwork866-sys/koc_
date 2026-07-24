@@ -14,15 +14,13 @@ const initialForm = { creator_key: '', booking_cost: '' };
 const ACTIVE_COLLABORATION_STATUSES = new Set(['ONGOING', 'VALID', 'EXPIRING']);
 
 const targetKocKey = (creator) => {
-  const source = creator.collaboration_id || 'creator-performance';
   const identity = creator.creator_open_id || `username:${String(creator.username || '').toLocaleLowerCase()}`;
-  return `${creator.shop_id}:${source}:${identity}`;
+  return `${creator.shop_id}:${identity}`;
 };
 const targetKocLabel = (creator) => {
   if (!creator) return '';
   const name = creator.nickname || creator.username || 'KOC';
-  const collaboration = creator.collaboration_name ? ` · ${creator.collaboration_name}` : '';
-  return `${name}${creator.username ? ` (@${creator.username})` : ''}${collaboration}`;
+  return `${name}${creator.username ? ` (@${creator.username})` : ''}`;
 };
 const snapshotOf = (booking) => booking?.evaluation_snapshot || {};
 const collaborationOf = (booking) => snapshotOf(booking).collaboration || {};
@@ -42,7 +40,9 @@ const TargetKocAvatar = ({ src, name }) => {
   return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
 };
 
-const TargetKocCombobox = ({ creators, value, onChange, placeholder, noResults, performanceSourceLabel }) => {
+const TargetKocCombobox = ({
+  creators, value, onChange, placeholder, noResults, performanceSourceLabel, collaborationLabel,
+}) => {
   const rootRef = useRef(null);
   const selectedCreator = useMemo(
     () => creators.find((creator) => targetKocKey(creator) === value) || null,
@@ -107,7 +107,7 @@ const TargetKocCombobox = ({ creators, value, onChange, placeholder, noResults, 
               <TargetKocAvatar src={creator.avatar_url} name={creator.nickname || creator.username} />
               <span>
                 <strong>{creator.nickname || creator.username}</strong>
-                <small>@{creator.username} · {creator.collaboration_name || creator.collaboration_id || performanceSourceLabel}</small>
+                <small>@{creator.username} · {(creator.collaborations || []).length ? `${creator.collaborations.length} ${collaborationLabel}` : performanceSourceLabel}</small>
               </span>
             </button>
           )) : <div className="booking-koc-combobox__empty">{noResults}</div>}
@@ -250,7 +250,7 @@ const BookingManagement = ({ heroTitle }) => {
       setError('');
       const created = await createBooking({
         target_shop_id: selectedKoc.shop_id,
-        target_collaboration_id: selectedKoc.collaboration_id,
+        target_collaboration_id: selectedKoc.collaboration_id || null,
         creator_open_id: selectedKoc.creator_open_id,
         creator_username: selectedKoc.username,
         booking_cost: Number(form.booking_cost),
@@ -367,7 +367,7 @@ const BookingManagement = ({ heroTitle }) => {
       <section className="section-card">
         <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.createEvaluation')}</h2></div></div>
         <form className="filter-panel booking-evaluation-form" onSubmit={handleSubmit}>
-          <div className="field"><label>{t('booking.targetCreator')}</label><TargetKocCombobox creators={targetKocs} value={form.creator_key} onChange={(value) => setForm((current) => ({ ...current, creator_key: value }))} placeholder={t('booking.searchKoc')} noResults={t('booking.noSyncedCollaboration')} performanceSourceLabel={t('booking.creatorPerformance')} /></div>
+          <div className="field"><label>{t('booking.targetCreator')}</label><TargetKocCombobox creators={targetKocs} value={form.creator_key} onChange={(value) => setForm((current) => ({ ...current, creator_key: value }))} placeholder={t('booking.searchKoc')} noResults={t('booking.noSyncedCollaboration')} performanceSourceLabel={t('booking.creatorPerformance')} collaborationLabel={t('booking.collaboration')} /></div>
           <div className="field"><label htmlFor="booking_cost">{t('booking.bookingCost')}</label><input id="booking_cost" type="number" min="0" step="0.01" inputMode="decimal" value={form.booking_cost} onChange={(event) => setForm((current) => ({ ...current, booking_cost: event.target.value }))} required /></div>
           <div className="actions"><button className="button" type="submit" disabled={saving || !selectedKoc}>{saving ? t('booking.submitting') : t('booking.evaluate')}</button></div>
         </form>

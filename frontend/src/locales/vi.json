@@ -1161,7 +1161,7 @@
     },
     "jobs": {
       "tiktok_creator_performance": {
-        "name": "TikTok Creator Performance",
+        "name": "Hiệu suất TikTok Creator",
         "description": ""
       },
       "tiktok_shop_analytics": {
@@ -1169,15 +1169,15 @@
         "description": ""
       },
       "tiktok_channel_metrics": {
-        "name": "TikTok Channel Metrics",
+        "name": "Chỉ số kênh TikTok",
         "description": ""
       },
       "booking_video_performance": {
-        "name": "Booking Video Performance",
+        "name": "Hiệu suất video Booking",
         "description": ""
       },
       "tiktok_shop_video_catalog": {
-        "name": "TikTok Shop Video Catalog",
+        "name": "Danh mục video TikTok Shop",
         "description": ""
       }
     }

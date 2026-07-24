@@ -257,6 +257,45 @@ const creatorIdentityKeys = (shopId, creator = {}) => {
   if (username) keys.push(`${shopId}:username:${username}`);
   return keys;
 };
+const canonicalCreatorKey = (shopId, creator = {}) => {
+  const username = String(creator.username || '').trim().replace(/^@+/, '').toLowerCase();
+  const creatorOpenId = String(creator.creator_open_id || '').trim();
+  return username
+    ? `${shopId}:username:${username}`
+    : `${shopId}:open:${creatorOpenId}`;
+};
+const collaborationOption = (candidate) => candidate.collaboration_id ? {
+  id: candidate.collaboration_id,
+  name: candidate.collaboration_name,
+  status: candidate.collaboration_status,
+  start_at: candidate.collaboration_start_at,
+  end_at: candidate.collaboration_end_at,
+  products: candidate.products || [],
+  synced_at: candidate.collaboration_synced_at || null,
+} : null;
+const mergeCreatorCandidates = (rows) => {
+  const merged = new Map();
+  for (const row of rows) {
+    const key = canonicalCreatorKey(row.shop_id, row);
+    const existing = merged.get(key);
+    const collaboration = collaborationOption(row);
+    if (!existing) {
+      merged.set(key, {
+        ...row,
+        collaborations: collaboration ? [collaboration] : [],
+      });
+      continue;
+    }
+    if (collaboration && !existing.collaborations.some((item) => String(item.id) === String(collaboration.id))) {
+      existing.collaborations.push(collaboration);
+    }
+    existing.performance ||= row.performance;
+    existing.creator_open_id ||= row.creator_open_id;
+    existing.nickname ||= row.nickname;
+    existing.avatar_url ||= row.avatar_url;
+  }
+  return [...merged.values()];
+};
 
 const getTargetKocs = async (req, res) => {
   try {
@@ -329,13 +368,14 @@ const getTargetKocs = async (req, res) => {
         performance_synced_at: performance.synced_at,
       });
     }
-    candidates.sort((left, right) => {
+    const mergedCandidates = mergeCreatorCandidates(candidates);
+    mergedCandidates.sort((left, right) => {
       const active = (value) => ['ONGOING', 'VALID', 'EXPIRING'].includes(value) ? 1 : 0;
       return active(right.collaboration_status) - active(left.collaboration_status)
         || new Date(right.collaboration_end_at || 0) - new Date(left.collaboration_end_at || 0)
         || String(left.nickname || left.username).localeCompare(String(right.nickname || right.username));
     });
-    res.json(candidates);
+    res.json(mergedCandidates);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -861,5 +901,6 @@ module.exports = {
     bookingVideoDateRange,
     normalizeVideoCandidate,
     tiktokVideoIdFromUrl,
+    mergeCreatorCandidates,
   },
 };
