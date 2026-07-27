@@ -22,7 +22,6 @@ import {
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 
-const TIMEZONES = ['Asia/Ho_Chi_Minh', 'Asia/Kuala_Lumpur', 'Asia/Singapore', 'Asia/Bangkok', 'UTC'];
 const DEFAULT_TIMES = ['02:00', '06:00', '10:00', '14:00', '18:00', '22:00'];
 
 const resizeRunTimes = (current, count) => {
@@ -125,7 +124,7 @@ const ScheduleManagement = () => {
       setError('');
       const payload = await updateSchedule(schedule.job_key, {
         enabled: schedule.enabled,
-        timezone: schedule.timezone,
+        timezone: 'Asia/Ho_Chi_Minh',
         run_times: schedule.run_times,
       });
       patchSchedule(schedule.job_key, payload.schedule);
@@ -229,9 +228,6 @@ const ScheduleManagement = () => {
                 </header>
 
                 <div className="schedule-card__body">
-                  <div className="schedule-form-grid">
-                    <label className="field"><span>{t('schedule.timezone')}</span><select value={schedule.timezone} onChange={(event) => patchSchedule(schedule.job_key, { timezone: event.target.value })}>{TIMEZONES.map((timezone) => <option value={timezone} key={timezone}>{timezone}</option>)}</select></label>
-                  </div>
                   <div className="schedule-times">
                     <span className="schedule-times__label">{t('schedule.runTimes')}</span>
                     <div className="schedule-time-list">

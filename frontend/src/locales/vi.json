@@ -527,11 +527,21 @@
     "ofHistoricalGmv": "trên GMV kỳ",
     "noEvaluations": "Chưa có đánh giá booking nào.",
     "products": "Sản phẩm",
-    "performancePeriodDisclaimer": "Performance là dữ liệu tổng của creator trong kỳ được ghi nhận, dùng để tham khảo trước khi booking.",
+    "performancePeriodDisclaimer": "Ưu tiên dữ liệu tổng hợp 6 tháng; nếu chưa có sẽ dùng 30 ngày hoặc 7 ngày. Đây là hiệu suất tổng của creator, chỉ dùng để tham khảo trước booking.",
+    "performanceWindows": {
+      "PAST_180_DAYS": "Kỳ benchmark: 6 tháng gần nhất",
+      "PAST_30_DAYS": "Kỳ benchmark: 30 ngày gần nhất",
+      "PAST_7_DAYS": "Kỳ benchmark tạm thời: 7 ngày gần nhất",
+      "PAST_24H": "Kỳ benchmark tạm thời: 24 giờ gần nhất",
+      "UNKNOWN": "Chưa xác định kỳ dữ liệu"
+    },
     "costPerThousandViews": "Chi phí / 1.000 lượt xem",
     "costPerOrder": "Chi phí / đơn hàng",
     "costGmvRatio": "Chi phí / GMV kỳ",
     "saveCost": "Lưu chi phí",
+    "currency": "Tiền tệ",
+    "costNote": "Ghi chú chi phí",
+    "costNotePlaceholder": "Ví dụ: Booking 3 triệu, ads 1,5 triệu, mẫu và ship 500 nghìn",
     "collaborationStatuses": {
       "ONGOING": "Đang diễn ra",
       "VALID": "Còn hiệu lực",
@@ -548,7 +558,7 @@
     "completed": "Hoàn tất",
     "koc": "KOC",
     "staff": "Staff",
-    "totalCost": "Tổng cost",
+    "totalCost": "Tổng chi phí",
     "partnerSync": "Đồng bộ từ TikTok",
     "partnerConnect": "Kết nối TikTok",
     "partnerConnectNew": "Kết nối Creator mới",
@@ -877,6 +887,7 @@
     "past24h": "Hôm qua",
     "past7Days": "7 ngày",
     "past30Days": "30 ngày",
+    "past180Days": "180 ngày",
     "endDay": "Ngày kết thúc",
     "generateReport": "Tạo báo cáo",
     "performanceSyncError": "Không thể tạo báo cáo hiệu quả nhà sáng tạo.",
@@ -1129,7 +1140,7 @@
     "addRunTime": "Thêm giờ chạy",
     "removeRunTime": "Xóa giờ chạy lần {{number}}",
     "save": "Lưu",
-    "runNow": "Chạy ngay",
+    "runNow": "Chạy",
     "running": "Đang chạy",
     "stop": "Dừng",
     "stopping": "Đang dừng…",
@@ -1162,6 +1173,10 @@
     "jobs": {
       "tiktok_creator_performance": {
         "name": "Hiệu suất TikTok Creator",
+        "description": ""
+      },
+      "tiktok_creator_performance_6_months": {
+        "name": "Hiệu suất TikTok Creator 6 tháng",
         "description": ""
       },
       "tiktok_shop_analytics": {

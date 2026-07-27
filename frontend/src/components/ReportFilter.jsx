@@ -13,6 +13,7 @@ import {
   shareReport,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import ReportContent from './ReportContent';
 
 const toDateInputValue = (date) => [
   date.getFullYear(),
@@ -251,7 +252,7 @@ const ReportFilter = ({ heroTitle }) => {
                   </div>
                   {expanded ? (
                     <div className="report-card__body" id={`report-content-${report.id}`}>
-                      <pre className="report-content">{report.generated_content}</pre>
+                      <ReportContent content={report.generated_content} />
                     </div>
                   ) : null}
                 </article>

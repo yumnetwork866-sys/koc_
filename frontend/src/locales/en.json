@@ -532,11 +532,21 @@
     "ofHistoricalGmv": "of period GMV",
     "noEvaluations": "No booking evaluations yet.",
     "products": "Products",
-    "performancePeriodDisclaimer": "Performance is the creator's aggregate data for the stated period and is only a pre-booking reference.",
+    "performancePeriodDisclaimer": "The six-month aggregate is preferred, with a 30-day or 7-day fallback. This is the creator's aggregate performance and is only a pre-booking reference.",
+    "performanceWindows": {
+      "PAST_180_DAYS": "Benchmark period: latest 6 months",
+      "PAST_30_DAYS": "Benchmark period: latest 30 days",
+      "PAST_7_DAYS": "Temporary benchmark period: latest 7 days",
+      "PAST_24H": "Temporary benchmark period: latest 24 hours",
+      "UNKNOWN": "Data period is unknown"
+    },
     "costPerThousandViews": "Cost / 1,000 views",
     "costPerOrder": "Cost / order",
     "costGmvRatio": "Cost / period GMV",
     "saveCost": "Save cost",
+    "currency": "Currency",
+    "costNote": "Cost note",
+    "costNotePlaceholder": "Example: booking 3m, ads 1.5m, samples and shipping 500k",
     "collaborationStatuses": {
       "ONGOING": "Ongoing",
       "VALID": "Valid",
@@ -877,6 +887,7 @@
     "past24h": "Yesterday",
     "past7Days": "7 days",
     "past30Days": "30 days",
+    "past180Days": "180 days",
     "endDay": "End day",
     "generateReport": "Generate report",
     "performanceSyncError": "Unable to create Creator Performance report.",
@@ -1163,6 +1174,10 @@
     "jobs": {
       "tiktok_creator_performance": {
         "name": "TikTok Creator Performance",
+        "description": ""
+      },
+      "tiktok_creator_performance_6_months": {
+        "name": "TikTok Creator Performance 6 Months",
         "description": ""
       },
       "tiktok_shop_analytics": {

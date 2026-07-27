@@ -1329,14 +1329,7 @@
 }
 
 .booking-evaluation-table {
-  min-width: 1540px;
-}
-
-.booking-table-groups th {
-  border-bottom-color: color-mix(in srgb, var(--color-accent-strong) 22%, var(--color-border));
-  background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
-  text-align: center;
+  min-width: 1320px;
 }
 
 .booking-actual-status {
@@ -1911,9 +1904,9 @@
 
 .seller-affiliate__pagination {
   display: grid;
-  grid-template-columns: minmax(110px, 1fr) auto minmax(110px, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  max-width: 440px;
+  max-width: 100%;
   gap: 16px;
   margin: 18px auto 0;
   padding-top: 18px;
@@ -2213,7 +2206,7 @@
 
   .seller-affiliate__pagination {
     width: 100%;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 10px;
   }
 

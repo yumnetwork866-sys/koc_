@@ -12,6 +12,7 @@ import {
   startTikTokPartnerOauth,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import Pagination from './Pagination';
 
 const REQUIRED_CREATOR_SCOPES = ['creator.affiliate.info', 'creator.affiliate_collaboration.read', 'creator.showcase.read'];
 const PAGE_SIZE = 10;
@@ -458,7 +459,7 @@ const KOCPerformance = ({ heroTitle }) => {
               })}
               {!loading && !pagedRows.length ? <div className="empty-state">{t('koc.noMatch')}</div> : null}
             </div>
-            <div className="table-pagination"><span>{t('koc.pageOf').replace('{{page}}', page).replace('{{total}}', pageCount)}</span><div className="actions actions--inline"><button className="button button--small button--ghost" type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>{t('koc.previous')}</button><button className="button button--small button--ghost" type="button" disabled={page >= pageCount} onClick={() => setPage((value) => value + 1)}>{t('koc.next')}</button></div></div>
+            <Pagination currentPage={page} totalPages={pageCount} onPageChange={setPage} previousLabel={t('koc.previous')} nextLabel={t('koc.next')} ariaLabel={t('koc.pageOf').replace('{{page}}', page).replace('{{total}}', pageCount)} />
           </section>
         </div>
       )}

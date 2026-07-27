@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Heart, MessageCircle, Share2 } from 'lucide-react';
 import { fetchChannels, fetchVideos } from '../lib/api';
 import { useI18n } from '../lib/language';
+import Pagination from './Pagination';
 
 const PAGE_SIZE = 20;
 const getVideoHashtags = (video) => {
@@ -321,17 +322,14 @@ const VideoTable = ({ heroTitle }) => {
           </table>
         </div>
         {filteredVideos.length > PAGE_SIZE ? (
-          <nav className="table-pagination" aria-label={t('videoLibrary.pagination')}>
-            <span>{t('videoLibrary.pageOf', { page, total: pageCount })}</span>
-            <div className="actions actions--inline">
-              <button className="button button--small button--ghost" type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
-                {t('common.previous')}
-              </button>
-              <button className="button button--small button--ghost" type="button" disabled={page >= pageCount} onClick={() => setPage((current) => current + 1)}>
-                {t('common.next')}
-              </button>
-            </div>
-          </nav>
+          <Pagination
+            currentPage={page}
+            totalPages={pageCount}
+            onPageChange={setPage}
+            previousLabel={t('common.previous')}
+            nextLabel={t('common.next')}
+            ariaLabel={t('videoLibrary.pagination')}
+          />
         ) : null}
       </section>
     </div>

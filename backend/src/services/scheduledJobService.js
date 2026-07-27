@@ -6,10 +6,14 @@ const {
   ScheduledJobRun,
   TikTokShop,
   TikTokShopAuthorization,
+  sequelize,
 } = require('../models');
 const {
   createCreatorPerformanceExportWithFallback,
+  createBasePerformanceExportWithFallback,
   processCreatorPerformanceExport,
+  processBasePerformanceExport,
+  shiftEndDay,
   yesterdayEndDay,
 } = require('./tiktokCreatorPerformanceService');
 const {
@@ -23,6 +27,7 @@ const { syncShopVideoCatalog } = require('./shopVideoCatalogService');
 
 const JOB_KEYS = new Set([
   'tiktok_creator_performance',
+  'tiktok_creator_performance_6_months',
   'tiktok_shop_analytics',
   'tiktok_channel_metrics',
   'booking_video_performance',
@@ -136,15 +141,291 @@ const runForShops = async (operation, signal) => {
   return summary;
 };
 
-const jobHandlers = {
-  tiktok_creator_performance: ({ signal } = {}) => runForShops(async (shop) => {
-    const { exportRecord, requestedEndDay, endDay } = await createCreatorPerformanceExportWithFallback(shop, {
-      windowType: 'PAST_7_DAYS',
-      endDay: yesterdayEndDay(shop.region),
+const syncCreatorPerformanceWindows = async (shop, windows, signal) => {
+  const exports = [];
+  for (const window of windows) {
+    throwIfAborted(signal);
+    const { exportRecord, requestedEndDay, endDay, fallbackDays } = await createCreatorPerformanceExportWithFallback(shop, {
+      windowType: window.windowType,
+      endDay: window.endDay,
       planType: 'ALL',
     });
     if (exportRecord.status === 'PROCESSING') await processCreatorPerformanceExport(shop, exportRecord);
-    return { requested_end_day: requestedEndDay, effective_end_day: endDay, export_id: exportRecord.id };
+    exports.push({
+      window_type: window.windowType,
+      requested_end_day: requestedEndDay,
+      effective_end_day: endDay,
+      fallback_days: fallbackDays,
+      start_date: exportRecord.start_date,
+      end_date: exportRecord.end_date,
+      export_id: exportRecord.id,
+    });
+  }
+  return exports;
+};
+
+const syncBasePerformanceWindows = async (shop, creatorExports, signal) => {
+  const exports = [];
+  for (const creatorExport of creatorExports) {
+    throwIfAborted(signal);
+    const { exportRecord, requestedEndDay, endDay, fallbackDays } = await createBasePerformanceExportWithFallback(shop, {
+      windowType: creatorExport.window_type,
+      endDay: creatorExport.effective_end_day,
+    });
+    if (exportRecord.status === 'PROCESSING') await processBasePerformanceExport(shop, exportRecord);
+    exports.push({
+      window_type: creatorExport.window_type,
+      requested_end_day: requestedEndDay,
+      effective_end_day: endDay,
+      fallback_days: fallbackDays,
+      start_date: exportRecord.start_date,
+      end_date: exportRecord.end_date,
+      export_id: exportRecord.id,
+    });
+  }
+  return exports;
+};
+
+const aggregateSixMonthCreatorPerformance = async (shopId, exports) => {
+  const exportIds = exports.map((item) => Number(item.export_id)).filter(Number.isInteger);
+  if (exportIds.length !== 6) throw new Error('Six completed 30-day exports are required for the 180-day benchmark.');
+  await sequelize.query(`
+    WITH source AS (
+      SELECT snapshot.*
+      FROM tiktok_creator_performance_snapshots snapshot
+      WHERE snapshot.export_id IN (:exportIds)
+        AND snapshot.window_type = 'PAST_30_DAYS'
+    ),
+    period AS (
+      SELECT MIN(start_date) AS start_date, MAX(end_date) AS end_date
+      FROM tiktok_creator_performance_exports
+      WHERE id IN (:exportIds)
+    )
+    INSERT INTO tiktok_creator_performance_snapshots (
+      export_id, shop_id, username, nickname, avatar_url, creator_open_id,
+      start_date, end_date, window_type, plan_type, currency,
+      affiliate_gmv, live_gmv, video_gmv, product_card_gmv,
+      affiliate_products_sold, products_sold, items_sold,
+      estimated_commission, estimated_flat_fee, average_order_value,
+      product_showcase_count, products_added_to_showcase,
+      total_sample_content, samples_shipped, affiliate_orders,
+      product_impressions, customers, video_views, live_streams,
+      shoppable_videos, target_gmv, target_estimated_commission,
+      open_gmv, open_estimated_commission, refunded_gmv, items_refunded,
+      followers, raw_metrics, synced_at
+    )
+    SELECT
+      MAX(source.export_id), source.shop_id, LOWER(source.username),
+      MAX(source.nickname), MAX(source.avatar_url), MAX(source.creator_open_id),
+      period.start_date, period.end_date, 'PAST_180_DAYS', 'ALL', source.currency,
+      SUM(source.affiliate_gmv), SUM(source.live_gmv), SUM(source.video_gmv),
+      SUM(source.product_card_gmv), SUM(source.affiliate_products_sold),
+      SUM(source.products_sold), SUM(source.items_sold),
+      SUM(source.estimated_commission),
+      CASE WHEN COUNT(source.estimated_flat_fee) = COUNT(*) THEN SUM(source.estimated_flat_fee) ELSE NULL END,
+      CASE WHEN SUM(source.affiliate_orders) > 0
+        THEN SUM(source.affiliate_gmv) / SUM(source.affiliate_orders)
+        ELSE 0
+      END,
+      MAX(source.product_showcase_count), MAX(source.products_added_to_showcase),
+      SUM(source.total_sample_content), SUM(source.samples_shipped),
+      SUM(source.affiliate_orders), SUM(source.product_impressions),
+      SUM(source.customers),
+      CASE WHEN COUNT(source.video_views) = COUNT(*) THEN SUM(source.video_views) ELSE NULL END,
+      SUM(source.live_streams), SUM(source.shoppable_videos),
+      SUM(source.target_gmv), SUM(source.target_estimated_commission),
+      SUM(source.open_gmv), SUM(source.open_estimated_commission),
+      SUM(source.refunded_gmv), SUM(source.items_refunded), MAX(source.followers),
+      jsonb_build_object(
+        'source', 'SIX_MONTH_SCHEDULE',
+        'period_days', 180,
+        'source_export_ids', to_jsonb(ARRAY_AGG(DISTINCT source.export_id ORDER BY source.export_id))
+      ) || jsonb_strip_nulls(jsonb_build_object(
+        'Affiliate GMV', CASE WHEN BOOL_OR((source.raw_metrics ? 'Affiliate GMV') OR (source.raw_metrics ? 'Creator-attributed GMV')) THEN 'aggregated' END,
+        'Affiliate refunded GMV', CASE WHEN BOOL_OR((source.raw_metrics ? 'Affiliate refunded GMV') OR (source.raw_metrics ? 'Refunds')) THEN 'aggregated' END,
+        'Affiliate orders', CASE WHEN BOOL_OR((source.raw_metrics ? 'Affiliate orders') OR (source.raw_metrics ? 'Attributed orders')) THEN 'aggregated' END,
+        'Items sold', CASE WHEN BOOL_OR((source.raw_metrics ? 'Items sold') OR (source.raw_metrics ? 'Creator-attributed items sold')) THEN 'aggregated' END,
+        'Affiliate items refunded', CASE WHEN BOOL_OR((source.raw_metrics ? 'Affiliate items refunded') OR (source.raw_metrics ? 'Items refunded')) THEN 'aggregated' END,
+        'Avg. order value', CASE WHEN BOOL_OR((source.raw_metrics ? 'Avg. order value') OR (source.raw_metrics ? 'AOV')) THEN 'recalculated' END,
+        'Affiliate LIVE streams', CASE WHEN BOOL_OR((source.raw_metrics ? 'Affiliate LIVE streams') OR (source.raw_metrics ? 'LIVE streams')) THEN 'aggregated' END,
+        'Affiliate shoppable videos', CASE WHEN BOOL_OR((source.raw_metrics ? 'Affiliate shoppable videos') OR (source.raw_metrics ? 'Videos')) THEN 'aggregated' END,
+        'Samples shipped', CASE WHEN BOOL_OR(source.raw_metrics ? 'Samples shipped') THEN 'aggregated' END,
+        'Est. commission', CASE WHEN BOOL_OR(source.raw_metrics ? 'Est. commission') THEN 'aggregated' END
+      )),
+      NOW()
+    FROM source
+    CROSS JOIN period
+    WHERE source.shop_id = :shopId
+    GROUP BY source.shop_id, LOWER(source.username), source.currency, period.start_date, period.end_date
+    ON CONFLICT (shop_id, username, start_date, end_date, plan_type)
+    DO UPDATE SET
+      export_id = EXCLUDED.export_id,
+      nickname = EXCLUDED.nickname,
+      avatar_url = EXCLUDED.avatar_url,
+      creator_open_id = EXCLUDED.creator_open_id,
+      window_type = EXCLUDED.window_type,
+      currency = EXCLUDED.currency,
+      affiliate_gmv = EXCLUDED.affiliate_gmv,
+      live_gmv = EXCLUDED.live_gmv,
+      video_gmv = EXCLUDED.video_gmv,
+      product_card_gmv = EXCLUDED.product_card_gmv,
+      affiliate_products_sold = EXCLUDED.affiliate_products_sold,
+      products_sold = EXCLUDED.products_sold,
+      items_sold = EXCLUDED.items_sold,
+      estimated_commission = EXCLUDED.estimated_commission,
+      estimated_flat_fee = EXCLUDED.estimated_flat_fee,
+      average_order_value = EXCLUDED.average_order_value,
+      product_showcase_count = EXCLUDED.product_showcase_count,
+      products_added_to_showcase = EXCLUDED.products_added_to_showcase,
+      total_sample_content = EXCLUDED.total_sample_content,
+      samples_shipped = EXCLUDED.samples_shipped,
+      affiliate_orders = EXCLUDED.affiliate_orders,
+      product_impressions = EXCLUDED.product_impressions,
+      customers = EXCLUDED.customers,
+      video_views = EXCLUDED.video_views,
+      live_streams = EXCLUDED.live_streams,
+      shoppable_videos = EXCLUDED.shoppable_videos,
+      target_gmv = EXCLUDED.target_gmv,
+      target_estimated_commission = EXCLUDED.target_estimated_commission,
+      open_gmv = EXCLUDED.open_gmv,
+      open_estimated_commission = EXCLUDED.open_estimated_commission,
+      refunded_gmv = EXCLUDED.refunded_gmv,
+      items_refunded = EXCLUDED.items_refunded,
+      followers = EXCLUDED.followers,
+      raw_metrics = EXCLUDED.raw_metrics,
+      synced_at = EXCLUDED.synced_at
+  `, { replacements: { shopId, exportIds } });
+  await sequelize.query(`
+    WITH period AS (
+      SELECT MIN(start_date) AS start_date, MAX(end_date) AS end_date
+      FROM tiktok_creator_performance_exports
+      WHERE id IN (:exportIds)
+    ),
+    benchmark AS (
+      SELECT snapshot.*
+      FROM tiktok_creator_performance_snapshots snapshot
+      CROSS JOIN period
+      WHERE snapshot.shop_id = :shopId
+        AND snapshot.window_type = 'PAST_180_DAYS'
+        AND snapshot.start_date = period.start_date
+        AND snapshot.end_date = period.end_date
+    )
+    UPDATE bookings booking
+    SET evaluation_snapshot = jsonb_set(
+      COALESCE(booking.evaluation_snapshot, '{}'::jsonb),
+      '{performance}',
+      to_jsonb(benchmark),
+      TRUE
+    )
+    FROM benchmark
+    WHERE booking.target_shop_id = benchmark.shop_id
+      AND (
+        (
+          NULLIF(booking.creator_open_id, '') IS NOT NULL
+          AND booking.creator_open_id = benchmark.creator_open_id
+        )
+        OR LOWER(booking.creator_username) = LOWER(benchmark.username)
+      )
+  `, { replacements: { shopId, exportIds } });
+};
+
+const aggregateSixMonthBasePerformance = async (shopId, exports) => {
+  const exportIds = exports.map((item) => Number(item.export_id)).filter(Number.isInteger);
+  if (exportIds.length !== 6) throw new Error('Six completed BASE exports are required for the 180-day cards.');
+  await sequelize.query(`
+    WITH source AS (
+      SELECT snapshot.*
+      FROM tiktok_base_performance_snapshots snapshot
+      WHERE snapshot.export_id IN (:exportIds)
+        AND snapshot.window_type = 'PAST_30_DAYS'
+    ),
+    period AS (
+      SELECT MIN(start_date) AS start_date, MAX(end_date) AS end_date
+      FROM tiktok_creator_performance_exports
+      WHERE id IN (:exportIds)
+    ),
+    creator_aov AS (
+      SELECT CASE WHEN SUM(affiliate_orders) > 0
+        THEN SUM(affiliate_gmv) / SUM(affiliate_orders)
+        ELSE NULL
+      END AS value
+      FROM tiktok_creator_performance_snapshots
+      CROSS JOIN period
+      WHERE shop_id = :shopId
+        AND window_type = 'PAST_180_DAYS'
+        AND start_date = period.start_date
+        AND end_date = period.end_date
+    )
+    INSERT INTO tiktok_base_performance_snapshots (
+      export_id, shop_id, start_date, end_date, window_type, currency,
+      creator_attributed_gmv, creator_attributed_items_sold, refunds,
+      estimated_commission, videos, live_streams, samples_shipped,
+      items_refunded, average_order_value, raw_metrics, synced_at
+    )
+    SELECT
+      MAX(source.export_id), source.shop_id, period.start_date, period.end_date,
+      'PAST_180_DAYS', source.currency,
+      SUM(source.creator_attributed_gmv),
+      SUM(source.creator_attributed_items_sold),
+      SUM(source.refunds), SUM(source.estimated_commission),
+      SUM(source.videos), SUM(source.live_streams), SUM(source.samples_shipped),
+      SUM(source.items_refunded), COALESCE(MAX(creator_aov.value), 0),
+      jsonb_build_object(
+        'source', 'SIX_MONTH_SCHEDULE',
+        'period_days', 180,
+        'source_export_ids', to_jsonb(ARRAY_AGG(DISTINCT source.export_id ORDER BY source.export_id))
+      ),
+      NOW()
+    FROM source
+    CROSS JOIN period
+    CROSS JOIN creator_aov
+    WHERE source.shop_id = :shopId
+    GROUP BY source.shop_id, source.currency, period.start_date, period.end_date
+    ON CONFLICT (shop_id, start_date, end_date, window_type)
+    DO UPDATE SET
+      export_id = EXCLUDED.export_id,
+      currency = EXCLUDED.currency,
+      creator_attributed_gmv = EXCLUDED.creator_attributed_gmv,
+      creator_attributed_items_sold = EXCLUDED.creator_attributed_items_sold,
+      refunds = EXCLUDED.refunds,
+      estimated_commission = EXCLUDED.estimated_commission,
+      videos = EXCLUDED.videos,
+      live_streams = EXCLUDED.live_streams,
+      samples_shipped = EXCLUDED.samples_shipped,
+      items_refunded = EXCLUDED.items_refunded,
+      average_order_value = EXCLUDED.average_order_value,
+      raw_metrics = EXCLUDED.raw_metrics,
+      synced_at = EXCLUDED.synced_at
+  `, { replacements: { shopId, exportIds } });
+};
+
+const jobHandlers = {
+  tiktok_creator_performance: ({ signal } = {}) => runForShops(async (shop) => {
+    const endDay = yesterdayEndDay(shop.region);
+    const exports = await syncCreatorPerformanceWindows(shop, [
+      { windowType: 'PAST_30_DAYS', endDay },
+      { windowType: 'PAST_7_DAYS', endDay },
+    ], signal);
+    const baseExports = await syncBasePerformanceWindows(shop, exports, signal);
+    return { exports, base_exports: baseExports };
+  }, signal),
+  tiktok_creator_performance_6_months: ({ signal } = {}) => runForShops(async (shop) => {
+    const windows = [];
+    let endDay = yesterdayEndDay(shop.region);
+    for (let index = 0; index < 6; index += 1) {
+      windows.push({ windowType: 'PAST_30_DAYS', endDay });
+      endDay = shiftEndDay(endDay, -30);
+    }
+    const exports = await syncCreatorPerformanceWindows(shop, windows, signal);
+    await aggregateSixMonthCreatorPerformance(shop.id, exports);
+    const baseExports = await syncBasePerformanceWindows(shop, exports, signal);
+    await aggregateSixMonthBasePerformance(shop.id, baseExports);
+    return {
+      period_days: 180,
+      window_count: exports.length,
+      exports,
+      base_exports: baseExports,
+    };
   }, signal),
   tiktok_shop_analytics: ({ signal } = {}) => runForShops(async (shop) => {
     const range = scheduledAnalyticsRange(shop);

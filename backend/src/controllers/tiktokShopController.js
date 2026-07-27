@@ -796,8 +796,13 @@ const disconnectShop = async (req, res) => {
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
-const creatorPerformanceOptions = (shop, input = {}) => ({
-  windowType: ['PAST_24H', 'PAST_7_DAYS', 'PAST_30_DAYS'].includes(input.window_type)
+const creatorPerformanceOptions = (shop, input = {}, { allowAggregate = false } = {}) => ({
+  windowType: [
+    'PAST_24H',
+    'PAST_7_DAYS',
+    'PAST_30_DAYS',
+    ...(allowAggregate ? ['PAST_180_DAYS'] : []),
+  ].includes(input.window_type)
     ? input.window_type : 'PAST_7_DAYS',
   endDay: /^\d{8}$/.test(String(input.end_day || '')) ? Number(input.end_day) : yesterdayEndDay(shop.region),
   planType: ['ALL', 'TARGET', 'OPEN', 'PARTNER'].includes(input.plan_type) ? input.plan_type : 'ALL',
@@ -807,59 +812,109 @@ const listCreatorPerformance = async (req, res) => {
   try {
     const shop = await loadAffiliateShop(req, res);
     if (!shop) return;
-    const options = creatorPerformanceOptions(shop, req.query);
+    const options = creatorPerformanceOptions(shop, req.query, { allowAggregate: true });
     const requestedEndDate = `${String(options.endDay).slice(0, 4)}-${String(options.endDay).slice(4, 6)}-${String(options.endDay).slice(6, 8)}`;
-    const exportRecord = await TikTokCreatorPerformanceExport.findOne({
-      where: {
-        shop_id: shop.id,
-        module_type: 'CREATOR',
-        window_type: options.windowType,
-        plan_type: options.planType,
-        end_date: requestedEndDate,
-      },
-      order: [['created_at', 'DESC']],
-    });
-    const snapshotExport = exportRecord?.status === 'SUCCEEDED'
-      ? exportRecord
-      : await TikTokCreatorPerformanceExport.findOne({
+    let exportRecord = null;
+    let snapshotExport = null;
+    let basePayload = {
+      base_export: null,
+      base_snapshot_export: null,
+      base_is_fallback: false,
+      base_snapshot: null,
+    };
+    if (options.windowType === 'PAST_180_DAYS') {
+      const benchmark = await TikTokCreatorPerformanceSnapshot.findOne({
+        where: {
+          shop_id: shop.id,
+          window_type: 'PAST_180_DAYS',
+          plan_type: options.planType,
+        },
+        order: [['end_date', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
+      });
+      if (benchmark) {
+        snapshotExport = {
+          id: `aggregate:${benchmark.start_date}:${benchmark.end_date}`,
+          status: 'SUCCEEDED',
+          start_date: benchmark.start_date,
+          end_date: benchmark.end_date,
+          window_type: 'PAST_180_DAYS',
+          plan_type: benchmark.plan_type,
+        };
+      }
+      const baseSnapshot = await TikTokBasePerformanceSnapshot.findOne({
+        where: {
+          shop_id: shop.id,
+          window_type: 'PAST_180_DAYS',
+        },
+        order: [['end_date', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
+      });
+      if (baseSnapshot) {
+        basePayload = {
+          base_export: null,
+          base_snapshot_export: {
+            id: `aggregate:${baseSnapshot.start_date}:${baseSnapshot.end_date}`,
+            status: 'SUCCEEDED',
+            start_date: baseSnapshot.start_date,
+            end_date: baseSnapshot.end_date,
+            window_type: 'PAST_180_DAYS',
+          },
+          base_is_fallback: false,
+          base_snapshot: baseSnapshot,
+        };
+      }
+    } else {
+      exportRecord = await TikTokCreatorPerformanceExport.findOne({
         where: {
           shop_id: shop.id,
           module_type: 'CREATOR',
           window_type: options.windowType,
           plan_type: options.planType,
-          status: 'SUCCEEDED',
+          end_date: requestedEndDate,
         },
-        order: [['end_date', 'DESC'], ['created_at', 'DESC']],
+        order: [['created_at', 'DESC']],
       });
-    const baseExport = await TikTokCreatorPerformanceExport.findOne({
-      where: {
-        shop_id: shop.id,
-        module_type: 'BASE',
-        window_type: options.windowType,
-        end_date: requestedEndDate,
-      },
-      order: [['created_at', 'DESC']],
-    });
-    const baseSnapshotExport = baseExport?.status === 'SUCCEEDED'
-      ? baseExport
-      : await TikTokCreatorPerformanceExport.findOne({
+      snapshotExport = exportRecord?.status === 'SUCCEEDED'
+        ? exportRecord
+        : await TikTokCreatorPerformanceExport.findOne({
+          where: {
+            shop_id: shop.id,
+            module_type: 'CREATOR',
+            window_type: options.windowType,
+            plan_type: options.planType,
+            status: 'SUCCEEDED',
+          },
+          order: [['end_date', 'DESC'], ['created_at', 'DESC']],
+        });
+      const baseExport = await TikTokCreatorPerformanceExport.findOne({
         where: {
           shop_id: shop.id,
           module_type: 'BASE',
           window_type: options.windowType,
-          status: 'SUCCEEDED',
+          end_date: requestedEndDate,
         },
-        order: [['end_date', 'DESC'], ['created_at', 'DESC']],
+        order: [['created_at', 'DESC']],
       });
-    const baseSnapshot = baseSnapshotExport
-      ? await TikTokBasePerformanceSnapshot.findOne({ where: { export_id: baseSnapshotExport.id } })
-      : null;
-    const basePayload = {
-      base_export: baseExport,
-      base_snapshot_export: baseSnapshotExport,
-      base_is_fallback: Boolean(baseSnapshotExport && (!baseExport || String(baseExport.id) !== String(baseSnapshotExport.id))),
-      base_snapshot: baseSnapshot,
-    };
+      const baseSnapshotExport = baseExport?.status === 'SUCCEEDED'
+        ? baseExport
+        : await TikTokCreatorPerformanceExport.findOne({
+          where: {
+            shop_id: shop.id,
+            module_type: 'BASE',
+            window_type: options.windowType,
+            status: 'SUCCEEDED',
+          },
+          order: [['end_date', 'DESC'], ['created_at', 'DESC']],
+        });
+      const baseSnapshot = baseSnapshotExport
+        ? await TikTokBasePerformanceSnapshot.findOne({ where: { export_id: baseSnapshotExport.id } })
+        : null;
+      basePayload = {
+        base_export: baseExport,
+        base_snapshot_export: baseSnapshotExport,
+        base_is_fallback: Boolean(baseSnapshotExport && (!baseExport || String(baseExport.id) !== String(baseSnapshotExport.id))),
+        base_snapshot: baseSnapshot,
+      };
+    }
     if (!snapshotExport) {
       return res.json({
         export: exportRecord,
@@ -879,6 +934,7 @@ const listCreatorPerformance = async (req, res) => {
       shop_id: shop.id,
       start_date: snapshotExport.start_date,
       end_date: snapshotExport.end_date,
+      window_type: options.windowType,
       plan_type: snapshotExport.plan_type,
       ...(keyword ? { username: { [Op.iLike]: `%${keyword}%` } } : {}),
     };
@@ -890,16 +946,41 @@ const listCreatorPerformance = async (req, res) => {
     });
     const [totals] = await sequelize.query(`
       SELECT
-        COALESCE(SUM(affiliate_gmv), 0) AS affiliate_gmv,
-        COALESCE(SUM(affiliate_orders), 0) AS affiliate_orders,
-        COALESCE(SUM(items_sold), 0) AS items_sold,
-        COALESCE(SUM(product_impressions), 0) AS product_impressions,
-        COALESCE(SUM(refunded_gmv), 0) AS refunded_gmv
+        CASE WHEN BOOL_OR((raw_metrics ? 'Affiliate GMV') OR (raw_metrics ? 'Creator-attributed GMV'))
+          THEN SUM(affiliate_gmv) END AS affiliate_gmv,
+        CASE WHEN BOOL_OR((raw_metrics ? 'Affiliate orders') OR (raw_metrics ? 'Attributed orders'))
+          THEN SUM(affiliate_orders) END AS affiliate_orders,
+        CASE WHEN BOOL_OR((raw_metrics ? 'Items sold') OR (raw_metrics ? 'Creator-attributed items sold'))
+          THEN SUM(items_sold) END AS items_sold,
+        CASE WHEN BOOL_OR(raw_metrics ? 'Product impressions')
+          THEN SUM(product_impressions) END AS product_impressions,
+        CASE WHEN BOOL_OR((raw_metrics ? 'Affiliate refunded GMV') OR (raw_metrics ? 'Refunds'))
+          THEN SUM(refunded_gmv) END AS refunded_gmv,
+        CASE WHEN BOOL_OR(raw_metrics ? 'Est. commission')
+          THEN SUM(estimated_commission) END AS estimated_commission,
+        CASE WHEN BOOL_OR((raw_metrics ? 'Affiliate shoppable videos') OR (raw_metrics ? 'Videos'))
+          THEN SUM(shoppable_videos) END AS videos,
+        CASE WHEN BOOL_OR((raw_metrics ? 'Affiliate LIVE streams') OR (raw_metrics ? 'LIVE streams'))
+          THEN SUM(live_streams) END AS live_streams,
+        CASE WHEN BOOL_OR(raw_metrics ? 'Samples shipped')
+          THEN SUM(samples_shipped) END AS samples_shipped,
+        CASE WHEN BOOL_OR((raw_metrics ? 'Affiliate items refunded') OR (raw_metrics ? 'Items refunded'))
+          THEN SUM(items_refunded) END AS items_refunded,
+        CASE
+          WHEN BOOL_OR((raw_metrics ? 'Affiliate orders') OR (raw_metrics ? 'Attributed orders'))
+            AND SUM(affiliate_orders) > 0
+          THEN SUM(affiliate_gmv) / SUM(affiliate_orders)
+        END AS average_order_value
       FROM tiktok_creator_performance_snapshots
-      WHERE shop_id = :shopId AND start_date = :startDate AND end_date = :endDate AND plan_type = :planType
+      WHERE shop_id = :shopId AND start_date = :startDate AND end_date = :endDate
+        AND window_type = :windowType AND plan_type = :planType
     `, {
       replacements: {
-        shopId: shop.id, startDate: snapshotExport.start_date, endDate: snapshotExport.end_date, planType: snapshotExport.plan_type,
+        shopId: shop.id,
+        startDate: snapshotExport.start_date,
+        endDate: snapshotExport.end_date,
+        windowType: options.windowType,
+        planType: snapshotExport.plan_type,
       },
     });
     const sharedCreatorRows = await hydrateCreatorRows(

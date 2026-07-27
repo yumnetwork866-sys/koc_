@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { Op, QueryTypes } = require('sequelize');
+const { Op, QueryTypes, literal } = require('sequelize');
 const {
   User, Booking, TikTokPartnerAuthorization, TikTokShop,
   TikTokTargetCollaborationSnapshot, TikTokCreatorPerformanceSnapshot,
@@ -297,6 +297,44 @@ const mergeCreatorCandidates = (rows) => {
   return [...merged.values()];
 };
 
+const benchmarkPerformanceOrder = [
+  [literal(`CASE "window_type" WHEN 'PAST_180_DAYS' THEN 0 WHEN 'PAST_30_DAYS' THEN 1 WHEN 'PAST_7_DAYS' THEN 2 ELSE 3 END`), 'ASC'],
+  ['end_date', 'DESC'],
+  ['synced_at', 'DESC'],
+  ['id', 'DESC'],
+];
+
+const enrichPerformanceViews = async (performance) => {
+  if (!performance || performance.video_views !== null && performance.video_views !== undefined) return performance;
+  if (!sequelize?.query || !performance.shop_id || !performance.username) return performance;
+  const rows = await sequelize.query(`
+    SELECT SUM(latest.views)::bigint AS video_views
+    FROM shop_videos video
+    JOIN LATERAL (
+      SELECT snapshot.views
+      FROM shop_video_performance_snapshots snapshot
+      WHERE snapshot.shop_video_id = video.id
+      ORDER BY snapshot.snapshot_date DESC, snapshot.synced_at DESC, snapshot.id DESC
+      LIMIT 1
+    ) latest ON TRUE
+    WHERE video.shop_id = :shopId
+      AND LOWER(video.creator_username) = LOWER(:username)
+      AND video.posted_at::date BETWEEN :startDate AND :endDate
+  `, {
+    replacements: {
+      shopId: performance.shop_id,
+      username: performance.username,
+      startDate: performance.start_date,
+      endDate: performance.end_date,
+    },
+    type: QueryTypes.SELECT,
+  });
+  const catalogViews = rows[0]?.video_views;
+  return catalogViews === null || catalogViews === undefined
+    ? performance
+    : { ...performance, video_views: catalogViews, video_views_source: 'SHOP_VIDEO_CATALOG' };
+};
+
 const getTargetKocs = async (req, res) => {
   try {
     const keyword = String(req.query.keyword || '').trim();
@@ -306,9 +344,36 @@ const getTargetKocs = async (req, res) => {
       order: [['end_at', 'DESC'], ['synced_at', 'DESC']],
     });
     const performanceRows = await sequelize.query(`
-      SELECT DISTINCT ON (shop_id, COALESCE(NULLIF(creator_open_id, ''), LOWER(username))) *
-      FROM tiktok_creator_performance_snapshots
-      ORDER BY shop_id, COALESCE(NULLIF(creator_open_id, ''), LOWER(username)), end_date DESC, synced_at DESC, id DESC
+      WITH ranked AS (
+        SELECT snapshot.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY shop_id, COALESCE(NULLIF(creator_open_id, ''), LOWER(username))
+            ORDER BY
+              CASE window_type WHEN 'PAST_180_DAYS' THEN 0 WHEN 'PAST_30_DAYS' THEN 1 WHEN 'PAST_7_DAYS' THEN 2 ELSE 3 END,
+              end_date DESC, synced_at DESC, id DESC
+          ) AS benchmark_rank
+        FROM tiktok_creator_performance_snapshots snapshot
+      )
+      SELECT ranked.*,
+        COALESCE(
+          ranked.video_views,
+          (
+            SELECT SUM(latest.views)::bigint
+            FROM shop_videos video
+            JOIN LATERAL (
+              SELECT performance.views
+              FROM shop_video_performance_snapshots performance
+              WHERE performance.shop_video_id = video.id
+              ORDER BY performance.snapshot_date DESC, performance.synced_at DESC, performance.id DESC
+              LIMIT 1
+            ) latest ON TRUE
+            WHERE video.shop_id = ranked.shop_id
+              AND LOWER(video.creator_username) = LOWER(ranked.username)
+              AND video.posted_at::date BETWEEN ranked.start_date AND ranked.end_date
+          )
+        ) AS video_views
+      FROM ranked
+      WHERE benchmark_rank = 1
     `, { type: QueryTypes.SELECT });
     const performanceByCreator = new Map();
     for (const performance of performanceRows) {
@@ -410,9 +475,15 @@ const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValu
               ...(profile.username ? [{ username: { [Op.iLike]: profile.username } }] : []),
             ],
           },
-          order: [['end_date', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
+          order: benchmarkPerformanceOrder,
         });
-        return { collaboration, raw, profile, performance: performance?.toJSON() || null };
+        const performanceData = performance?.toJSON() || null;
+        return {
+          collaboration,
+          raw,
+          profile,
+          performance: await enrichPerformanceViews(performanceData),
+        };
       }
     }
   }
@@ -426,7 +497,7 @@ const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValu
       shop_id: normalizedShopId,
       [Op.or]: creatorConditions,
     },
-    order: [['end_date', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
+    order: benchmarkPerformanceOrder,
   });
   if (!performance) return null;
   const performanceData = performance.toJSON();
@@ -439,7 +510,7 @@ const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValu
       nickname: performanceData.nickname || performanceData.username,
       avatar_url: performanceData.avatar_url || null,
     },
-    performance: performanceData,
+    performance: await enrichPerformanceViews(performanceData),
   };
 };
 
@@ -470,8 +541,8 @@ const getBookingById = async (req, res) => {
 
 const createBooking = async (req, res) => {
   try {
-    const cost = Number(req.body.booking_cost);
-    if (!Number.isFinite(cost) || cost < 0) return res.status(400).json({ message: 'Booking cost must be zero or greater.' });
+    const cost = Number(req.body.total_cost ?? req.body.booking_cost);
+    if (!Number.isFinite(cost) || cost < 0) return res.status(400).json({ message: 'Total cost must be zero or greater.' });
     const targetCreator = await findTargetCreator(
       req.body.target_shop_id,
       req.body.target_collaboration_id,
@@ -505,6 +576,9 @@ const createBooking = async (req, res) => {
       target_collaboration_id: collaboration?.collaboration_id || null,
       evaluation_snapshot: evaluationSnapshot,
       booking_cost: cost,
+      total_cost: cost,
+      cost_note: String(req.body.cost_note || '').trim() || null,
+      currency: String(req.body.currency || performance?.currency || 'MYR').trim().toUpperCase(),
       status: 'draft',
       deadline: collaboration?.end_at ? new Date(collaboration.end_at).toISOString().slice(0, 10) : null,
       note: req.body.note || null,
@@ -525,9 +599,10 @@ const createBooking = async (req, res) => {
 
 const updateBooking = async (req, res) => {
   try {
-    if (req.body.booking_cost !== undefined) {
-      const cost = Number(req.body.booking_cost);
-      if (!Number.isFinite(cost) || cost < 0) return res.status(400).json({ message: 'Booking cost must be zero or greater.' });
+    if (req.body.total_cost !== undefined || req.body.booking_cost !== undefined) {
+      const cost = Number(req.body.total_cost ?? req.body.booking_cost);
+      if (!Number.isFinite(cost) || cost < 0) return res.status(400).json({ message: 'Total cost must be zero or greater.' });
+      req.body.total_cost = cost;
       req.body.booking_cost = cost;
     }
     if (req.body.status && !ALLOWED_STATUSES.has(req.body.status)) {
@@ -539,6 +614,9 @@ const updateBooking = async (req, res) => {
       staff_name: req.body.staff_name === undefined ? undefined : String(req.body.staff_name || '').trim(),
       creator_id: req.body.creator_id,
       booking_cost: req.body.booking_cost,
+      total_cost: req.body.total_cost,
+      cost_note: req.body.cost_note === undefined ? undefined : String(req.body.cost_note || '').trim() || null,
+      currency: req.body.currency === undefined ? undefined : String(req.body.currency || 'MYR').trim().toUpperCase(),
       status: req.body.status,
       deadline: req.body.deadline,
       note: req.body.note,

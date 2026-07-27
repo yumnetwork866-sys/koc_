@@ -20,6 +20,7 @@ import {
   normalizeEngagementPercentage,
 } from '../lib/sellerAffiliate';
 import ShopDropdown from './ShopDropdown';
+import Pagination from './Pagination';
 
 const REQUIRED_SCOPE = 'seller.affiliate_collaboration.read';
 const MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
@@ -391,6 +392,70 @@ const SellerAffiliatePanel = () => {
   const nextPageToken = section === 'performance'
     ? ((data.page || 1) * (data.page_size || PAGE_SIZE) < (data.total_count || 0) ? 'next' : '')
     : data.next_page_token || '';
+  const currentPage = pageTokens.length + 1;
+  const totalPages = Math.max(
+    currentPage + (nextPageToken ? 1 : 0),
+    Math.ceil(Number(data.total_count || 0) / Number(data.page_size || PAGE_SIZE)),
+    1,
+  );
+  const changePage = async (targetPage) => {
+    const target = Math.min(totalPages, Math.max(1, Number(targetPage) || 1));
+    if (target === currentPage) return;
+
+    if (target < currentPage) {
+      setPageTokens((tokens) => tokens.slice(0, target - 1));
+      return;
+    }
+
+    if (section === 'performance') {
+      setPageTokens(Array.from({ length: target - 1 }, () => 'next'));
+      return;
+    }
+
+    if (section === 'discover') {
+      setPageTokens(Array.from(
+        { length: target - 1 },
+        (_, index) => String((index + 1) * PAGE_SIZE),
+      ));
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const tokens = [...pageTokens];
+      let cursor = nextPageToken;
+      while (tokens.length < target - 1 && cursor) {
+        tokens.push(cursor);
+        if (tokens.length >= target - 1) break;
+
+        const filters = {
+          pageSize: PAGE_SIZE,
+          pageToken: cursor,
+          keyword: submittedKeyword,
+        };
+        let intermediate;
+        if (section === 'open') {
+          intermediate = await fetchTikTokSellerOpenCollaborations(shopId, filters);
+        } else if (section === 'target') {
+          intermediate = await fetchTikTokSellerTargetCollaborations(shopId, { ...filters, status });
+        } else if (section === 'creators') {
+          intermediate = await fetchTikTokSellerAffiliateCreators(shopId, { ...filters, status });
+        } else {
+          intermediate = await fetchTikTokSellerAffiliateOrders(shopId, { ...filters, programId: submittedKeyword });
+        }
+        cursor = intermediate?.next_page_token || '';
+      }
+      if (tokens.length === pageTokens.length) {
+        setLoading(false);
+      } else {
+        setPageTokens(tokens);
+      }
+    } catch (err) {
+      setError(err.message || t('sellerAffiliate.loadError'));
+      setLoading(false);
+    }
+  };
   const openCollaborationSettings = settings?.open_collaboration_settings || settings;
   const selectedPerformanceExport = data.snapshot_export;
   const formatNumber = (value) => Number(value || 0).toLocaleString(locale);
@@ -494,17 +559,40 @@ const SellerAffiliatePanel = () => {
     orders: 4,
   }[section] || 1;
   const baseSnapshot = data.base_snapshot;
-  const baseMetrics = baseSnapshot ? [
-    ['creatorGmv', formatMoney({ amount: baseSnapshot.creator_attributed_gmv, currency: baseSnapshot.currency })],
-    ['itemsSold', formatNumber(baseSnapshot.creator_attributed_items_sold)],
-    ['refundedGmv', formatMoney({ amount: baseSnapshot.refunds, currency: baseSnapshot.currency })],
-    ['estimatedCommission', formatMoney({ amount: baseSnapshot.estimated_commission, currency: baseSnapshot.currency })],
-    ['videos', formatNumber(baseSnapshot.videos)],
-    ['lives', formatNumber(baseSnapshot.live_streams)],
-    ['samplesShipped', formatNumber(baseSnapshot.samples_shipped)],
-    ['itemsRefunded', formatNumber(baseSnapshot.items_refunded)],
-    ['averageOrderValue', formatMoney({ amount: baseSnapshot.average_order_value, currency: baseSnapshot.currency })],
-  ] : [];
+  const creatorTotals = data.totals;
+  const summaryCurrency = baseSnapshot?.currency || rows.find((row) => row.currency)?.currency || 'MYR';
+  const summaryValues = baseSnapshot ? {
+    creatorGmv: baseSnapshot.creator_attributed_gmv,
+    itemsSold: baseSnapshot.creator_attributed_items_sold,
+    refundedGmv: baseSnapshot.refunds,
+    estimatedCommission: baseSnapshot.estimated_commission,
+    videos: baseSnapshot.videos,
+    lives: baseSnapshot.live_streams,
+    samplesShipped: baseSnapshot.samples_shipped,
+    itemsRefunded: baseSnapshot.items_refunded,
+    averageOrderValue: baseSnapshot.average_order_value,
+  } : creatorTotals ? {
+    creatorGmv: creatorTotals.affiliate_gmv,
+    itemsSold: creatorTotals.items_sold,
+    refundedGmv: creatorTotals.refunded_gmv,
+    estimatedCommission: creatorTotals.estimated_commission,
+    videos: creatorTotals.videos,
+    lives: creatorTotals.live_streams,
+    samplesShipped: creatorTotals.samples_shipped,
+    itemsRefunded: creatorTotals.items_refunded,
+    averageOrderValue: creatorTotals.average_order_value,
+  } : null;
+  const moneySummaryMetrics = new Set(['creatorGmv', 'refundedGmv', 'estimatedCommission', 'averageOrderValue']);
+  const baseMetrics = summaryValues
+    ? Object.entries(summaryValues)
+      .filter(([, value]) => value !== null && value !== undefined)
+      .map(([key, value]) => [
+        key,
+        moneySummaryMetrics.has(key)
+          ? formatMoney({ amount: value, currency: summaryCurrency })
+          : formatNumber(value),
+      ])
+    : [];
   const resetMarketplaceSearch = () => { marketplaceSearchKey.current = ''; };
   const changeSection = (value) => { resetMarketplaceSearch(); setSection(value); setStatus(value === 'target' ? 'ONGOING' : ''); setKeyword(''); setSubmittedKeyword(''); setPageTokens([]); setData({}); setError(''); };
   const submitSearch = (event) => {
@@ -563,7 +651,7 @@ const SellerAffiliatePanel = () => {
             </div>
           </form>
           {section === 'target' || section === 'creators' ? <div className="field"><label htmlFor="affiliate-status">{t('sellerAffiliate.status')}</label><select id="affiliate-status" value={status} onChange={(event) => { setStatus(event.target.value); setPageTokens([]); }}>{section === 'creators' ? <option value="">{t('sellerAffiliate.allStatuses')}</option> : null}{(section === 'target' ? ['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'] : ['PENDING', 'AWAITING_SHIPMENT', 'SHIPPED', 'CONTENT_PENDING', 'COMPLETED', 'REJECT_CANCELLED']).map((value) => <option value={value} key={value}>{value}</option>)}</select></div> : null}
-          {section === 'performance' ? <div className="field"><label htmlFor="creator-performance-window">{t('sellerAffiliate.performanceWindow')}</label><select id="creator-performance-window" value={performanceWindow} onChange={(event) => { setPerformanceWindow(event.target.value); setPageTokens([]); }}><option value="PAST_24H">{t('sellerAffiliate.past24h')}</option><option value="PAST_7_DAYS">{t('sellerAffiliate.past7Days')}</option><option value="PAST_30_DAYS">{t('sellerAffiliate.past30Days')}</option></select></div> : null}
+          {section === 'performance' ? <div className="field"><label htmlFor="creator-performance-window">{t('sellerAffiliate.performanceWindow')}</label><select id="creator-performance-window" value={performanceWindow} onChange={(event) => { setPerformanceWindow(event.target.value); setPageTokens([]); }}><option value="PAST_24H">{t('sellerAffiliate.past24h')}</option><option value="PAST_7_DAYS">{t('sellerAffiliate.past7Days')}</option><option value="PAST_30_DAYS">{t('sellerAffiliate.past30Days')}</option><option value="PAST_180_DAYS">{t('sellerAffiliate.past180Days')}</option></select></div> : null}
         </div>
       </section>
 
@@ -587,17 +675,16 @@ const SellerAffiliatePanel = () => {
               {loading ? <tr><td colSpan={tableColumnCount}><div className="empty-state"><span className="loading-dot" />{t('common.loading')}</div></td></tr> : rows.length ? rows.map((row, index) => <tr key={row.id || index}>{performanceColumns.map((column) => <td className={column.numeric ? 'cell-number' : undefined} key={column.key}>{column.render(row)}</td>)}</tr>) : <tr><td colSpan={tableColumnCount}><div className="empty-state">{t('sellerAffiliate.noData')}</div></td></tr>}
             </tbody>
           </table></div>
-          <nav className="seller-affiliate__pagination" aria-label={t('sellerAffiliate.page', { page: pageTokens.length + 1 })}>
-            <button className="button button--ghost seller-affiliate__pagination-button" type="button" disabled={!pageTokens.length || loading} onClick={() => setPageTokens((tokens) => tokens.slice(0, -1))}>
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m12.5 15-5-5 5-5" /></svg>
-              {t('common.previous')}
-            </button>
-            <span className="seller-affiliate__page-number" aria-current="page">{t('sellerAffiliate.page', { page: pageTokens.length + 1 })}</span>
-            <button className="button button--ghost seller-affiliate__pagination-button" type="button" disabled={!nextPageToken || loading} onClick={() => setPageTokens((tokens) => [...tokens, nextPageToken])}>
-              {t('common.next')}
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m7.5 5 5 5-5 5" /></svg>
-            </button>
-          </nav>
+          <Pagination
+            className="seller-affiliate__pagination"
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={changePage}
+            disabled={loading}
+            previousLabel={t('common.previous')}
+            nextLabel={t('common.next')}
+            ariaLabel={t('sellerAffiliate.page', { page: currentPage })}
+          />
         </section> : null}
         {section !== 'performance' && (section !== 'discover' || hasMarketplaceScope) ? <section className="section-card">
           <div className="section-card__header"><div><h2 className="section-card__title">{t(`sellerAffiliate.${section}Title`)}</h2>{section !== 'target' ? <p className="section-card__meta">{t(`sellerAffiliate.${section}Meta`)}</p> : null}</div><span className="chip">{formatNumber(data.total_count ?? rows.length)}</span></div>
@@ -605,29 +692,16 @@ const SellerAffiliatePanel = () => {
             {loading ? <tr><td colSpan={section === 'discover' ? 5 : 7}><div className="empty-state"><span className="loading-dot" />{t('common.loading')}</div></td></tr> : section !== 'discover' && rows.length ? rows.map((row, index) => section === 'open' ? <tr key={row.id || index}><td><div className="seller-affiliate__product">{row.product?.main_image_url ? <img src={row.product.main_image_url} alt="" loading="lazy" /> : null}<div><strong>{row.product?.title || row.product?.id || row.id}</strong><span>{row.product?.id}</span></div></div></td><td>{formatRate(row.current_commission?.rate ?? row.commission_rate)}</td><td>{formatNumber(row.showcase_creator_count)} / {formatNumber(row.content_creator_count)}</td><td><span className="chip">{formatStatus(row.status, t)}</span></td></tr> : section === 'target' ? <tr key={row.id || index}><td><strong>{row.name || row.id}</strong><span className="row-subtitle">{row.id}</span><div className="target-collaboration__creators">{(row.creators || []).slice(0, 3).map((creator, creatorIndex) => <div className="creator-identity" key={creator.creator_open_id || creator.user_id || creator.username || creatorIndex}><CreatorAvatar src={creator.avatar?.url || creator.avatar_url} name={creator.nickname || creator.username} /><span><strong>{creator.nickname || creator.username || '—'}</strong><span className="row-subtitle">{creator.username ? `@${creator.username.replace(/^@/, '')}` : '—'}</span></span></div>)}{row.creators?.length > 3 ? <span className="target-collaboration__more">+{formatNumber(row.creators.length - 3)}</span> : null}</div></td><td>{formatNumber(row.products?.length ?? row.product_count)}</td><td>{formatNumber(row.showcase_creator_count)} / {formatNumber(row.content_creator_count)}</td><td>{formatTime(row.end_time)}</td><td><span className="chip">{formatStatus(row.status || row.collaboration_status, t)}</span></td></tr> : section === 'performance' ? <tr key={row.id || index}>{performanceCreatorCell(row)}<td>{formatMoney({ amount: row.affiliate_gmv, currency: row.currency })}</td><td>{formatNumber(row.affiliate_orders)}</td><td>{formatNumber(row.items_sold)}</td><td>{formatNumber(row.product_impressions)}</td><td>{formatMoney({ amount: row.refunded_gmv, currency: row.currency })}</td><td>{formatNumber(row.followers)}</td></tr> : section === 'creators' ? <tr key={row.id || index}><td><div className="creator-identity"><CreatorAvatar src={row.creator?.avatar_url} name={row.creator?.nickname || row.creator?.username} /><span><strong>{row.creator?.nickname || row.creator?.username || '—'}</strong><span className="row-subtitle">{row.creator?.username ? `@${row.creator.username.replace(/^@/, '')}` : row.creator?.user_id}</span></span></div></td><td>{formatNumber(row.creator?.follower_count)}</td><td>{formatMoney(row.creator?.gmv)}</td><td>{formatNumber(row.creator?.content_count)}<span className="row-subtitle">{formatNumber(row.creator?.ec_video_view)} {t('common.views')}</span></td><td>{row.creator?.fulfillment_percentage ? `${row.creator.fulfillment_percentage}%` : formatStatus(row.fulfillment_status, t)}</td><td><span className="chip">{formatStatus(row.status, t)}</span></td><td><button className="button button--small button--ghost" type="button" onClick={() => openCreatorDetail(row)}>{t('sellerAffiliate.view')}</button></td></tr> : <tr key={row.order_id || row.id || index}><td><strong>{row.order_id || row.id}</strong></td><td><AffiliateOrderProducts row={row} /></td><td><AffiliateOrderPrograms row={row} t={t} /></td><td>{formatTime(row.create_time || row.created_time)}</td></tr>) : !rows.length ? <tr><td colSpan={section === 'discover' ? 5 : 7}><div className="empty-state">{t(section === 'discover' && data.search_pending ? 'sellerAffiliate.discoverSearchPending' : section === 'discover' && !submittedKeyword ? 'sellerAffiliate.discoverSyncPending' : 'sellerAffiliate.noData')}</div></td></tr> : null}
             {section === 'discover' && !loading ? rows.map((row, index) => <tr className="marketplace-creator-row" key={`marketplace-${row.creator_open_id || row.username || index}`}><MarketplaceCreatorCell creator={row} followerCount={formatCreatorCount(row, ['follower_count', 'followers'])} t={t} /><td>{formatCreatorGmv(row)}</td><td>{formatUnitsSold(row)}</td><td>{formatCreatorCount(row, ['avg_video_views', 'avg_ec_video_play_count', 'avg_ec_video_view_count', 'avg_ec_video_views', 'avg_video_play_count', 'avg_video_view_count'])}</td><td>{formatEngagementRate(row)}</td></tr>) : null}
           </tbody></table></div>
-          <nav className="seller-affiliate__pagination" aria-label={t('sellerAffiliate.page', { page: pageTokens.length + 1 })}>
-            <button
-              className="button button--ghost seller-affiliate__pagination-button"
-              type="button"
-              disabled={!pageTokens.length || loading}
-              onClick={() => setPageTokens((tokens) => tokens.slice(0, -1))}
-            >
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m12.5 15-5-5 5-5" /></svg>
-              {t('common.previous')}
-            </button>
-            <span className="seller-affiliate__page-number" aria-current="page">
-              {t('sellerAffiliate.page', { page: pageTokens.length + 1 })}
-            </span>
-            <button
-              className="button button--ghost seller-affiliate__pagination-button"
-              type="button"
-              disabled={!nextPageToken || loading}
-              onClick={() => setPageTokens((tokens) => [...tokens, nextPageToken])}
-            >
-              {t('common.next')}
-              <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m7.5 5 5 5-5 5" /></svg>
-            </button>
-          </nav>
+          <Pagination
+            className="seller-affiliate__pagination"
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={changePage}
+            disabled={loading}
+            previousLabel={t('common.previous')}
+            nextLabel={t('common.next')}
+            ariaLabel={t('sellerAffiliate.page', { page: currentPage })}
+          />
         </section> : null}
       </> : null}
       {selectedCreatorApplication ? <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCreatorDetail(); }}><aside className="koc-drawer" role="dialog" aria-modal="true" aria-labelledby="seller-creator-detail-title"><div className="koc-drawer__header"><div><h2 id="seller-creator-detail-title">{selectedCreatorApplication.creator?.nickname || selectedCreatorApplication.creator?.username}</h2><p>{selectedCreatorApplication.creator?.username ? `@${selectedCreatorApplication.creator.username.replace(/^@/, '')}` : selectedCreatorApplication.creator?.user_id}</p></div><button className="button button--ghost" type="button" onClick={closeCreatorDetail} aria-label={t('common.close')}>×</button></div><div className="koc-drawer__body"><section className="drawer-section"><div className="drawer-profile">{selectedCreatorApplication.creator?.avatar_url ? <img src={selectedCreatorApplication.creator.avatar_url} alt="" /> : null}<div><strong>{selectedCreatorApplication.creator?.nickname || selectedCreatorApplication.creator?.username}</strong><span>{formatNumber(selectedCreatorApplication.creator?.follower_count)} {t('sellerAffiliate.followers')}</span></div></div></section><section className="page__stats page__stats--four"><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.creatorGmv')}</p><p className="stat-card__value">{formatMoney(selectedCreatorApplication.creator?.gmv)}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.content')}</p><p className="stat-card__value">{formatNumber(selectedCreatorApplication.creator?.content_count)}</p></article><article className="stat-card"><p className="stat-card__label">{t('common.views')}</p><p className="stat-card__value">{formatNumber(selectedCreatorApplication.creator?.ec_video_view)}</p></article><article className="stat-card"><p className="stat-card__label">{t('sellerAffiliate.fulfillment')}</p><p className="stat-card__value">{selectedCreatorApplication.creator?.fulfillment_percentage ? `${selectedCreatorApplication.creator.fulfillment_percentage}%` : '—'}</p></article></section><section className="drawer-section"><h3>{t('sellerAffiliate.sampleDetail')}</h3><div className="drawer-meta"><span>{t('sellerAffiliate.status')}: <strong>{selectedCreatorApplication.status || '—'}</strong></span><span>{t('sellerAffiliate.fulfillmentStatus')}: <strong>{selectedCreatorApplication.fulfillment_status || '—'}</strong></span><span>{t('sellerAffiliate.sampleOrder')}: <strong>{selectedCreatorApplication.order_id || '—'}</strong></span><span>{t('sellerAffiliate.tracking')}: <strong>{selectedCreatorApplication.tracking_number || '—'}</strong></span><span>{t('sellerAffiliate.product')}: <strong>{selectedCreatorApplication.product?.title || selectedCreatorApplication.product?.id || '—'}</strong></span></div></section><section className="drawer-section"><h3>{t('sellerAffiliate.creatorContent')}</h3>{creatorDetailLoading ? <div className="empty-state"><span className="loading-dot" />{t('common.loading')}</div> : <div className="drawer-meta"><span>{t('sellerAffiliate.videos')}: <strong>{creatorContent?.video_count ?? '—'}</strong></span><span>{t('sellerAffiliate.lives')}: <strong>{creatorContent?.live_count ?? '—'}</strong></span><span>{t('sellerAffiliate.promotionStatus')}: <strong>{creatorContent?.promotion_status || '—'}</strong></span><span>{t('sellerAffiliate.promotionEnd')}: <strong>{formatTime(creatorContent?.promotion_end_time)}</strong></span></div>}</section></div></aside></div> : null}

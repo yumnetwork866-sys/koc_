@@ -165,6 +165,10 @@ const numeric = (value) => {
 
 const nullableNumeric = (value) => (value === '--' || value === '' || value === null || value === undefined ? null : numeric(value));
 const integer = (value) => Math.round(numeric(value));
+const nullableInteger = (value) => {
+  const parsed = nullableNumeric(value);
+  return parsed === null ? null : Math.round(parsed);
+};
 const normalizeUsername = (value) => String(value || '').trim().replace(/^@/, '').toLowerCase();
 const avatarUrlExpired = (value, now = Date.now()) => {
   try {
@@ -214,7 +218,7 @@ const parseCreatorPerformanceWorkbook = (buffer, {
     product_impressions: integer(row['Product impressions']),
     average_affiliate_customers: numeric(row['Avg. affiliate customers'] ?? row.Customers),
     customers: integer(row.Customers ?? row['Avg. affiliate customers']),
-    video_views: integer(row['Video views']),
+    video_views: nullableInteger(row['Video views']),
     live_streams: integer(row['Affiliate LIVE streams'] ?? row['LIVE streams']),
     shoppable_videos: integer(row['Affiliate shoppable videos'] ?? row.Videos),
     target_gmv: numeric(row['Target collaboration GMV']),

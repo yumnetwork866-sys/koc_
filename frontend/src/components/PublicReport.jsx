@@ -3,6 +3,7 @@ import { FileText } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { fetchPublicReport } from '../lib/api';
 import { useI18n } from '../lib/language';
+import ReportContent from './ReportContent';
 
 const PublicReport = () => {
   const { token } = useParams();
@@ -53,7 +54,9 @@ const PublicReport = () => {
             <h1>{t('reports.heroTitle')}</h1>
             <span>{formatDate(report.week_start)} – {formatDate(report.week_end)}</span>
           </header>
-          <pre className="report-content public-report-card__content">{report.generated_content}</pre>
+          <div className="public-report-card__content">
+            <ReportContent content={report.generated_content} />
+          </div>
         </article>
       )}
     </main>

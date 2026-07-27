@@ -108,7 +108,7 @@ const buildKocReportSnapshot = (bookings, startText, endText) => {
       });
     }
     const current = kocStats.get(identity);
-    const bookingCost = number(booking.booking_cost);
+    const bookingCost = number(booking.total_cost ?? booking.booking_cost);
     const videoViews = number(performance?.video_views);
     const affiliateOrders = number(performance?.affiliate_orders);
     const affiliateGmv = number(performance?.affiliate_gmv);
@@ -674,7 +674,8 @@ const getKocDetail = async (req, res) => {
         LIMIT 20
       `, { type: QueryTypes.SELECT, replacements }),
       sequelize.query(`
-        SELECT id, booking_cost AS "bookingCost", status, deadline, note, video_url AS "videoUrl", posted_at AS "postedAt"
+        SELECT id, COALESCE(total_cost, booking_cost) AS "bookingCost", cost_note AS "costNote",
+          currency, status, deadline, note, video_url AS "videoUrl", posted_at AS "postedAt"
         FROM bookings
         WHERE creator_id = :creatorId
         ORDER BY deadline DESC, id DESC
@@ -724,6 +725,9 @@ const generateWeeklyReport = async (req, res) => {
         'creator_username',
         'creator_name',
         'booking_cost',
+        'total_cost',
+        'cost_note',
+        'currency',
         'status',
         'deadline',
         'created_at',

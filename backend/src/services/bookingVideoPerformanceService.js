@@ -232,7 +232,7 @@ const latestSnapshot = (video) => [...(video.performance_snapshots || [])]
 const calculateActualPerformance = (booking) => {
   const videos = booking.booking_videos || [];
   const latest = videos.map(latestSnapshot).filter(Boolean);
-  const bookingCost = numberOrZero(booking.booking_cost);
+  const bookingCost = numberOrZero(booking.total_cost ?? booking.booking_cost);
   const grossGmv = latest.reduce((sum, row) => sum + numberOrZero(row.gross_gmv), 0);
   const hasCompleteRefunds = latest.length > 0 && latest.every((row) => row.refunded_gmv !== null && row.refunded_gmv !== undefined);
   const refundedGmv = hasCompleteRefunds
@@ -254,7 +254,7 @@ const calculateActualPerformance = (booking) => {
     orders: latest.reduce((sum, row) => sum + numberOrZero(row.orders), 0),
     items_sold: latest.reduce((sum, row) => sum + numberOrZero(row.items_sold), 0),
     views: latest.reduce((sum, row) => sum + numberOrZero(row.views), 0),
-    currency: latest.find((row) => row.currency)?.currency || null,
+    currency: latest.find((row) => row.currency)?.currency || booking.currency || null,
     gross_roas: bookingCost > 0 && latest.length ? grossGmv / bookingCost : null,
     net_roas: bookingCost > 0 && netGmv !== null ? netGmv / bookingCost : null,
     roi: null,

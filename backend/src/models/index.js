@@ -92,6 +92,19 @@ const Booking = sequelize.define('Booking', {
     allowNull: false,
     defaultValue: 0,
   },
+  total_cost: {
+    type: DataTypes.DECIMAL(14, 2),
+    allowNull: true,
+  },
+  cost_note: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+  },
+  currency: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'MYR',
+  },
   status: {
     type: DataTypes.STRING,
     allowNull: false,
