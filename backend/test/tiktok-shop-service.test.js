@@ -11,6 +11,7 @@ const {
   TARGET_COLLABORATION_DETAIL_PATH,
   AFFILIATE_ORDERS_PATH,
   SAMPLE_APPLICATIONS_PATH,
+  SAMPLE_APPLICATION_FULFILLMENTS_PATH,
   CREATOR_CONTENT_DETAILS_PATH,
   MARKETPLACE_CREATORS_PATH,
   MARKETPLACE_CREATOR_DETAIL_PATH,
@@ -29,6 +30,8 @@ const {
   searchAffiliateOrders,
   attachAffiliateOrderMetadata,
   searchSellerSampleApplications,
+  searchSellerSampleApplicationFulfillments,
+  summarizeSampleFulfillments,
   searchMarketplaceCreators,
   getMarketplaceCreatorPerformance,
   getProductCategories,
@@ -396,6 +399,40 @@ test('search Seller sample applications uses the existing Seller Affiliate read 
     assert.equal(url.searchParams.get('page_size'), '20');
     assert.deepEqual(JSON.parse(options.body), { username: 'demo.creator', status: 'PENDING' });
     return successResponse({ sample_applications: [] });
+  });
+});
+
+test('search Seller sample application fulfillments uses the application-specific endpoint', async (t) => {
+  configure(t);
+  await searchSellerSampleApplicationFulfillments({
+    authorization: sellerAuthorization(),
+    shopCipher: 'cipher-1',
+    applicationId: 'application/1',
+  }, async (url, options) => {
+    assert.equal(
+      url.pathname,
+      `${SAMPLE_APPLICATION_FULFILLMENTS_PATH}/application%2F1/fulfillments/search`,
+    );
+    assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
+    assert.equal(options.method, 'POST');
+    assert.equal(options.body, undefined);
+    return successResponse({ fulfillments: [] });
+  });
+});
+
+test('sample fulfillment summary deduplicates content and totals its views', () => {
+  assert.deepEqual(summarizeSampleFulfillments([
+    { content: { id: 'video-1', format: 'VIDEO', view_count: 120 } },
+    { content: { id: 'video-1', format: 'VIDEO', view_count: 150 } },
+    { content: { id: 'live-1', format: 'LIVE', view_count: 80 } },
+    { content: null },
+  ]), {
+    sample_content_count: 2,
+    sample_content_views: 230,
+  });
+  assert.deepEqual(summarizeSampleFulfillments([]), {
+    sample_content_count: 0,
+    sample_content_views: null,
   });
 });
 

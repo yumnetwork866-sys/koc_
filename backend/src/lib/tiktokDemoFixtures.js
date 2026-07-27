@@ -74,6 +74,9 @@ const sellerAffiliateFixture = (namespace, shop, query = {}) => {
         fulfillment_percentage: String(58 + index * 4),
         ec_video_view: 18000 + index * 9200,
       },
+      sample_content_count: index % 4 === 3 ? 1 + index % 3 : 0,
+      sample_content_views: index % 4 === 3 ? 18000 + index * 9200 : null,
+      sample_content_status: index % 4 === 3 ? 'AVAILABLE' : 'NOT_POSTED',
       product: products[index % products.length],
     }));
     const filteredApplications = query.status

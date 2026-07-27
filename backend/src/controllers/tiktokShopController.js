@@ -19,6 +19,8 @@ const {
   attachAffiliateOrderMetadata,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
+  searchSellerSampleApplicationFulfillments,
+  summarizeSampleFulfillments,
   getProductCategories,
   SELLER_PRODUCT_BASIC_SCOPE,
   getSellerCreatorContentDetails,
@@ -575,14 +577,63 @@ const marketplaceBrowseSeed = (value) => {
     : `browse:${crypto.randomBytes(16).toString('hex')}`;
 };
 
-const listAffiliateCreators = affiliateResponse('creators', (shop, req) => searchSellerSampleApplications({
-  authorization: shop.authorization,
-  shopCipher: shop.cipher,
-  pageToken: req.query.page_token,
-  pageSize: pageSizeValue(req.query.page_size),
-  keyword: req.query.keyword,
-  status: sampleApplicationStatuses.has(req.query.status) ? req.query.status : null,
-}));
+const completedSampleApplicationStatuses = new Set(['COMPLETED', 'OPS_COMPLETED']);
+const listAffiliateCreators = affiliateResponse('creators', async (shop, req) => {
+  const payload = await searchSellerSampleApplications({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    pageToken: req.query.page_token,
+    pageSize: pageSizeValue(req.query.page_size),
+    keyword: req.query.keyword,
+    status: sampleApplicationStatuses.has(req.query.status) ? req.query.status : null,
+  });
+  const applications = Array.isArray(payload.data?.sample_applications)
+    ? payload.data.sample_applications
+    : [];
+  const enrichedApplications = await mapWithConcurrency(applications, 2, async (application) => {
+    if (!completedSampleApplicationStatuses.has(application.status)) {
+      return {
+        ...application,
+        sample_content_count: 0,
+        sample_content_views: null,
+        sample_content_status: 'NOT_POSTED',
+      };
+    }
+    try {
+      const fulfillmentPayload = await searchSellerSampleApplicationFulfillments({
+        authorization: shop.authorization,
+        shopCipher: shop.cipher,
+        applicationId: application.id,
+      });
+      return {
+        ...application,
+        ...summarizeSampleFulfillments(fulfillmentPayload.data?.fulfillments),
+        sample_content_status: 'AVAILABLE',
+      };
+    } catch (error) {
+      console.warn('[Sample Applications] Fulfillment content unavailable', {
+        shopId: shop.id,
+        applicationId: application.id,
+        code: error.tiktokCode || null,
+        requestId: error.requestId || null,
+        message: error.message,
+      });
+      return {
+        ...application,
+        sample_content_count: null,
+        sample_content_views: null,
+        sample_content_status: 'UNAVAILABLE',
+      };
+    }
+  });
+  return {
+    ...payload,
+    data: {
+      ...payload.data,
+      sample_applications: enrichedApplications,
+    },
+  };
+});
 
 const listMarketplaceCreators = async (req, res) => {
   try {

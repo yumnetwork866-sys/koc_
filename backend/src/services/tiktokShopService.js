@@ -16,6 +16,7 @@ const TARGET_COLLABORATION_DETAIL_PATH = '/affiliate_seller/202409/target_collab
 const AFFILIATE_ORDERS_PATH = '/affiliate_seller/202410/orders/search';
 const OPEN_COLLABORATION_SETTINGS_PATH = '/affiliate_seller/202409/open_collaboration_settings';
 const SAMPLE_APPLICATIONS_PATH = '/affiliate_seller/202508/sample_applications/search';
+const SAMPLE_APPLICATION_FULFILLMENTS_PATH = '/affiliate_seller/202409/sample_applications';
 const CREATOR_CONTENT_DETAILS_PATH = '/affiliate_seller/202508/open_collaborations/creator_content_details';
 const MARKETPLACE_CREATORS_PATH = '/affiliate_seller/202508/marketplace_creators/search';
 const MARKETPLACE_CREATOR_DETAIL_PATH = '/affiliate_seller/202508/marketplace_creators';
@@ -344,6 +345,47 @@ const searchSellerSampleApplications = ({
   }, fetchImpl);
 };
 
+const searchSellerSampleApplicationFulfillments = ({
+  authorization, shopCipher, applicationId, contentFormat,
+} = {}, fetchImpl) => {
+  const normalizedApplicationId = String(applicationId || '').trim();
+  if (!normalizedApplicationId) throw new Error('application_id is required.');
+  const normalizedContentFormat = String(contentFormat || '').trim().toUpperCase();
+  if (normalizedContentFormat && !['VIDEO', 'LIVE'].includes(normalizedContentFormat)) {
+    throw new Error('content_format must be VIDEO or LIVE.');
+  }
+  return sellerAffiliateRequest({
+    authorization,
+    shopCipher,
+    path: `${SAMPLE_APPLICATION_FULFILLMENTS_PATH}/${encodeURIComponent(normalizedApplicationId)}/fulfillments/search`,
+    body: normalizedContentFormat ? { content_format: normalizedContentFormat } : {},
+  }, fetchImpl);
+};
+
+const summarizeSampleFulfillments = (fulfillments) => {
+  const contents = new Map();
+  for (const fulfillment of Array.isArray(fulfillments) ? fulfillments : []) {
+    const content = fulfillment?.content;
+    if (!content || typeof content !== 'object') continue;
+    const key = String(content.id || [
+      content.format,
+      content.url || content.page_link,
+      content.create_time,
+    ].filter(Boolean).join(':'));
+    if (!key) continue;
+    const existing = contents.get(key);
+    if (!existing || Number(content.view_count || 0) > Number(existing.view_count || 0)) {
+      contents.set(key, content);
+    }
+  }
+  return {
+    sample_content_count: contents.size,
+    sample_content_views: contents.size
+      ? [...contents.values()].reduce((total, content) => total + (Number(content.view_count) || 0), 0)
+      : null,
+  };
+};
+
 const searchMarketplaceCreators = ({
   authorization, shopCipher, pageToken, pageSize = 20, keyword, searchKey,
 } = {}, fetchImpl) => {
@@ -534,6 +576,7 @@ module.exports = {
   TARGET_COLLABORATION_DETAIL_PATH,
   AFFILIATE_ORDERS_PATH,
   SAMPLE_APPLICATIONS_PATH,
+  SAMPLE_APPLICATION_FULFILLMENTS_PATH,
   CREATOR_CONTENT_DETAILS_PATH,
   MARKETPLACE_CREATORS_PATH,
   MARKETPLACE_CREATOR_DETAIL_PATH,
@@ -555,6 +598,8 @@ module.exports = {
   attachAffiliateOrderMetadata,
   getOpenCollaborationSettings,
   searchSellerSampleApplications,
+  searchSellerSampleApplicationFulfillments,
+  summarizeSampleFulfillments,
   searchMarketplaceCreators,
   getMarketplaceCreatorPerformance,
   getProductCategories,
