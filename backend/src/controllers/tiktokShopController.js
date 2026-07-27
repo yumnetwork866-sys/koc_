@@ -590,47 +590,36 @@ const listAffiliateCreators = affiliateResponse('creators', async (shop, req) =>
   const applications = Array.isArray(payload.data?.sample_applications)
     ? payload.data.sample_applications
     : [];
-  const enrichedApplications = await mapWithConcurrency(applications, 2, async (application) => {
-    if (!completedSampleApplicationStatuses.has(application.status)) {
-      return {
-        ...application,
-        sample_content_count: 0,
-        sample_content_views: null,
-        sample_content_status: 'NOT_POSTED',
-      };
-    }
-    try {
-      const fulfillmentPayload = await searchSellerSampleApplicationFulfillments({
-        authorization: shop.authorization,
-        shopCipher: shop.cipher,
-        applicationId: application.id,
-      });
-      return {
-        ...application,
-        ...summarizeSampleFulfillments(fulfillmentPayload.data?.fulfillments),
-        sample_content_status: 'AVAILABLE',
-      };
-    } catch (error) {
-      console.warn('[Sample Applications] Fulfillment content unavailable', {
-        shopId: shop.id,
-        applicationId: application.id,
-        code: error.tiktokCode || null,
-        requestId: error.requestId || null,
-        message: error.message,
-      });
-      return {
-        ...application,
-        sample_content_count: null,
-        sample_content_views: null,
-        sample_content_status: 'UNAVAILABLE',
-      };
-    }
-  });
+  const enrichedApplications = applications.map((application) => ({
+    ...application,
+    sample_content_count: completedSampleApplicationStatuses.has(application.status) ? null : 0,
+    sample_content_views: null,
+    sample_content_status: completedSampleApplicationStatuses.has(application.status)
+      ? 'PENDING_SYNC'
+      : 'NOT_POSTED',
+  }));
   return {
     ...payload,
     data: {
       ...payload.data,
       sample_applications: enrichedApplications,
+    },
+  };
+});
+
+const showAffiliateCreatorFulfillments = affiliateResponse('creator-fulfillments', async (shop, req) => {
+  const payload = await searchSellerSampleApplicationFulfillments({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    applicationId: req.params.applicationId,
+  });
+  const fulfillments = Array.isArray(payload.data?.fulfillments) ? payload.data.fulfillments : [];
+  return {
+    ...payload,
+    data: {
+      ...summarizeSampleFulfillments(fulfillments),
+      sample_content_status: 'AVAILABLE',
+      fulfillments,
     },
   };
 });
@@ -1101,7 +1090,7 @@ module.exports = {
   getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization, disconnectShop,
   listShopVideoPerformance, getShopVideoThumbnail,
   listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
-  listAffiliateCreators, listMarketplaceCreators, showMarketplaceCreator,
+  listAffiliateCreators, showAffiliateCreatorFulfillments, listMarketplaceCreators, showMarketplaceCreator,
   listCreatorContentDetails,
   listCreatorPerformance,
   syncCreatorPerformance,
