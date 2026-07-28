@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import {
   fetchChannels,
   fetchContentTeams,
+  fetchTikTokShopVideoAnalytics,
+  fetchTikTokShops,
   fetchUsers,
   fetchVideos,
 } from '../lib/api';
@@ -23,10 +25,17 @@ const formatMonth = (value) => {
   return year && month ? `${month}/${year}` : '';
 };
 
-const videoRevenue = (video) => {
-  const raw = video?.gmv?.amount ?? video?.gross_gmv ?? video?.sales ?? video?.revenue;
+const videoRevenue = (video, analyticsByVideoId) => {
+  const analytics = analyticsByVideoId.get(String(video?.platform_video_id || ''));
+  const raw = analytics?.amount
+    ?? video?.gmv?.amount
+    ?? video?.gross_gmv
+    ?? video?.sales
+    ?? video?.revenue;
   const value = Number(raw);
-  return raw === null || raw === undefined || !Number.isFinite(value) ? null : value;
+  return raw === null || raw === undefined || !Number.isFinite(value)
+    ? null
+    : { amount: value, currency: analytics?.currency || video?.sales_currency || 'MYR' };
 };
 
 const matchingEmployeeRule = (video, rules) => {
@@ -43,9 +52,12 @@ const ChannelReport = () => {
   const { language } = useI18n();
   const [videos, setVideos] = useState([]);
   const [channels, setChannels] = useState([]);
+  const [shops, setShops] = useState([]);
   const [users, setUsers] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [videoAnalyticsById, setVideoAnalyticsById] = useState(() => new Map());
   const [selectedMonth, setSelectedMonth] = useState(currentMonthValue);
+  const [selectedTeamId, setSelectedTeamId] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -65,14 +77,16 @@ const ChannelReport = () => {
       try {
         setLoading(true);
         setError('');
-        const [loadedVideos, loadedChannels, loadedUsers, loadedTeams] = await Promise.all([
+        const [loadedVideos, loadedChannels, loadedShops, loadedUsers, loadedTeams] = await Promise.all([
           fetchVideos(controller.signal),
           fetchChannels(controller.signal),
+          fetchTikTokShops(controller.signal).catch(() => []),
           fetchUsers(controller.signal),
           fetchContentTeams(controller.signal),
         ]);
         setVideos(loadedVideos);
         setChannels(loadedChannels);
+        setShops(Array.isArray(loadedShops) ? loadedShops : []);
         setUsers(loadedUsers);
         setTeams(loadedTeams);
       } catch (loadError) {
@@ -84,6 +98,60 @@ const ChannelReport = () => {
     load();
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadVideoAnalytics = async () => {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      if (!year || !month || !shops.length) {
+        setVideoAnalyticsById(new Map());
+        return;
+      }
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const nextMonth = new Date(Date.UTC(year, month, 1));
+      const endDate = nextMonth.toISOString().slice(0, 10);
+      try {
+        const payloads = await Promise.all(shops.map((shop) => (
+          fetchTikTokShopVideoAnalytics(shop.id, {
+            signal: controller.signal,
+            startDate,
+            endDate,
+            currency: 'LOCAL',
+            accountType: 'LINKED_ACCOUNTS',
+            sortField: 'gmv',
+            sortOrder: 'DESC',
+            pageSize: 100,
+          })
+        )));
+        if (controller.signal.aborted) return;
+        const mapped = new Map();
+        payloads.flatMap((payload) => payload?.videos || []).forEach((video) => {
+          const videoId = String(video?.id || video?.video_id || '').trim();
+          const raw = video?.gmv?.amount ?? video?.gmv;
+          const amount = Number(raw);
+          if (!videoId || !Number.isFinite(amount)) return;
+          const currency = video?.gmv?.currency || 'MYR';
+          const existing = mapped.get(videoId);
+          mapped.set(videoId, {
+            amount: (existing?.amount || 0) + amount,
+            currency: existing?.currency || currency,
+          });
+        });
+        setVideoAnalyticsById(mapped);
+      } catch (analyticsError) {
+        if (analyticsError.name !== 'AbortError') setVideoAnalyticsById(new Map());
+      }
+    };
+    loadVideoAnalytics();
+    return () => controller.abort();
+  }, [selectedMonth, shops]);
+
+  useEffect(() => {
+    if (selectedTeamId !== 'all'
+      && !teams.some((team) => String(team.id) === selectedTeamId)) {
+      setSelectedTeamId('all');
+    }
+  }, [selectedTeamId, teams]);
 
   const monthlyVideos = useMemo(() => {
     const [year, month] = selectedMonth.split('-').map(Number);
@@ -169,22 +237,22 @@ const ChannelReport = () => {
         return;
       }
 
-      const revenue = videoRevenue(video);
+      const revenue = videoRevenue(video, videoAnalyticsById);
       group.videos += 1;
       group.views += Number(video.views || 0);
       if (revenue !== null) {
-        group.revenue += revenue;
+        group.revenue += revenue.amount;
         group.revenueAvailable = true;
-        group.currency ||= video.sales_currency || 'MYR';
+        group.currency ||= revenue.currency;
       }
 
       const member = group.members.get(String(rule.user_id));
       member.videos += 1;
       member.views += Number(video.views || 0);
       if (revenue !== null) {
-        member.revenue += revenue;
+        member.revenue += revenue.amount;
         member.revenueAvailable = true;
-        member.currency ||= video.sales_currency || 'MYR';
+        member.currency ||= revenue.currency;
       }
     });
 
@@ -195,16 +263,22 @@ const ChannelReport = () => {
       })),
       unclassified,
     };
-  }, [employeeRules, monthlyVideos, teams]);
+  }, [employeeRules, monthlyVideos, teams, videoAnalyticsById]);
 
-  const topGroup = [...report.groups].sort((a, b) => b.views - a.views)[0];
+  const visibleGroups = useMemo(() => (
+    selectedTeamId === 'all'
+      ? report.groups
+      : report.groups.filter((group) => group.key === selectedTeamId)
+  ), [report.groups, selectedTeamId]);
+  const selectedTeam = teams.find((team) => String(team.id) === selectedTeamId);
+  const topGroup = [...visibleGroups].sort((a, b) => b.views - a.views)[0];
 
   return (
     <div className="page channel-report-page">
       <section className="page__hero">
         <div>
           <h1 className="page__title">Báo cáo</h1>
-          <p className="page__subtitle">Theo dõi hiệu suất nội dung của từng team và nhân viên theo tháng.</p>
+
         </div>
       </section>
 
@@ -215,15 +289,26 @@ const ChannelReport = () => {
           <div>
             <h2 className="section-card__title">Hiệu suất theo team</h2>
             <p className="section-card__meta">
-              {formatNumber(monthlyVideos.length)} video trong {formatMonth(selectedMonth)} từ {formatNumber(channels.length)} kênh.
+              {selectedTeam
+                ? `${formatNumber(topGroup?.videos || 0)} video đã nhận diện của ${selectedTeam.name} trong ${formatMonth(selectedMonth)}.`
+                : `${formatNumber(monthlyVideos.length)} video trong ${formatMonth(selectedMonth)} từ ${formatNumber(channels.length)} kênh.`}
             </p>
-            {report.unclassified ? (
-              <span className="content-performance__unclassified">
-                {formatNumber(report.unclassified)} video chưa khớp hashtag nhân viên
-              </span>
-            ) : null}
+
           </div>
           <div className="channel-report-filters">
+            <div className="field channel-report-team">
+              <label htmlFor="channel-report-team">Team</label>
+              <select
+                id="channel-report-team"
+                value={selectedTeamId}
+                onChange={(event) => setSelectedTeamId(event.target.value)}
+              >
+                <option value="all">Tất cả team</option>
+                {teams.map((team) => (
+                  <option value={String(team.id)} key={team.id}>{team.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="field channel-report-month">
               <label htmlFor="channel-report-month">Tháng đánh giá</label>
               <select
@@ -247,8 +332,8 @@ const ChannelReport = () => {
           </div>
         ) : (
           <>
-            <div className="content-performance__groups">
-              {report.groups.map((group) => (
+            <div className={`content-performance__groups${selectedTeamId !== 'all' ? ' content-performance__groups--filtered' : ''}`}>
+              {visibleGroups.map((group) => (
                 <article className="content-performance__group" key={group.key}>
                   <div className="content-performance__group-header">
                     <h3>{group.label}</h3>
@@ -294,15 +379,6 @@ const ChannelReport = () => {
                 </article>
               ))}
             </div>
-
-            {topGroup?.views ? (
-              <div className="content-performance__ai-summary">
-                <strong>AI tổng hợp</strong>
-                <p>
-                  Trong {formatMonth(selectedMonth)}, {topGroup.label} đang có lượt xem cao nhất với {formatNumber(topGroup.views)} lượt xem từ {formatNumber(topGroup.videos)} video.
-                </p>
-              </div>
-            ) : null}
           </>
         )}
       </section>

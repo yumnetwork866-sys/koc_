@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   createContentTeam,
@@ -21,8 +21,6 @@ const initialForm = {
   email: '',
   password: '',
   role: 'member',
-  content_team_id: '',
-  content_hashtags: '',
 };
 
 const fallbackRoles = [
@@ -51,8 +49,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const [form, setForm] = useState(initialForm);
   const [editingUser, setEditingUser] = useState(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [isRoleManagerOpen, setIsRoleManagerOpen] = useState(false);
-  const [isTeamManagerOpen, setIsTeamManagerOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('users');
   const [teamForm, setTeamForm] = useState({ name: '' });
   const [editingTeamId, setEditingTeamId] = useState(null);
   const [teamSaving, setTeamSaving] = useState(false);
@@ -64,6 +61,11 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [teamFilter, setTeamFilter] = useState('all');
+  const [attributionDrafts, setAttributionDrafts] = useState({});
+  const [savingAttributionId, setSavingAttributionId] = useState(null);
+  const [pendingAttributionIds, setPendingAttributionIds] = useState({});
+  const [attributionErrorId, setAttributionErrorId] = useState(null);
+  const attributionSaveTimers = useRef(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -78,6 +80,13 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       fetchContentTeams(signal),
     ]);
     setUsers(loadedUsers);
+    setAttributionDrafts(Object.fromEntries(loadedUsers.map((user) => [
+      user.id,
+      {
+        teamId: String(user.content_attribution?.team_id || ''),
+        hashtags: (user.content_attribution?.hashtags || []).join(', '),
+      },
+    ])));
     setRoles(loadedRoles);
     setTeams(loadedTeams);
   };
@@ -126,29 +135,28 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   }, [isEditorOpen]);
 
   useEffect(() => {
-    if (!isRoleManagerOpen && !isTeamManagerOpen) return undefined;
-
-    const handleKeyDown = (event) => {
-      if (event.key !== 'Escape') return;
-      setIsRoleManagerOpen(false);
-      setIsTeamManagerOpen(false);
-      resetRoleForm();
-      resetTeamForm();
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isRoleManagerOpen, isTeamManagerOpen]);
-
-  useEffect(() => {
     const closeActions = (event) => {
-      if (!event.target.closest('.employee-table__action-menu')) {
+      if (!event.target.closest('.employee-table__action-menu, .employee-table__action-menu-panel')) {
         setOpenActions({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
       }
     };
+    const closeActionsOnViewportChange = () => {
+      setOpenActions({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
+    };
 
     document.addEventListener('click', closeActions);
-    return () => document.removeEventListener('click', closeActions);
+    window.addEventListener('resize', closeActionsOnViewportChange);
+    window.addEventListener('scroll', closeActionsOnViewportChange, true);
+    return () => {
+      document.removeEventListener('click', closeActions);
+      window.removeEventListener('resize', closeActionsOnViewportChange);
+      window.removeEventListener('scroll', closeActionsOnViewportChange, true);
+    };
+  }, []);
+
+  useEffect(() => () => {
+    attributionSaveTimers.current.forEach((timer) => window.clearTimeout(timer));
+    attributionSaveTimers.current.clear();
   }, []);
 
   const rows = useMemo(() => users, [users]);
@@ -222,20 +230,10 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
     setRoleError('');
   };
 
-  const openRoleManager = () => {
-    resetRoleForm();
-    setIsRoleManagerOpen(true);
-  };
-
   const resetTeamForm = () => {
     setEditingTeamId(null);
     setTeamForm({ name: '' });
     setTeamError('');
-  };
-
-  const openTeamManager = () => {
-    resetTeamForm();
-    setIsTeamManagerOpen(true);
   };
 
   const editTeam = (team) => {
@@ -318,8 +316,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       email: user.email || '',
       password: '',
       role: user.role || 'member',
-      content_team_id: user.content_attribution?.team_id || '',
-      content_hashtags: (user.content_attribution?.hashtags || []).join(', '),
     });
     setIsEditorOpen(true);
   };
@@ -350,8 +346,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         name: form.name.trim(),
         email: form.email.trim(),
         role: form.role,
-        content_team_id: form.content_team_id || null,
-        content_hashtags: form.content_hashtags,
       };
 
       if (form.password.trim()) {
@@ -409,6 +403,64 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
     }
   };
 
+  const updateAttributionDraft = (user, field, value, delay) => {
+    const draft = {
+      teamId: attributionDrafts[user.id]?.teamId || '',
+      hashtags: attributionDrafts[user.id]?.hashtags || '',
+      [field]: value,
+    };
+    setAttributionErrorId(null);
+    setAttributionDrafts((current) => ({
+      ...current,
+      [user.id]: draft,
+    }));
+    scheduleAttributionSave(user, draft, delay);
+  };
+
+  const saveAttribution = async (user, draft) => {
+    if (!draft) return;
+    try {
+      setSavingAttributionId(user.id);
+      setAttributionErrorId(null);
+      setError('');
+      const updatedUser = await updateUser(user.id, {
+        content_team_id: draft.teamId || null,
+        content_hashtags: draft.hashtags,
+      });
+      setUsers((current) => current.map((item) => (item.id === user.id ? updatedUser : item)));
+      setAttributionDrafts((current) => {
+        const latestDraft = current[user.id];
+        if (!latestDraft
+          || latestDraft.teamId !== draft.teamId
+          || latestDraft.hashtags !== draft.hashtags) return current;
+        return {
+          ...current,
+          [user.id]: {
+            teamId: String(updatedUser.content_attribution?.team_id || ''),
+            hashtags: (updatedUser.content_attribution?.hashtags || []).join(', '),
+          },
+        };
+      });
+    } catch (err) {
+      setAttributionErrorId(user.id);
+      setError(err.message || 'Không lưu được team và hashtag.');
+    } finally {
+      setSavingAttributionId(null);
+    }
+  };
+
+  const scheduleAttributionSave = (user, draft, delay = 650) => {
+    const currentTimer = attributionSaveTimers.current.get(user.id);
+    if (currentTimer) window.clearTimeout(currentTimer);
+    setPendingAttributionIds((current) => ({ ...current, [user.id]: true }));
+    const timer = window.setTimeout(() => {
+      attributionSaveTimers.current.delete(user.id);
+      setPendingAttributionIds((current) => ({ ...current, [user.id]: false }));
+      saveAttribution(user, draft);
+    }, delay);
+    attributionSaveTimers.current.set(user.id, timer);
+  };
+
   const handleBackdropClick = (event) => {
     if (event.target !== event.currentTarget) return;
     closeEditor();
@@ -422,20 +474,40 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           {heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
         </div>
 
-        <div className="employee-table__hero-actions">
-          <button className="button button--ghost" type="button" onClick={openTeamManager}>
-            Quản lý team
-          </button>
-          <button className="button button--ghost" type="button" onClick={openRoleManager}>
-            {t('users.manageRoles')}
-          </button>
+        {activeTab === 'users' ? (
+          <div className="employee-table__hero-actions">
           <button className="button" type="button" onClick={openCreateModal}>
             {t('users.create')}
           </button>
-        </div>
+          </div>
+        ) : null}
       </section>
 
-      <section className="employee-table__summary" aria-label={t('users.summaryLabel')}>
+      <nav className="employee-table__tabs" aria-label="Quản lý hệ thống">
+        {[
+          { key: 'users', label: 'Người dùng', count: users.length },
+          { key: 'teams', label: 'Team', count: teams.length },
+          { key: 'roles', label: 'Vai trò', count: roles.length },
+        ].map((tab) => (
+          <button
+            className={`employee-table__tab${activeTab === tab.key ? ' is-active' : ''}`}
+            type="button"
+            key={tab.key}
+            onClick={() => {
+              setActiveTab(tab.key);
+              setOpenActions({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
+            }}
+            aria-current={activeTab === tab.key ? 'page' : undefined}
+          >
+            <span>{tab.label}</span>
+            <strong>{tab.count}</strong>
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === 'users' ? (
+        <>
+          <section className="employee-table__summary" aria-label={t('users.summaryLabel')}>
         {[{ key: 'all', label: t('users.all') }, ...roles].map((role) => (
           <button
             key={role.key}
@@ -448,20 +520,20 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
             <strong>{role.key === 'all' ? stats.total : (stats.byRole[role.key] || 0)}</strong>
           </button>
         ))}
-      </section>
+          </section>
 
-      {error && !isEditorOpen ? (
-        <section className="section-card empty-state empty-state--compact">
-          <div>{error}</div>
-        </section>
-      ) : null}
+          {error && !isEditorOpen ? (
+            <section className="section-card empty-state empty-state--compact">
+              <div>{error}</div>
+            </section>
+          ) : null}
 
-      <section className="section-card employee-table__table-card">
+          <section className="section-card employee-table__table-card">
         <div className="section-card__header section-card__header--compact">
           <div>
             <h2 className="section-card__title">{t('users.list')}</h2>
             <p className="section-card__meta">
-              {t('users.showing', { visible: filteredRows.length, total: rows.length })}
+
             </p>
           </div>
         </div>
@@ -525,15 +597,14 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               <tr>
                 <th>{t('users.account')}</th>
                 <th>{t('users.role')}</th>
-                <th>Team</th>
-                <th>Hashtag</th>
+                 <th>Team</th>
                 <th className="cell-actions">{t('users.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={5}>
+                  <td className="table-state-cell" colSpan={4}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('users.loading')}</div>
@@ -567,21 +638,53 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                         ))}
                       </select>
                     </td>
-                    <td>
-                      <span className={`employee-table__team-badge${user.content_attribution?.team ? '' : ' employee-table__team-badge--empty'}`}>
-                        {user.content_attribution?.team?.name || 'Chưa phân team'}
-                      </span>
-                    </td>
-                    <td>
-                      {(user.content_attribution?.hashtags || []).length
-                        ? (
-                          <span className="employee-table__hashtag-list">
-                            {user.content_attribution.hashtags.map((hashtag) => (
-                              <span className="employee-table__hashtag-chip" key={hashtag}>{hashtag}</span>
+                    <td className="employee-table__attribution-cell">
+                      <div className="employee-table__attribution-editor">
+                        <label>
+                          <span className="sr-only">Team của {user.name}</span>
+                          <select
+                            value={attributionDrafts[user.id]?.teamId || ''}
+                            onChange={(event) => updateAttributionDraft(user, 'teamId', event.target.value, 0)}
+                            disabled={savingAttributionId === user.id}
+                            aria-label={`Team của ${user.name}`}
+                          >
+                            <option value="">Chưa phân team</option>
+                            {teams.map((team) => (
+                              <option value={String(team.id)} key={team.id}>{team.name}</option>
                             ))}
-                          </span>
-                        )
-                        : <span className="employee-table__empty-value">Chưa gắn</span>}
+                          </select>
+                        </label>
+                        <label className="employee-table__hashtag-input">
+                          <span className="sr-only">Hashtag của {user.name}</span>
+                          <input
+                            value={attributionDrafts[user.id]?.hashtags || ''}
+                            onChange={(event) => updateAttributionDraft(user, 'hashtags', event.target.value, 650)}
+                            onBlur={(event) => updateAttributionDraft(user, 'hashtags', event.target.value, 0)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                updateAttributionDraft(user, 'hashtags', event.currentTarget.value, 0);
+                                event.currentTarget.blur();
+                              }
+                            }}
+                             placeholder="#hashtag1, #hashtag2"
+                            aria-label={`Hashtag của ${user.name}`}
+                          />
+                        </label>
+                        <span
+                          className={`employee-table__attribution-status${savingAttributionId === user.id || pendingAttributionIds[user.id] ? ' is-saving' : ''}${attributionErrorId === user.id ? ' is-error' : ''}`}
+                          aria-live="polite"
+                        >
+                          {savingAttributionId === user.id
+                            ? 'Đang lưu…'
+                            : pendingAttributionIds[user.id]
+                              ? 'Chờ lưu…'
+                              : attributionErrorId === user.id ? 'Lỗi' : '✓'}
+                        </span>
+                      </div>
+                      {attributionErrorId === user.id ? (
+                        <span className="employee-table__attribution-error">Không lưu được. Hãy thử lại.</span>
+                      ) : null}
                     </td>
                     <td className="cell-actions">
                       <div className="action-menu employee-table__action-menu">
@@ -595,12 +698,14 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                         >
                           ...
                         </button>
-                        {openActions.id === user.id ? (
-                        <div
-                          className="action-menu__panel"
+                        {openActions.id === user.id ? createPortal((
+                          <div
+                          className="action-menu__panel employee-table__action-menu-panel"
                           role="menu"
+                          aria-label={`Thao tác với ${user.name}`}
                           style={{
                             position: 'fixed',
+                            zIndex: 30000,
                             right: `${openActions.right}px`,
                             top: openActions.direction === 'down' ? `${openActions.top}px` : 'auto',
                             bottom: openActions.direction === 'up' ? `${openActions.bottom}px` : 'auto',
@@ -629,15 +734,15 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                           >
                             {deletingId === user.id ? t('users.deleting') : t('users.delete')}
                           </button>
-                        </div>
-                        ) : null}
+                          </div>
+                        ), document.body) : null}
                       </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={5}>
+                  <td className="table-state-cell" colSpan={4}>
                     <div className="empty-state empty-state--compact table-empty-state">
                       <div>{t('users.noMatch')}</div>
                     </div>
@@ -647,7 +752,131 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
             </tbody>
           </table>
         </div>
-      </section>
+          </section>
+        </>
+      ) : null}
+
+      {activeTab === 'teams' ? (
+        <section className="section-card employee-table__management-card" aria-labelledby="team-manager-title">
+          <div className="section-card__header">
+            <div>
+              <h2 id="team-manager-title" className="section-card__title">Quản lý team</h2>
+
+            </div>
+            <button className="button button--ghost button--small" type="button" onClick={resetTeamForm}>Thêm team</button>
+          </div>
+
+          {teamError ? <div className="employee-table__inline-error empty-state empty-state--compact">{teamError}</div> : null}
+
+          <div className="employee-table__management-layout">
+            <section className="employee-table__role-list-panel">
+              <div className="employee-table__role-panel-heading">
+                <div><strong>Danh sách team</strong><span>{teams.length} team</span></div>
+              </div>
+              <div className="employee-table__role-list">
+                {teams.length ? teams.map((team) => (
+                  <div className={`employee-table__role-item${editingTeamId === team.id ? ' is-active' : ''}`} key={team.id}>
+                    <button type="button" className="employee-table__role-edit" onClick={() => editTeam(team)}>
+                      <span><span className="employee-table__role-name"><strong>{team.name}</strong></span></span>
+                      <span>{team.user_count || 0} nhân viên</span>
+                    </button>
+                    <button className="button button--ghost button--small button--danger" type="button" onClick={() => handleDeleteTeam(team)}>Xóa</button>
+                  </div>
+                )) : <div className="empty-state empty-state--compact">Chưa có team.</div>}
+              </div>
+            </section>
+
+            <form className="employee-table__role-form" onSubmit={handleTeamSubmit}>
+              <div className="employee-table__manager-form-heading">
+                <strong>{editingTeamId ? 'Sửa tên team' : 'Tạo team mới'}</strong>
+                 <span>{editingTeamId ? 'Tên mới sẽ được cập nhật trên báo cáo.' : ''}</span>
+              </div>
+              <div className="field">
+                <label htmlFor="content-team-name">Tên team</label>
+                <input
+                  id="content-team-name"
+                  value={teamForm.name}
+                  required
+                  maxLength={120}
+                  onChange={(event) => setTeamForm({ name: event.target.value })}
+                  placeholder="Ví dụ: Content MKT"
+                />
+              </div>
+              <div className="actions">
+                {editingTeamId ? <button className="button button--ghost" type="button" onClick={resetTeamForm}>Hủy sửa</button> : null}
+                <button className="button" type="submit" disabled={teamSaving}>
+                  {teamSaving ? 'Đang lưu…' : editingTeamId ? 'Cập nhật' : 'Thêm team'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === 'roles' ? (
+        <section className="section-card employee-table__management-card" aria-labelledby="role-manager-title">
+          <div className="section-card__header">
+            <div>
+              <h2 id="role-manager-title" className="section-card__title">{t('users.manageRoles')}</h2>
+
+            </div>
+            <button className="button button--ghost button--small" type="button" onClick={resetRoleForm}>{t('users.addRole')}</button>
+          </div>
+
+          {roleError ? <div className="employee-table__inline-error empty-state empty-state--compact">{roleError}</div> : null}
+
+          <div className="employee-table__management-layout">
+            <section className="employee-table__role-list-panel">
+              <div className="employee-table__role-panel-heading">
+                <div><strong>{t('users.roleList')}</strong><span>{t('users.roleCount', { count: roles.length })}</span></div>
+              </div>
+              <div className="employee-table__role-list">
+                {roles.map((role) => (
+                  <div className={`employee-table__role-item${editingRoleKey === role.key ? ' is-active' : ''}`} key={role.key}>
+                    <button type="button" className="employee-table__role-edit" onClick={() => editRole(role)}>
+                      <span>
+                        <span className="employee-table__role-name">
+                          <strong>{role.label}</strong>
+                          {!role.is_system ? <em>{t('users.customRole')}</em> : null}
+                        </span>
+                      </span>
+                      <span>{t('users.userCount', { count: role.user_count || 0 })}</span>
+                    </button>
+                    {!role.is_system ? (
+                      <button className="button button--ghost button--small button--danger" type="button" onClick={() => handleDeleteRole(role)}>{t('users.delete')}</button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <form className="employee-table__role-form" onSubmit={handleRoleSubmit}>
+              <div className="employee-table__manager-form-heading">
+                <strong>{editingRoleKey ? 'Sửa vai trò' : 'Tạo vai trò mới'}</strong>
+
+              </div>
+              <div className="field">
+                <label htmlFor="role-label">{t('users.roleName')}</label>
+                <input
+                  id="role-label"
+                  value={roleForm.label}
+                  required
+                  onChange={(event) => setRoleForm((current) => ({
+                    ...current,
+                    label: event.target.value,
+                    key: editingRoleKey ? current.key : createRoleKey(event.target.value),
+                  }))}
+                  placeholder={t('users.rolePlaceholder')}
+                />
+              </div>
+              <div className="actions">
+                {editingRoleKey ? <button className="button button--ghost" type="button" onClick={resetRoleForm}>{t('users.cancelEdit')}</button> : null}
+                <button className="button" type="submit" disabled={roleSaving}>{roleSaving ? t('users.saving') : (editingRoleKey ? t('users.save') : t('users.createRole'))}</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      ) : null}
 
       {isEditorOpen ? (
         <div className="modal-backdrop" role="presentation" onClick={handleBackdropClick}>
@@ -686,10 +915,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
             ) : null}
 
             <form className="employee-table__modal-form" onSubmit={handleSubmit}>
-              <div className="employee-table__form-section-title">
-                <strong>Thông tin tài khoản</strong>
-                <span>Thông tin đăng nhập và quyền truy cập hệ thống.</span>
-              </div>
+
               <div className="field">
                 <label htmlFor="name">{t('users.fullName')}</label>
                 <input id="name" name="name" value={form.name} onChange={handleChange} required placeholder="Nguyễn Văn A" />
@@ -727,28 +953,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                   ))}
                 </select>
               </div>
-              <div className="employee-table__form-section-title">
-                <strong>Phân loại báo cáo</strong>
-                <span>Gắn team và hashtag xuất hiện trong tiêu đề video của nhân viên.</span>
-              </div>
-              <div className="field">
-                <label htmlFor="content_team_id">Team</label>
-                <select id="content_team_id" name="content_team_id" value={form.content_team_id} onChange={handleChange}>
-                  <option value="">Chưa phân team</option>
-                  {teams.map((team) => <option value={team.id} key={team.id}>{team.name}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="content_hashtags">Hashtag nhận diện</label>
-                <input
-                  id="content_hashtags"
-                  name="content_hashtags"
-                  value={form.content_hashtags}
-                  onChange={handleChange}
-                  placeholder="#tennhanvien, #nickname"
-                />
-                <p className="employee-table__field-hint">Có thể nhập nhiều hashtag, phân cách bằng dấu phẩy.</p>
-              </div>
               <div className="actions employee-table__modal-actions">
                 <button className="button button--ghost" type="button" onClick={closeEditor} disabled={saving}>
                   {t('users.cancel')}
@@ -762,132 +966,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         </div>
       ) : null}
 
-      {isTeamManagerOpen ? createPortal((
-        <div className="modal-backdrop employee-table__role-backdrop" role="presentation" onClick={(event) => {
-          if (event.target === event.currentTarget) setIsTeamManagerOpen(false);
-        }}>
-          <div className="modal-card employee-table__role-modal" role="dialog" aria-modal="true" aria-labelledby="team-manager-title">
-            <div className="employee-table__modal-header employee-table__modal-header--roles">
-              <div>
-                <h2 id="team-manager-title" className="section-card__title">Quản lý team</h2>
-                <p className="section-card__meta">Team dùng để nhóm nhân viên trên báo cáo hiệu suất.</p>
-              </div>
-              <button className="employee-table__modal-close" type="button" onClick={() => setIsTeamManagerOpen(false)} aria-label={t('users.close')}>×</button>
-            </div>
-
-            {teamError ? <div className="employee-table__modal-error empty-state empty-state--compact">{teamError}</div> : null}
-
-            <div className="employee-table__role-manager">
-              <section className="employee-table__role-list-panel">
-                <div className="employee-table__role-panel-heading">
-                  <div><strong>Danh sách team</strong><span>{teams.length} team</span></div>
-                  <button className="button button--ghost button--small" type="button" onClick={resetTeamForm}>Thêm team</button>
-                </div>
-                <div className="employee-table__role-list">
-                  {teams.length ? teams.map((team) => (
-                    <div className={`employee-table__role-item${editingTeamId === team.id ? ' is-active' : ''}`} key={team.id}>
-                      <button type="button" className="employee-table__role-edit" onClick={() => editTeam(team)}>
-                        <span><span className="employee-table__role-name"><strong>{team.name}</strong></span></span>
-                        <span>{team.user_count || 0} nhân viên</span>
-                      </button>
-                      <button className="button button--ghost button--small button--danger" type="button" onClick={() => handleDeleteTeam(team)}>Xóa</button>
-                    </div>
-                  )) : <div className="empty-state empty-state--compact">Chưa có team.</div>}
-                </div>
-              </section>
-
-              <form className="employee-table__role-form" onSubmit={handleTeamSubmit}>
-                <div className="employee-table__manager-form-heading">
-                  <strong>{editingTeamId ? 'Sửa tên team' : 'Tạo team mới'}</strong>
-                  <span>{editingTeamId ? 'Tên mới sẽ được cập nhật trên báo cáo.' : 'Sau khi tạo, bạn có thể gắn nhân viên vào team.'}</span>
-                </div>
-                <div className="field">
-                  <label htmlFor="content-team-name">Tên team</label>
-                  <input
-                    id="content-team-name"
-                    value={teamForm.name}
-                    required
-                    maxLength={120}
-                    onChange={(event) => setTeamForm({ name: event.target.value })}
-                    placeholder="Tên team"
-                  />
-                </div>
-                <div className="actions">
-                  {editingTeamId ? <button className="button button--ghost" type="button" onClick={resetTeamForm}>Hủy sửa</button> : null}
-                  <button className="button" type="submit" disabled={teamSaving}>
-                    {teamSaving ? 'Đang lưu…' : editingTeamId ? 'Cập nhật' : 'Thêm team'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      ), document.body) : null}
-
-      {isRoleManagerOpen ? createPortal((
-        <div className="modal-backdrop employee-table__role-backdrop" role="presentation" onClick={(event) => {
-          if (event.target === event.currentTarget) setIsRoleManagerOpen(false);
-        }}>
-          <div className="modal-card employee-table__role-modal" role="dialog" aria-modal="true" aria-labelledby="role-manager-title">
-            <div className="employee-table__modal-header employee-table__modal-header--roles">
-              <div>
-                <h2 id="role-manager-title" className="section-card__title">{t('users.manageRoles')}</h2>
-              </div>
-              <button className="employee-table__modal-close" type="button" onClick={() => setIsRoleManagerOpen(false)} aria-label={t('users.close')}>×</button>
-            </div>
-
-            {roleError ? <div className="employee-table__modal-error empty-state empty-state--compact">{roleError}</div> : null}
-
-            <div className="employee-table__role-manager">
-              <section className="employee-table__role-list-panel">
-                <div className="employee-table__role-panel-heading">
-                  <div><strong>{t('users.roleList')}</strong><span>{t('users.roleCount', { count: roles.length })}</span></div>
-                  <button className="button button--ghost button--small" type="button" onClick={resetRoleForm}>{t('users.addRole')}</button>
-                </div>
-                <div className="employee-table__role-list">
-                  {roles.map((role) => (
-                  <div className={`employee-table__role-item${editingRoleKey === role.key ? ' is-active' : ''}`} key={role.key}>
-                    <button type="button" className="employee-table__role-edit" onClick={() => editRole(role)}>
-                      <span>
-                        <span className="employee-table__role-name">
-                          <strong>{role.label}</strong>
-                          {!role.is_system ? <em>{t('users.customRole')}</em> : null}
-                        </span>
-                      </span>
-                      <span>{t('users.userCount', { count: role.user_count || 0 })}</span>
-                    </button>
-                    {!role.is_system ? (
-                      <button className="button button--ghost button--small button--danger" type="button" onClick={() => handleDeleteRole(role)}>{t('users.delete')}</button>
-                    ) : null}
-                  </div>
-                  ))}
-                </div>
-              </section>
-
-              <form className="employee-table__role-form" onSubmit={handleRoleSubmit}>
-                <div className="field">
-                  <input
-                    id="role-label"
-                    aria-label={t('users.roleName')}
-                    value={roleForm.label}
-                    required
-                    onChange={(event) => setRoleForm((current) => ({
-                      ...current,
-                      label: event.target.value,
-                      key: editingRoleKey ? current.key : createRoleKey(event.target.value),
-                    }))}
-                    placeholder={t('users.rolePlaceholder')}
-                  />
-                </div>
-                <div className="actions">
-                  {editingRoleKey ? <button className="button button--ghost" type="button" onClick={resetRoleForm}>{t('users.cancelEdit')}</button> : null}
-                  <button className="button" type="submit" disabled={roleSaving}>{roleSaving ? t('users.saving') : (editingRoleKey ? t('users.save') : t('users.createRole'))}</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      ), document.body) : null}
     </div>
   );
 };

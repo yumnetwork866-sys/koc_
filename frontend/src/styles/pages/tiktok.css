@@ -913,7 +913,8 @@
 }
 
 
-.channel-report-month {
+.channel-report-month,
+.channel-report-team {
   min-width: 180px;
 }
 
@@ -1115,13 +1116,12 @@
 
 
 .content-performance__groups {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
-
 
 .content-performance__group {
   min-width: 0;
-  padding: 16px;
+  padding: 20px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
@@ -1170,8 +1170,7 @@
 }
 
 
-.content-performance__metrics small,
-.content-performance__ai-summary small {
+.content-performance__metrics small {
   color: var(--color-muted);
 }
 
@@ -1217,20 +1216,6 @@
 
 .content-performance__group-empty a:hover {
   text-decoration: underline;
-}
-
-
-.content-performance__ai-summary {
-  padding: 16px;
-  border: 1px solid rgba(37, 99, 235, 0.18);
-  border-radius: var(--radius-lg);
-  background: rgba(37, 99, 235, 0.06);
-}
-
-
-.content-performance__ai-summary p {
-  margin: 6px 0;
-  line-height: 1.55;
 }
 
 

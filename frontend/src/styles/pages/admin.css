@@ -47,6 +47,69 @@
   margin-left: auto;
 }
 
+.employee-table__tabs {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+  scrollbar-width: none;
+}
+
+.employee-table__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.employee-table__tab {
+  display: inline-flex;
+  flex: 1 0 150px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.employee-table__tab strong {
+  display: inline-grid;
+  place-items: center;
+  min-width: 25px;
+  height: 23px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+  font-size: 0.75rem;
+}
+
+.employee-table__tab:hover {
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.employee-table__tab.is-active {
+  border-color: rgba(0, 127, 123, 0.22);
+  background: var(--color-accent-soft);
+  color: var(--color-social-cyan-strong);
+}
+
+.employee-table__tab.is-active strong {
+  background: var(--color-surface);
+  color: var(--color-social-cyan-strong);
+}
+
 
 .employee-table__summary {
   display: flex;
@@ -165,9 +228,112 @@
   overflow: hidden;
 }
 
+.employee-table__management-card {
+  overflow: hidden;
+  padding: 0;
+}
+
+.employee-table__management-card > .section-card__header {
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.employee-table__management-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  min-height: 380px;
+}
+
+.employee-table__management-layout .employee-table__role-list-panel {
+  padding: 22px;
+  border-right: 1px solid var(--color-border);
+  border-bottom: 0;
+}
+
+.employee-table__management-layout .employee-table__role-form {
+  min-width: 0;
+  border-left: 0;
+}
+
+.employee-table__inline-error {
+  margin: 16px 22px 0;
+  border: 1px solid rgba(220, 38, 38, 0.16);
+  background: rgba(254, 242, 242, 0.88);
+  color: #991b1b;
+}
+
 
 .employee-table__data-table {
-  min-width: 1040px;
+  min-width: 960px;
+}
+
+.employee-table__attribution-cell {
+  width: 48%;
+}
+
+.employee-table__attribution-editor {
+  display: grid;
+  grid-template-columns: minmax(145px, 0.8fr) minmax(190px, 1.2fr) 76px;
+  align-items: center;
+  gap: 7px;
+}
+
+.employee-table__attribution-editor label {
+  min-width: 0;
+}
+
+.employee-table__attribution-editor select,
+.employee-table__attribution-editor input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.78rem;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.employee-table__attribution-editor select:focus,
+.employee-table__attribution-editor input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+
+.employee-table__attribution-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  color: #15803d;
+  font-size: 0.7rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.employee-table__attribution-status.is-saving {
+  color: var(--color-muted);
+  font-weight: 650;
+}
+
+.employee-table__attribution-status:not(.is-saving) {
+  color: #15803d;
+}
+
+.employee-table__attribution-status.is-error {
+  color: #b91c1c;
+}
+
+.employee-table__attribution-error {
+  display: block;
+  margin-top: 5px;
+  color: #b91c1c;
+  font-size: 0.72rem;
 }
 
 .employee-table__team-badge {
@@ -268,8 +434,9 @@
 }
 
 
-.employee-table__action-menu .action-menu__panel {
-  z-index: 10000;
+.employee-table__action-menu-panel {
+  z-index: 30000;
+  isolation: isolate;
 }
 
 
@@ -701,6 +868,15 @@
 
 
 @media (max-width: 900px) {
+.employee-table__management-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .employee-table__management-layout .employee-table__role-list-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
 .employee-table__role-manager {
     grid-template-columns: minmax(0, 1fr);
   }
