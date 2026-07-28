@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { isAdminSession } from '../lib/session';
 import { useSession } from '../lib/useSession';
@@ -171,16 +171,34 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
     '/reports',
   ].some((prefix) => location.pathname.startsWith(prefix));
   const adminVisible = isAdminSession(session);
-  const activeSectionTitle = isAdminArea ? 'Admin' : isFacebookArea ? 'Facebook' : isWhatsAppArea ? 'WhatsApp' : isTikTokShopArea ? 'TikTok Shop' : 'TikTok';
+  const activeSectionTitle = isAdminArea ? 'Admin' : isFacebookArea ? 'Facebook' : isWhatsAppArea ? 'WhatsApp' : 'TikTok';
   const visibleSections = sidebarSections.filter((section) => section.title === activeSectionTitle);
+  const activeTikTokGroup = isTikTokShopArea ? 'tiktok-shop' : 'tiktok-channel';
+  const [openGroups, setOpenGroups] = useState({ [activeTikTokGroup]: true });
+
+  useEffect(() => {
+    if (activeSectionTitle !== 'TikTok') return;
+    setOpenGroups((current) => ({ ...current, [activeTikTokGroup]: true }));
+  }, [activeSectionTitle, activeTikTokGroup]);
+
+  const toggleGroup = (groupId) => {
+    if (isCollapsed) {
+      onToggle();
+      setOpenGroups((current) => ({ ...current, [groupId]: true }));
+      return;
+    }
+    setOpenGroups((current) => ({ ...current, [groupId]: !current[groupId] }));
+  };
 
   return (
     <aside className={`sidebar${isCollapsed ? ' sidebar--collapsed' : ''}`}>
       <div className="sidebar__header">
-        <span className="sidebar__header-label">
-          <PlatformIcon type={isAdminArea ? 'admin' : isFacebookArea ? 'facebook' : isWhatsAppArea ? 'whatsapp' : 'tiktok'} />
-          {activeSectionTitle}
-        </span>
+        {!isCollapsed ? (
+          <span className="sidebar__header-label">
+            <PlatformIcon type={isAdminArea ? 'admin' : isFacebookArea ? 'facebook' : isWhatsAppArea ? 'whatsapp' : 'tiktok'} />
+            {activeSectionTitle}
+          </span>
+        ) : null}
         <button
           type="button"
           className="sidebar__toggle"
@@ -198,17 +216,56 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
             <div className="sidebar__section-links">
               {section.items
                 .filter((item) => adminVisible || !item.adminOnly)
-                .map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
-                    title={t(item.labelKey)}
-                  >
-                    <SidebarIcon name={routeIconMap[item.to]} />
-                    <span className="sidebar__link-label">{t(item.labelKey)}</span>
-                  </NavLink>
-                ))}
+                .map((item) => {
+                  if (item.children) {
+                    const visibleChildren = item.children.filter((child) => adminVisible || !child.adminOnly);
+                    const isGroupActive = visibleChildren.some((child) => location.pathname.startsWith(child.to));
+                    const isOpen = Boolean(openGroups[item.id]);
+                    return (
+                      <div className="sidebar__expandable" key={item.id}>
+                        <button
+                          className={`sidebar__link sidebar__link--button${isGroupActive ? ' sidebar__link--group-active' : ''}`}
+                          type="button"
+                          aria-expanded={isOpen}
+                          onClick={() => toggleGroup(item.id)}
+                          title={t(item.labelKey)}
+                        >
+                          <span className="sidebar__group-label">
+                            <SidebarIcon name={item.icon} />
+                            {!isCollapsed ? <span className="sidebar__link-label">{t(item.labelKey)}</span> : null}
+                          </span>
+                          {!isCollapsed ? (
+                            <span className={`sidebar__chevron${isOpen ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" />
+                          ) : null}
+                        </button>
+                        {isOpen && !isCollapsed ? (
+                          <div className="sidebar__subnav">
+                            {visibleChildren.map((child) => (
+                              <NavLink
+                                className={({ isActive }) => `sidebar__sublink${isActive ? ' sidebar__sublink--active' : ''}`}
+                                key={child.to}
+                                to={child.to}
+                              >
+                                <span>{t(child.labelKey)}</span>
+                              </NavLink>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  }
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={({ isActive }) => `sidebar__link${isActive ? ' sidebar__link--active' : ''}`}
+                      title={t(item.labelKey)}
+                    >
+                      <SidebarIcon name={routeIconMap[item.to]} />
+                      {!isCollapsed ? <span className="sidebar__link-label">{t(item.labelKey)}</span> : null}
+                    </NavLink>
+                  );
+                })}
             </div>
           </div>
         ))}

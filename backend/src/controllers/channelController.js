@@ -578,6 +578,32 @@ const syncTiktokVideosForChannel = async (channel, accessToken) => {
 const syncTiktokChannel = async (channel) => {
   try {
     const accessToken = await getUsableTiktokAccessToken(channel);
+    let profileUpdated = false;
+
+    try {
+      const profilePayload = await fetchTiktokUserInfo(accessToken);
+      const profile = profilePayload?.data?.user || profilePayload?.data || profilePayload?.user || profilePayload;
+
+      await channel.update({
+        display_name: profile?.display_name || channel.display_name,
+        username: String(profile?.username || channel.username).replace(/^@/, '').trim(),
+        avatar_url: profile?.avatar_url || channel.avatar_url || null,
+        avatar_large_url: profile?.avatar_large_url || channel.avatar_large_url || null,
+        bio_description: profile?.bio_description || channel.bio_description || null,
+        is_verified: profile?.is_verified ?? channel.is_verified ?? null,
+        follower_count: profile?.follower_count ?? channel.follower_count ?? null,
+        following_count: profile?.following_count ?? channel.following_count ?? null,
+        likes_count: profile?.likes_count ?? channel.likes_count ?? null,
+        video_count: profile?.video_count ?? channel.video_count ?? null,
+      });
+      profileUpdated = true;
+    } catch (profileError) {
+      console.warn('[TikTok Sync] Channel profile refresh failed; continuing video sync', {
+        channelId: channel.id,
+        message: profileError?.message || String(profileError),
+      });
+    }
+
     const summary = await syncTiktokVideosForChannel(channel, accessToken);
 
     await channel.update({
@@ -586,7 +612,7 @@ const syncTiktokChannel = async (channel) => {
       last_sync_error: null,
     });
 
-    return summary;
+    return { ...summary, profileUpdated };
   } catch (error) {
     await channel.update({
       last_sync_at: new Date(),

@@ -1,5 +1,4 @@
 export const topNavItems = [
-  { to: '/manage/shop-analytics', label: 'TikTok Shop' },
   { to: '/dashboard', label: 'TikTok' },
   { to: '/chatbot', label: 'Facebook' },
   { to: '/whatsapp', label: 'WhatsApp' },
@@ -10,19 +9,28 @@ export const sidebarSections = [
   {
     title: 'TikTok',
     items: [
-      { to: '/dashboard', labelKey: 'navigation.dashboard' },
-      { to: '/manage/channels', labelKey: 'navigation.channels' },
-      { to: '/videos', labelKey: 'navigation.videos' },
-    ],
-  },
-  {
-    title: 'TikTok Shop',
-    items: [
-      { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
-      { to: '/manage/video-analytics', labelKey: 'navigation.videoAnalytics' },
-      { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
-      { to: '/bookings', labelKey: 'navigation.bookings' },
-      { to: '/reports', labelKey: 'navigation.reports' },
+      {
+        id: 'tiktok-shop',
+        labelKey: 'navigation.tiktokShop',
+        icon: 'shop',
+        children: [
+          { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
+          { to: '/manage/video-analytics', labelKey: 'navigation.videoAnalytics' },
+          { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
+          { to: '/bookings', labelKey: 'navigation.bookings' },
+          { to: '/reports', labelKey: 'navigation.reports' },
+        ],
+      },
+      {
+        id: 'tiktok-channel',
+        labelKey: 'navigation.tiktokChannel',
+        icon: 'channels',
+        children: [
+          { to: '/dashboard', labelKey: 'navigation.dashboard' },
+          { to: '/manage/channels', labelKey: 'navigation.channels' },
+          { to: '/videos', labelKey: 'navigation.videos' },
+        ],
+      },
     ],
   },
   {

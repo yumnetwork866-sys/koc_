@@ -737,6 +737,19 @@
   gap: 8px;
 }
 
+.sidebar__group-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.sidebar__link--group-active {
+  border-color: rgba(0, 127, 123, 0.12);
+  background: rgba(237, 249, 247, 0.58);
+  color: #006a66;
+}
+
 
 .sidebar__subnav {
   display: grid;
@@ -2468,4 +2481,67 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+
+/* TikTok navigation groups */
+.sidebar__link--group-active {
+  border-color: #cfe0fb;
+  background: #f3f7ff;
+  color: #245cc5;
+}
+
+
+.sidebar__link--group-active .sidebar__link-icon {
+  background: #edf4ff;
+  color: #2f6fe4;
+}
+
+
+.sidebar--collapsed .sidebar__group-label {
+  width: 34px;
+  justify-content: center;
+}
+
+
+.sidebar--collapsed .sidebar__chevron {
+  display: none;
+}
+
+
+.sidebar--collapsed .sidebar__link--button {
+  justify-content: center;
+  padding-inline: 5px;
+}
+
+
+.sidebar--collapsed .sidebar__expandable {
+  width: 100%;
+}
+
+
+@media (min-width: 600px) and (max-width: 1023px) {
+  .app-shell__layout {
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+
+
+  .app-shell__layout.app-shell__layout--sidebar-collapsed {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+
+
+  .sidebar {
+    width: 100%;
+  }
+
+
+  .sidebar:not(.sidebar--collapsed) .sidebar__header-label {
+    display: inline-flex;
+  }
+
+
+  .sidebar:not(.sidebar--collapsed) .sidebar__link-label {
+    display: inline;
+  }
 }

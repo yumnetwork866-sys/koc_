@@ -203,6 +203,8 @@
     "support": "Support"
   },
   "navigation": {
+    "tiktokShop": "TikTok Shop",
+    "tiktokChannel": "TikTok Channel",
     "dashboard": "Dashboard",
     "affiliate": "Affiliate marketing",
     "kocPerformance": "KOC performance",

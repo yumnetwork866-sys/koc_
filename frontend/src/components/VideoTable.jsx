@@ -5,6 +5,49 @@ import { useI18n } from '../lib/language';
 import Pagination from './Pagination';
 
 const PAGE_SIZE = 20;
+
+const getChannelInitials = (channel) => {
+  const label = String(channel?.display_name || channel?.username || '').trim();
+  if (!label) return 'CH';
+  return label
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join('')
+    .toUpperCase();
+};
+
+const ChannelAvatar = ({ channel, className, fallbackClassName, alt }) => {
+  const sources = useMemo(
+    () => [...new Set([channel?.avatar_url, channel?.avatar_large_url].filter(Boolean))],
+    [channel?.avatar_large_url, channel?.avatar_url],
+  );
+  const sourceKey = sources.join('|');
+  const [sourceIndex, setSourceIndex] = useState(0);
+
+  useEffect(() => {
+    setSourceIndex(0);
+  }, [sourceKey]);
+
+  if (!sources[sourceIndex]) {
+    return (
+      <span className={`${className} ${fallbackClassName}`} aria-hidden="true">
+        {getChannelInitials(channel)}
+      </span>
+    );
+  }
+
+  return (
+    <img
+      className={className}
+      src={sources[sourceIndex]}
+      alt={alt}
+      loading="lazy"
+      onError={() => setSourceIndex((current) => current + 1)}
+    />
+  );
+};
+
 const getVideoHashtags = (video) => {
   const provided = Array.isArray(video.hashtags)
     ? video.hashtags
@@ -158,18 +201,12 @@ const VideoTable = ({ heroTitle }) => {
                 onClick={() => setIsChannelDropdownOpen((current) => !current)}
               >
                 <span className="channel-picker__current">
-                  {selectedChannel?.avatar_url ? (
-                    <img
-                      className="channel-picker__avatar"
-                      src={selectedChannel.avatar_url}
-                      alt={selectedChannelLabel}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <span className="channel-picker__avatar channel-picker__avatar--empty" aria-hidden="true">
-                      CH
-                    </span>
-                  )}
+                  <ChannelAvatar
+                    channel={selectedChannel}
+                    className="channel-picker__avatar"
+                    fallbackClassName="channel-picker__avatar--empty"
+                    alt={selectedChannelLabel}
+                  />
                   <span className="channel-picker__label">{selectedChannelLabel}</span>
                 </span>
                 <span className={`sidebar__chevron channel-picker__chevron ${isChannelDropdownOpen ? 'sidebar__chevron--open' : ''}`} aria-hidden="true" />
@@ -191,18 +228,12 @@ const VideoTable = ({ heroTitle }) => {
                           setIsChannelDropdownOpen(false);
                         }}
                       >
-                        {channel.avatar_url ? (
-                          <img
-                            className="channel-picker__option-avatar"
-                            src={channel.avatar_url}
-                            alt={channel.display_name || channel.username || t('videoLibrary.channelAvatar')}
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span className="channel-picker__option-avatar channel-picker__option-avatar--empty" aria-hidden="true">
-                            CH
-                          </span>
-                        )}
+                        <ChannelAvatar
+                          channel={channel}
+                          className="channel-picker__option-avatar"
+                          fallbackClassName="channel-picker__option-avatar--empty"
+                          alt={channel.display_name || channel.username || t('videoLibrary.channelAvatar')}
+                        />
                         <span className="channel-picker__option-meta">
                           <span className="channel-picker__option-title">{channel.display_name || channel.username || channel.id}</span>
                           {channel.username ? (
