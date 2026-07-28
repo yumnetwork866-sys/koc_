@@ -1,5 +1,5 @@
 export const topNavItems = [
-  { to: '/dashboard', label: 'TikTok' },
+  { to: '/manage/shop-analytics', label: 'TikTok' },
   { to: '/chatbot', label: 'Facebook' },
   { to: '/whatsapp', label: 'WhatsApp' },
   { to: '/manage/users', label: 'Admin', adminOnly: true },
@@ -15,11 +15,10 @@ export const sidebarSections = [
         icon: 'shop',
         children: [
           { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
-          { to: '/manage/video-analytics', labelKey: 'navigation.videoAnalytics' },
-          { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
-          { to: '/bookings', labelKey: 'navigation.bookings' },
-          { to: '/reports', labelKey: 'navigation.reports' },
-        ],
+           { to: '/manage/video-analytics', labelKey: 'navigation.videoAnalytics' },
+           { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
+           { to: '/bookings', labelKey: 'navigation.bookings' },
+         ],
       },
       {
         id: 'tiktok-channel',
@@ -27,6 +26,7 @@ export const sidebarSections = [
         icon: 'channels',
         children: [
           { to: '/dashboard', labelKey: 'navigation.channelOverview' },
+          { to: '/channel-reports', labelKey: 'navigation.reports' },
           { to: '/manage/channels', labelKey: 'navigation.channels' },
         ],
       },
@@ -67,6 +67,11 @@ export const protectedRouteCards = [
       heroTitle: 'Content performance dashboard',
       heroSubtitle: '',
     },
+  },
+  {
+    path: '/channel-reports',
+    component: 'ChannelReport',
+    props: {},
   },
   {
     path: '/manage/users',
@@ -128,14 +133,6 @@ export const protectedRouteCards = [
     component: 'ChannelManagement',
     props: {
       heroTitle: 'Channel management',
-      heroSubtitle: '',
-    },
-  },
-  {
-    path: '/reports',
-    component: 'ReportFilter',
-    props: {
-      heroTitle: 'Automated reports',
       heroSubtitle: '',
     },
   },

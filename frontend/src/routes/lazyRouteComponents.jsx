@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 
 export const ChannelManagement = lazy(() => import('../components/ChannelManagement'));
+export const ChannelReport = lazy(() => import('../components/ChannelReport'));
 export const ChatbotManagement = lazy(() => import('../components/ChatbotManagement'));
 export const BookingManagement = lazy(() => import('../components/BookingManagement'));
 export const Dashboard = lazy(() => import('../components/Dashboard'));
@@ -11,7 +12,6 @@ export const ShopAnalytics = lazy(() => import('../components/ShopAnalytics'));
 export const ScheduleManagement = lazy(() => import('../components/ScheduleManagement'));
 export const HomePage = lazy(() => import('../components/HomePage'));
 export const Login = lazy(() => import('../components/Login'));
-export const ReportFilter = lazy(() => import('../components/ReportFilter'));
 export const PublicReport = lazy(() => import('../components/PublicReport'));
 export const WhatsAppManagement = lazy(() => import('../components/WhatsAppManagement'));
 export const TermsPage = lazy(() => import('../pages/legal/TermsPage'));

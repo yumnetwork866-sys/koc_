@@ -503,7 +503,7 @@ async function askAssistant(message) {
   const runtime = await getRuntime();
   const normalizedMessage = String(message || '').trim();
   const prompt = buildPrompt(normalizedMessage, snapshot);
-  const suggestions = ['Đánh giá KOC theo Booking', 'Booking quá hạn', 'Tổng chi phí Booking'];
+  const suggestions = ['Đánh giá KOC', 'Booking quá hạn', 'Tổng chi phí Booking'];
   const systemPrompt = [
     'Bạn là trợ lý phân tích dữ liệu nội bộ cho YUM Network.',
     "Trả lời ngắn gọn, rõ ràng, lịch sự, xưng 'mình' gọi người dùng 'bạn'.",

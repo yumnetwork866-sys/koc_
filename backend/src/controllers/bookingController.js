@@ -6,7 +6,10 @@ const {
   BookingVideo, BookingVideoPerformanceSnapshot,
   ShopVideo, ShopVideoPerformanceSnapshot, sequelize,
 } = require('../models');
-const { normalizeCreatorProfile } = require('../services/tiktokCreatorProfileService');
+const {
+  loadCreatorProfiles,
+  normalizeCreatorProfile,
+} = require('../services/tiktokCreatorProfileService');
 const {
   buildAuthorizationUrl,
   parseAuthorizationState,
@@ -37,6 +40,35 @@ const ALLOWED_STATUSES = new Set(['draft', 'booked', 'waiting_video', 'video_pos
 const compactPayload = (payload) => Object.fromEntries(
   Object.entries(payload).filter(([, value]) => value !== undefined),
 );
+
+const serializeBookingsWithFreshCreatorAvatars = async (bookings = []) => {
+  const serialized = bookings.map(serializeBookingWithActual);
+  const bookingsByShop = new Map();
+  for (const booking of serialized) {
+    const shopId = Number(booking.target_shop_id);
+    if (!Number.isInteger(shopId)) continue;
+    const rows = bookingsByShop.get(shopId) || [];
+    rows.push(booking);
+    bookingsByShop.set(shopId, rows);
+  }
+
+  await Promise.all([...bookingsByShop].map(async ([shopId, rows]) => {
+    const profiles = await loadCreatorProfiles(shopId, rows.map((booking) => ({
+      creator_open_id: booking.creator_open_id,
+      username: booking.creator_username,
+    })));
+    for (const booking of rows) {
+      const creatorOpenId = String(booking.creator_open_id || '').trim();
+      const username = normalizedUsername(booking.creator_username);
+      const profile = (creatorOpenId && profiles.get(`open:${creatorOpenId}`))
+        || (username && profiles.get(`username:${username}`));
+      const value = profile?.toJSON ? profile.toJSON() : profile;
+      if (value?.avatar_url) booking.creator_avatar_url = value.avatar_url;
+    }
+  }));
+
+  return serialized;
+};
 
 const normalizeBookingVideoUrl = (value) => {
   if (value === null || value === undefined || value === '') {
@@ -521,7 +553,7 @@ const getBookings = async (req, res) => {
       include: bookingInclude,
       order: [['deadline', 'ASC'], ['id', 'DESC']],
     });
-    res.json(bookings.map(serializeBookingWithActual));
+    res.json(await serializeBookingsWithFreshCreatorAvatars(bookings));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -533,7 +565,8 @@ const getBookingById = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
-    res.json(serializeBookingWithActual(booking));
+    const [serialized] = await serializeBookingsWithFreshCreatorAvatars([booking]);
+    res.json(serialized);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -591,7 +624,8 @@ const createBooking = async (req, res) => {
 
     const booking = await Booking.create(payload);
     const createdBooking = await Booking.findByPk(booking.id, { include: bookingInclude });
-    res.status(201).json(serializeBookingWithActual(createdBooking));
+    const [serialized] = await serializeBookingsWithFreshCreatorAvatars([createdBooking]);
+    res.status(201).json(serialized);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -637,7 +671,8 @@ const updateBooking = async (req, res) => {
     }
 
     const booking = await Booking.findByPk(req.params.id, { include: bookingInclude });
-    res.json(serializeBookingWithActual(booking));
+    const [serialized] = await serializeBookingsWithFreshCreatorAvatars([booking]);
+    res.json(serialized);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -714,9 +749,10 @@ const matchBookingVideo = async (req, res) => {
       });
     }
     const updated = await Booking.findByPk(booking.id, { include: bookingInclude });
+    const [serialized] = await serializeBookingsWithFreshCreatorAvatars([updated]);
     return res.json({
       status: 'matched',
-      booking: serializeBookingWithActual(updated),
+      booking: serialized,
       candidate: selected,
       range,
       ...(syncWarning ? { sync_warning: syncWarning } : {}),

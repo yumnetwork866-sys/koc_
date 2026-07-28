@@ -51,6 +51,8 @@ const migrations = [
   require('./041_create_shop_video_catalog'),
   require('./042_improve_booking_evaluation_data'),
   require('./043_add_creator_performance_six_month_schedule'),
+  require('./044_add_channel_content_attribution_rules'),
+  require('./045_create_content_teams'),
 ];
 
 const createMigrationRunner = ({

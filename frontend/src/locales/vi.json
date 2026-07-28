@@ -96,7 +96,7 @@
     "offlineMessage": "Bạn đang ngoại tuyến. Hãy kết nối lại để tiếp tục trò chuyện.",
     "unreadCount": "{{count}} tin nhắn chưa đọc từ trợ lý",
     "closeHint": "Đóng gợi ý",
-    "quickPrompts": ["Tóm tắt hôm nay", "Đánh giá KOC theo Booking"]
+    "quickPrompts": ["Tóm tắt hôm nay", "Đánh giá KOC"]
   },
   "home": {
     "heroTitle": "Quản lý, đánh giá và báo cáo",
@@ -209,7 +209,7 @@
     "channelOverview": "Tổng quan",
     "affiliate": "Tiếp thị liên kết",
     "kocPerformance": "Hiệu quả KOC",
-    "shopAnalytics": "Phân tích cửa hàng",
+    "shopAnalytics": "Tổng quan",
     "videoAnalytics": "Phân tích video",
     "bookings": "Booking",
     "channels": "Kênh",
@@ -482,7 +482,7 @@
     "createEvaluation": "Tạo đánh giá booking",
     "createEvaluationMeta": "Chọn KOC từ Target Collaboration hoặc Creator Performance và nhập chi phí dự kiến.",
     "targetCreator": "Chọn hoặc tìm kiếm KOC",
-    "evaluate": "Lưu đánh giá",
+    "evaluate": "Lưu",
     "collaboration": "Target Collaboration",
     "creatorPerformance": "Creator Performance",
     "validUntil": "Hiệu lực đến",

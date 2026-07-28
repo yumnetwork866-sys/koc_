@@ -4,6 +4,7 @@ import { LoginRoute, RequireAdmin } from './guards';
 import {
   BookingManagement,
   ChannelManagement,
+  ChannelReport,
   ChatbotManagement,
   Dashboard,
   DataDeletionPage,
@@ -13,7 +14,6 @@ import {
   Login,
   PrivacyPage,
   PublicReport,
-  ReportFilter,
   ScheduleManagement,
   SellerAffiliatePanel,
   ShopAnalytics,
@@ -31,7 +31,7 @@ const componentMap = {
   ScheduleManagement,
   BookingManagement,
   ChannelManagement,
-  ReportFilter,
+  ChannelReport,
   ChatbotManagement,
   WhatsAppManagement,
 };

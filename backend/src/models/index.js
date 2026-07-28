@@ -65,6 +65,48 @@ const Role = sequelize.define('Role', {
   timestamps: false,
 });
 
+const ContentTeam = sequelize.define('ContentTeam', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true,
+  },
+  name: {
+    type: DataTypes.STRING(120),
+    allowNull: false,
+  },
+  legacy_key: {
+    type: DataTypes.STRING(80),
+    allowNull: true,
+  },
+  created_at: DataTypes.DATE,
+  updated_at: DataTypes.DATE,
+}, {
+  tableName: 'content_teams',
+  timestamps: false,
+});
+
+const UserContentAttribution = sequelize.define('UserContentAttribution', {
+  user_id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+  },
+  team_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  hashtags: {
+    type: DataTypes.JSONB,
+    allowNull: false,
+    defaultValue: [],
+  },
+  created_at: DataTypes.DATE,
+  updated_at: DataTypes.DATE,
+}, {
+  tableName: 'user_content_attributions',
+  timestamps: false,
+});
+
 const Booking = sequelize.define('Booking', {
   id: {
     type: DataTypes.INTEGER,
@@ -671,6 +713,11 @@ const TikTokChannel = sequelize.define('TikTokChannel', {
       isIn: [['oauth', 'import', 'crawler']],
     },
   },
+  content_attribution_rules: {
+    type: DataTypes.JSONB,
+    allowNull: false,
+    defaultValue: [],
+  },
 }, {
   tableName: 'tiktok_channels',
   timestamps: false,
@@ -1208,6 +1255,10 @@ Video.hasMany(VideoAssignment, { foreignKey: 'video_id', as: 'assignments' });
 VideoAssignment.belongsTo(Video, { foreignKey: 'video_id', as: 'video' });
 User.hasMany(VideoAssignment, { foreignKey: 'user_id', as: 'assignments' });
 VideoAssignment.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+User.hasOne(UserContentAttribution, { foreignKey: 'user_id', as: 'content_attribution' });
+UserContentAttribution.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+ContentTeam.hasMany(UserContentAttribution, { foreignKey: 'team_id', as: 'user_attributions' });
+UserContentAttribution.belongsTo(ContentTeam, { foreignKey: 'team_id', as: 'team' });
 
 Video.belongsToMany(Product, {
   through: VideoProduct,
@@ -1233,6 +1284,8 @@ ChatbotOrder.belongsTo(FacebookPage, { foreignKey: 'page_id', as: 'page' });
 module.exports = {
   User,
   Role,
+  ContentTeam,
+  UserContentAttribution,
   Booking,
   BookingVideo,
   BookingVideoPerformanceSnapshot,

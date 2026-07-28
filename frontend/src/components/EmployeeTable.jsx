@@ -1,7 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  createRole, createUser, deleteRole, deleteUser, fetchRoles, fetchUsers, updateRole, updateUser,
+  createContentTeam,
+  createRole,
+  createUser,
+  deleteContentTeam,
+  deleteRole,
+  deleteUser,
+  fetchContentTeams,
+  fetchRoles,
+  fetchUsers,
+  updateContentTeam,
+  updateRole,
+  updateUser,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 
@@ -10,6 +21,8 @@ const initialForm = {
   email: '',
   password: '',
   role: 'member',
+  content_team_id: '',
+  content_hashtags: '',
 };
 
 const fallbackRoles = [
@@ -34,16 +47,23 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const { t } = useI18n();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState(fallbackRoles);
+  const [teams, setTeams] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [editingUser, setEditingUser] = useState(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isRoleManagerOpen, setIsRoleManagerOpen] = useState(false);
+  const [isTeamManagerOpen, setIsTeamManagerOpen] = useState(false);
+  const [teamForm, setTeamForm] = useState({ name: '' });
+  const [editingTeamId, setEditingTeamId] = useState(null);
+  const [teamSaving, setTeamSaving] = useState(false);
+  const [teamError, setTeamError] = useState('');
   const [roleForm, setRoleForm] = useState({ key: '', label: '', description: '' });
   const [editingRoleKey, setEditingRoleKey] = useState(null);
   const [roleSaving, setRoleSaving] = useState(false);
   const [roleError, setRoleError] = useState('');
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [teamFilter, setTeamFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -52,9 +72,14 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const [error, setError] = useState('');
 
   const loadData = async (signal) => {
-    const [loadedUsers, loadedRoles] = await Promise.all([fetchUsers(signal), fetchRoles(signal)]);
+    const [loadedUsers, loadedRoles, loadedTeams] = await Promise.all([
+      fetchUsers(signal),
+      fetchRoles(signal),
+      fetchContentTeams(signal),
+    ]);
     setUsers(loadedUsers);
     setRoles(loadedRoles);
+    setTeams(loadedTeams);
   };
 
   const roleOptions = roles.map((role) => role.key);
@@ -101,6 +126,21 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   }, [isEditorOpen]);
 
   useEffect(() => {
+    if (!isRoleManagerOpen && !isTeamManagerOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      setIsRoleManagerOpen(false);
+      setIsTeamManagerOpen(false);
+      resetRoleForm();
+      resetTeamForm();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRoleManagerOpen, isTeamManagerOpen]);
+
+  useEffect(() => {
     const closeActions = (event) => {
       if (!event.target.closest('.employee-table__action-menu')) {
         setOpenActions({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
@@ -127,16 +167,26 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
 
     return rows.filter((user) => {
       const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+      const userTeamId = String(user.content_attribution?.team_id || '');
+      const matchesTeam = teamFilter === 'all'
+        || (teamFilter === 'unassigned' ? !userTeamId : userTeamId === teamFilter);
       const matchesQuery = !normalizedQuery
-        || [user.name, user.email]
+        || [
+          user.name,
+          user.email,
+          user.content_attribution?.team?.name,
+          ...(user.content_attribution?.hashtags || []),
+        ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalizedQuery));
 
-      return matchesRole && matchesQuery;
+      return matchesRole && matchesTeam && matchesQuery;
     });
-  }, [query, roleFilter, rows]);
+  }, [query, roleFilter, rows, teamFilter]);
 
-  const activeFilters = Number(Boolean(query.trim())) + Number(roleFilter !== 'all');
+  const activeFilters = Number(Boolean(query.trim()))
+    + Number(roleFilter !== 'all')
+    + Number(teamFilter !== 'all');
 
   const toggleActionsMenu = (userId, triggerElement) => {
     setOpenActions((current) => {
@@ -175,6 +225,53 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const openRoleManager = () => {
     resetRoleForm();
     setIsRoleManagerOpen(true);
+  };
+
+  const resetTeamForm = () => {
+    setEditingTeamId(null);
+    setTeamForm({ name: '' });
+    setTeamError('');
+  };
+
+  const openTeamManager = () => {
+    resetTeamForm();
+    setIsTeamManagerOpen(true);
+  };
+
+  const editTeam = (team) => {
+    setEditingTeamId(team.id);
+    setTeamForm({ name: team.name });
+    setTeamError('');
+  };
+
+  const handleTeamSubmit = async (event) => {
+    event.preventDefault();
+    try {
+      setTeamSaving(true);
+      setTeamError('');
+      const payload = { name: teamForm.name.trim() };
+      if (editingTeamId) await updateContentTeam(editingTeamId, payload);
+      else await createContentTeam(payload);
+      await loadData();
+      resetTeamForm();
+    } catch (err) {
+      setTeamError(err.message || 'Không lưu được team.');
+    } finally {
+      setTeamSaving(false);
+    }
+  };
+
+  const handleDeleteTeam = async (team) => {
+    if (!window.confirm(`Xóa team ${team.name}? Nhân viên trong team sẽ chuyển về Chưa phân team.`)) return;
+    try {
+      setTeamError('');
+      await deleteContentTeam(team.id);
+      await loadData();
+      if (teamFilter === String(team.id)) setTeamFilter('all');
+      resetTeamForm();
+    } catch (err) {
+      setTeamError(err.message || 'Không xóa được team.');
+    }
   };
 
   const editRole = (role) => {
@@ -221,6 +318,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       email: user.email || '',
       password: '',
       role: user.role || 'member',
+      content_team_id: user.content_attribution?.team_id || '',
+      content_hashtags: (user.content_attribution?.hashtags || []).join(', '),
     });
     setIsEditorOpen(true);
   };
@@ -251,6 +350,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         name: form.name.trim(),
         email: form.email.trim(),
         role: form.role,
+        content_team_id: form.content_team_id || null,
+        content_hashtags: form.content_hashtags,
       };
 
       if (form.password.trim()) {
@@ -322,6 +423,9 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         </div>
 
         <div className="employee-table__hero-actions">
+          <button className="button button--ghost" type="button" onClick={openTeamManager}>
+            Quản lý team
+          </button>
           <button className="button button--ghost" type="button" onClick={openRoleManager}>
             {t('users.manageRoles')}
           </button>
@@ -385,6 +489,20 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               ))}
             </select>
           </div>
+          <div className="employee-table__team-filter employee-table__select-wrap">
+            <label className="sr-only" htmlFor="user-team-filter">Lọc theo team</label>
+            <select
+              id="user-team-filter"
+              value={teamFilter}
+              onChange={(event) => setTeamFilter(event.target.value)}
+            >
+              <option value="all">Tất cả team</option>
+              <option value="unassigned">Chưa phân team</option>
+              {teams.map((team) => (
+                <option key={team.id} value={String(team.id)}>{team.name}</option>
+              ))}
+            </select>
+          </div>
           {activeFilters ? (
             <button
               className="button button--ghost button--small"
@@ -392,6 +510,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               onClick={() => {
                 setQuery('');
                 setRoleFilter('all');
+                setTeamFilter('all');
               }}
               disabled={!activeFilters}
             >
@@ -406,13 +525,15 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               <tr>
                 <th>{t('users.account')}</th>
                 <th>{t('users.role')}</th>
+                <th>Team</th>
+                <th>Hashtag</th>
                 <th className="cell-actions">{t('users.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={3}>
+                  <td className="table-state-cell" colSpan={5}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('users.loading')}</div>
@@ -445,6 +566,22 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                           <option key={role} value={role}>{getRoleLabel(role)}</option>
                         ))}
                       </select>
+                    </td>
+                    <td>
+                      <span className={`employee-table__team-badge${user.content_attribution?.team ? '' : ' employee-table__team-badge--empty'}`}>
+                        {user.content_attribution?.team?.name || 'Chưa phân team'}
+                      </span>
+                    </td>
+                    <td>
+                      {(user.content_attribution?.hashtags || []).length
+                        ? (
+                          <span className="employee-table__hashtag-list">
+                            {user.content_attribution.hashtags.map((hashtag) => (
+                              <span className="employee-table__hashtag-chip" key={hashtag}>{hashtag}</span>
+                            ))}
+                          </span>
+                        )
+                        : <span className="employee-table__empty-value">Chưa gắn</span>}
                     </td>
                     <td className="cell-actions">
                       <div className="action-menu employee-table__action-menu">
@@ -500,7 +637,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                 ))
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={3}>
+                  <td className="table-state-cell" colSpan={5}>
                     <div className="empty-state empty-state--compact table-empty-state">
                       <div>{t('users.noMatch')}</div>
                     </div>
@@ -549,6 +686,10 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
             ) : null}
 
             <form className="employee-table__modal-form" onSubmit={handleSubmit}>
+              <div className="employee-table__form-section-title">
+                <strong>Thông tin tài khoản</strong>
+                <span>Thông tin đăng nhập và quyền truy cập hệ thống.</span>
+              </div>
               <div className="field">
                 <label htmlFor="name">{t('users.fullName')}</label>
                 <input id="name" name="name" value={form.name} onChange={handleChange} required placeholder="Nguyễn Văn A" />
@@ -586,6 +727,28 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                   ))}
                 </select>
               </div>
+              <div className="employee-table__form-section-title">
+                <strong>Phân loại báo cáo</strong>
+                <span>Gắn team và hashtag xuất hiện trong tiêu đề video của nhân viên.</span>
+              </div>
+              <div className="field">
+                <label htmlFor="content_team_id">Team</label>
+                <select id="content_team_id" name="content_team_id" value={form.content_team_id} onChange={handleChange}>
+                  <option value="">Chưa phân team</option>
+                  {teams.map((team) => <option value={team.id} key={team.id}>{team.name}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="content_hashtags">Hashtag nhận diện</label>
+                <input
+                  id="content_hashtags"
+                  name="content_hashtags"
+                  value={form.content_hashtags}
+                  onChange={handleChange}
+                  placeholder="#tennhanvien, #nickname"
+                />
+                <p className="employee-table__field-hint">Có thể nhập nhiều hashtag, phân cách bằng dấu phẩy.</p>
+              </div>
               <div className="actions employee-table__modal-actions">
                 <button className="button button--ghost" type="button" onClick={closeEditor} disabled={saving}>
                   {t('users.cancel')}
@@ -598,6 +761,68 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           </div>
         </div>
       ) : null}
+
+      {isTeamManagerOpen ? createPortal((
+        <div className="modal-backdrop employee-table__role-backdrop" role="presentation" onClick={(event) => {
+          if (event.target === event.currentTarget) setIsTeamManagerOpen(false);
+        }}>
+          <div className="modal-card employee-table__role-modal" role="dialog" aria-modal="true" aria-labelledby="team-manager-title">
+            <div className="employee-table__modal-header employee-table__modal-header--roles">
+              <div>
+                <h2 id="team-manager-title" className="section-card__title">Quản lý team</h2>
+                <p className="section-card__meta">Team dùng để nhóm nhân viên trên báo cáo hiệu suất.</p>
+              </div>
+              <button className="employee-table__modal-close" type="button" onClick={() => setIsTeamManagerOpen(false)} aria-label={t('users.close')}>×</button>
+            </div>
+
+            {teamError ? <div className="employee-table__modal-error empty-state empty-state--compact">{teamError}</div> : null}
+
+            <div className="employee-table__role-manager">
+              <section className="employee-table__role-list-panel">
+                <div className="employee-table__role-panel-heading">
+                  <div><strong>Danh sách team</strong><span>{teams.length} team</span></div>
+                  <button className="button button--ghost button--small" type="button" onClick={resetTeamForm}>Thêm team</button>
+                </div>
+                <div className="employee-table__role-list">
+                  {teams.length ? teams.map((team) => (
+                    <div className={`employee-table__role-item${editingTeamId === team.id ? ' is-active' : ''}`} key={team.id}>
+                      <button type="button" className="employee-table__role-edit" onClick={() => editTeam(team)}>
+                        <span><span className="employee-table__role-name"><strong>{team.name}</strong></span></span>
+                        <span>{team.user_count || 0} nhân viên</span>
+                      </button>
+                      <button className="button button--ghost button--small button--danger" type="button" onClick={() => handleDeleteTeam(team)}>Xóa</button>
+                    </div>
+                  )) : <div className="empty-state empty-state--compact">Chưa có team.</div>}
+                </div>
+              </section>
+
+              <form className="employee-table__role-form" onSubmit={handleTeamSubmit}>
+                <div className="employee-table__manager-form-heading">
+                  <strong>{editingTeamId ? 'Sửa tên team' : 'Tạo team mới'}</strong>
+                  <span>{editingTeamId ? 'Tên mới sẽ được cập nhật trên báo cáo.' : 'Sau khi tạo, bạn có thể gắn nhân viên vào team.'}</span>
+                </div>
+                <div className="field">
+                  <label htmlFor="content-team-name">Tên team</label>
+                  <input
+                    id="content-team-name"
+                    value={teamForm.name}
+                    required
+                    maxLength={120}
+                    onChange={(event) => setTeamForm({ name: event.target.value })}
+                    placeholder="Tên team"
+                  />
+                </div>
+                <div className="actions">
+                  {editingTeamId ? <button className="button button--ghost" type="button" onClick={resetTeamForm}>Hủy sửa</button> : null}
+                  <button className="button" type="submit" disabled={teamSaving}>
+                    {teamSaving ? 'Đang lưu…' : editingTeamId ? 'Cập nhật' : 'Thêm team'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      ), document.body) : null}
 
       {isRoleManagerOpen ? createPortal((
         <div className="modal-backdrop employee-table__role-backdrop" role="presentation" onClick={(event) => {

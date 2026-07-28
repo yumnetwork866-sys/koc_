@@ -1,4 +1,10 @@
-const { User, Role } = require('../models');
+const {
+  User,
+  Role,
+  ContentTeam,
+  UserContentAttribution,
+  sequelize,
+} = require('../models');
 const { hashPassword } = require('../lib/password');
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -10,10 +16,54 @@ const serializeUser = (user) => {
   return safeUser;
 };
 
+const userInclude = [{
+  model: UserContentAttribution,
+  as: 'content_attribution',
+  required: false,
+  include: [{
+    model: ContentTeam,
+    as: 'team',
+    required: false,
+    attributes: ['id', 'name'],
+  }],
+}];
+
+const normalizeHashtags = (value) => [...new Set(
+  (Array.isArray(value) ? value : String(value || '').split(/[\s,]+/))
+    .map((hashtag) => String(hashtag || '').trim().toLocaleLowerCase('en'))
+    .filter(Boolean)
+    .map((hashtag) => hashtag.startsWith('#') ? hashtag : `#${hashtag}`),
+)].slice(0, 20);
+
+const normalizeTeamId = (value) => {
+  if (value === null || value === '' || value === undefined) return null;
+  const teamId = Number(value);
+  return Number.isInteger(teamId) && teamId > 0 ? teamId : NaN;
+};
+
+const validateTeamId = async (value) => {
+  const teamId = normalizeTeamId(value);
+  if (Number.isNaN(teamId)) throw new Error('Invalid content team.');
+  if (teamId && !(await ContentTeam.findByPk(teamId))) throw new Error('Content team not found.');
+  return teamId;
+};
+
+const saveContentAttribution = async (userId, body, transaction) => {
+  const teamId = await validateTeamId(body.content_team_id);
+  const hashtags = normalizeHashtags(body.content_hashtags);
+  await UserContentAttribution.upsert({
+    user_id: userId,
+    team_id: teamId,
+    hashtags,
+    updated_at: new Date(),
+  }, { transaction });
+};
+
 // Get all users
 const getUsers = async (req, res) => {
   try {
     const users = await User.findAll({
+      include: userInclude,
       order: [['id', 'ASC']],
     });
     res.json(users);
@@ -25,7 +75,7 @@ const getUsers = async (req, res) => {
 // Get user by ID
 const getUserById = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findByPk(req.params.id, { include: userInclude });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -48,13 +98,23 @@ const createUser = async (req, res) => {
       return res.status(400).json({ message: 'Invalid role' });
     }
 
-    const user = await User.create({
-      name,
-      email,
-      role,
-      password_hash: await hashPassword(password),
+    const user = await sequelize.transaction(async (transaction) => {
+      const createdUser = await User.create({
+        name,
+        email,
+        role,
+        password_hash: await hashPassword(password),
+      }, { transaction });
+      if (
+        Object.prototype.hasOwnProperty.call(req.body, 'content_team_id')
+        || Object.prototype.hasOwnProperty.call(req.body, 'content_hashtags')
+      ) {
+        await saveContentAttribution(createdUser.id, req.body, transaction);
+      }
+      return createdUser;
     });
-    res.status(201).json(serializeUser(user));
+    const createdUser = await User.findByPk(user.id, { include: userInclude });
+    res.status(201).json(serializeUser(createdUser));
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -96,20 +156,34 @@ const updateUser = async (req, res) => {
       payload.password_hash = await hashPassword(req.body.password);
     }
 
-    if (!Object.keys(payload).length) {
+    const hasAttributionUpdate = Object.prototype.hasOwnProperty.call(req.body, 'content_team_id')
+      || Object.prototype.hasOwnProperty.call(req.body, 'content_hashtags');
+
+    if (!Object.keys(payload).length && !hasAttributionUpdate) {
       return res.status(400).json({ message: 'No update fields provided' });
     }
 
-    const [updated] = await User.update(payload, {
-      where: { id: req.params.id },
-      validate: true,
+    const user = await User.findByPk(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    await sequelize.transaction(async (transaction) => {
+      if (Object.keys(payload).length) {
+        await user.update(payload, { validate: true, transaction });
+      }
+      if (hasAttributionUpdate) {
+        const currentAttribution = await UserContentAttribution.findByPk(user.id, { transaction });
+        await saveContentAttribution(user.id, {
+          content_team_id: Object.prototype.hasOwnProperty.call(req.body, 'content_team_id')
+            ? req.body.content_team_id
+            : currentAttribution?.team_id,
+          content_hashtags: Object.prototype.hasOwnProperty.call(req.body, 'content_hashtags')
+            ? req.body.content_hashtags
+            : currentAttribution?.hashtags || [],
+        }, transaction);
+      }
     });
-    if (updated) {
-      const updatedUser = await User.findByPk(req.params.id);
-      res.json(serializeUser(updatedUser));
-    } else {
-      res.status(404).json({ message: 'User not found' });
-    }
+    const updatedUser = await User.findByPk(req.params.id, { include: userInclude });
+    res.json(serializeUser(updatedUser));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -67,6 +67,10 @@ export function fetchRoles(signal) {
   return apiRequest('/roles', { signal });
 }
 
+export function fetchContentTeams(signal) {
+  return apiRequest('/content-teams', { signal });
+}
+
 export function fetchBookings(signal) {
   return apiRequest('/bookings', { signal });
 }
@@ -353,6 +357,26 @@ export function createUser(payload) {
 
 export function createRole(payload) {
   return apiRequest('/roles', { method: 'POST', body: payload });
+}
+
+export function createContentTeam(payload) {
+  return apiRequest('/content-teams', {
+    method: 'POST',
+    body: payload,
+  });
+}
+
+export function updateContentTeam(teamId, payload) {
+  return apiRequest(`/content-teams/${encodeURIComponent(teamId)}`, {
+    method: 'PUT',
+    body: payload,
+  });
+}
+
+export function deleteContentTeam(teamId) {
+  return apiRequest(`/content-teams/${encodeURIComponent(teamId)}`, {
+    method: 'DELETE',
+  });
 }
 
 export function updateRole(roleKey, payload) {

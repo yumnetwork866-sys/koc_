@@ -37,6 +37,53 @@ const TIKTOK_VIDEO_SYNC_LIMIT = Number(process.env.TIKTOK_VIDEO_SYNC_LIMIT || 20
 const TIKTOK_VIDEO_SYNC_MAX_PAGES = Number(process.env.TIKTOK_VIDEO_SYNC_MAX_PAGES || 10);
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
 const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000;
+const LEGACY_CONTENT_GROUP_NAMES = {
+  CONTENT_MKT: 'Team Content MKT',
+  CONTENT_AI: 'Content AI',
+  NEWS: 'Team Tin tức',
+};
+
+const normalizeContentAttributionRules = (rules) => {
+  if (!Array.isArray(rules)) throw new Error('Content attribution rules must be an array.');
+  return rules.slice(0, 100).map((rule, index) => {
+    if (rule?.type === 'settings') {
+      return {
+        id: 'content-attribution-settings',
+        type: 'settings',
+        group: 'SETTINGS',
+        team_name: '',
+        user_id: null,
+        member: '',
+        hashtags: [],
+      };
+    }
+    const group = String(rule?.group || '').trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{1,80}$/.test(group)) throw new Error(`Invalid content group at rule ${index + 1}.`);
+    const userId = Number.isInteger(Number(rule?.user_id)) && Number(rule.user_id) > 0
+      ? Number(rule.user_id)
+      : null;
+    const type = rule?.type === 'team' || (!rule?.type && !userId) ? 'team' : 'employee';
+    const normalizedHashtags = [...new Set((Array.isArray(rule?.hashtags) ? rule.hashtags : [])
+      .map((value) => String(value || '').trim().toLocaleLowerCase('en'))
+      .filter(Boolean)
+      .map((value) => value.startsWith('#') ? value : `#${value}`))]
+      .slice(0, 20);
+    if (type === 'employee' && !normalizedHashtags.length) {
+      throw new Error(`At least one hashtag is required at rule ${index + 1}.`);
+    }
+    return {
+      id: String(rule?.id || crypto.randomUUID()),
+      type,
+      group,
+      team_name: type === 'team'
+        ? String(rule?.team_name || LEGACY_CONTENT_GROUP_NAMES[group] || group).trim().slice(0, 120)
+        : '',
+      user_id: type === 'employee' ? userId : null,
+      member: type === 'employee' ? String(rule?.member || '').trim().slice(0, 120) : '',
+      hashtags: type === 'employee' ? normalizedHashtags : [],
+    };
+  });
+};
 
 const expiresAtFromSeconds = (seconds) => {
   const expiresIn = Number(seconds);
@@ -845,7 +892,11 @@ const updateChannel = async (req, res) => {
         if (conflict) return res.status(409).json({ message: 'This KOC is already linked to another TikTok Channel.' });
       }
     }
-    const [updated] = await TikTokChannel.update({ ...req.body, creator_id: creatorId }, {
+    const payload = { ...req.body, creator_id: creatorId };
+    if (Object.prototype.hasOwnProperty.call(req.body, 'content_attribution_rules')) {
+      payload.content_attribution_rules = normalizeContentAttributionRules(req.body.content_attribution_rules);
+    }
+    const [updated] = await TikTokChannel.update(payload, {
       where: { id: req.params.id },
     });
     if (!updated) {

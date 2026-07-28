@@ -3,7 +3,13 @@ const test = require('node:test');
 
 const { mockModule } = require('./helpers/mockModule');
 
-const loadController = (t, models, shopService = {}, bookingVideoService = {}) => {
+const loadController = (
+  t,
+  models,
+  shopService = {},
+  bookingVideoService = {},
+  creatorProfileService = {},
+) => {
   const controllerPath = require.resolve('../src/controllers/bookingController');
   const restores = [
     mockModule(require.resolve('../src/models'), models),
@@ -14,6 +20,8 @@ const loadController = (t, models, shopService = {}, bookingVideoService = {}) =
         nickname: creator.nickname || null,
         avatar_url: creator.avatar_url || null,
       }),
+      loadCreatorProfiles: async () => new Map(),
+      ...creatorProfileService,
     }),
     mockModule(require.resolve('../src/services/tiktokPartnerService'), {}),
     mockModule(require.resolve('../src/services/tiktokShopService'), shopService),
@@ -35,6 +43,58 @@ const loadController = (t, models, shopService = {}, bookingVideoService = {}) =
   });
   return require(controllerPath);
 };
+
+test('booking list uses the latest creator profile avatar instead of an expired snapshot URL', async (t) => {
+  const bookingRows = [
+    {
+      id: 19,
+      target_shop_id: 4,
+      creator_open_id: 'creator-open-19',
+      creator_username: 'fresh.creator',
+      creator_avatar_url: 'https://example.test/expired-avatar.webp',
+      evaluation_snapshot: {},
+    },
+    {
+      id: 18,
+      target_shop_id: 4,
+      creator_open_id: null,
+      creator_username: 'snapshot.creator',
+      creator_avatar_url: 'https://example.test/snapshot-avatar.webp',
+      evaluation_snapshot: {},
+    },
+  ];
+  const { getBookings } = loadController(
+    t,
+    { Booking: { findAll: async () => bookingRows } },
+    {},
+    {},
+    {
+      loadCreatorProfiles: async (shopId, identities) => {
+        assert.equal(shopId, 4);
+        assert.deepEqual(identities, [
+          { creator_open_id: 'creator-open-19', username: 'fresh.creator' },
+          { creator_open_id: null, username: 'snapshot.creator' },
+        ]);
+        return new Map([[
+          'open:creator-open-19',
+          { avatar_url: 'https://example.test/fresh-avatar.webp' },
+        ]]);
+      },
+    },
+  );
+  let response;
+
+  await getBookings(
+    {},
+    {
+      json: (value) => { response = value; },
+      status: () => ({ json: () => {} }),
+    },
+  );
+
+  assert.equal(response[0].creator_avatar_url, 'https://example.test/fresh-avatar.webp');
+  assert.equal(response[1].creator_avatar_url, 'https://example.test/snapshot-avatar.webp');
+});
 
 test('KOC search includes Creator Performance-only creators and avoids duplicates', async (t) => {
   const performanceRows = [

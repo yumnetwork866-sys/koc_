@@ -190,6 +190,7 @@ const Header = () => {
     if (to === '/dashboard') {
       return [
         '/dashboard',
+        '/channel-reports',
         '/manage/channels',
         '/videos',
         '/manage/affiliate',

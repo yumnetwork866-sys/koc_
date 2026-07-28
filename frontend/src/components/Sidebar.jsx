@@ -91,6 +91,7 @@ const sidebarIcons = {
 
 const routeIconMap = {
   '/dashboard': 'dashboard',
+  '/channel-reports': 'reports',
   '/manage/affiliate': 'analytics',
   '/manage/users': 'users',
   '/manage/shops': 'shop',
