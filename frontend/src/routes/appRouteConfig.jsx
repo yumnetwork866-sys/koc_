@@ -18,7 +18,6 @@ import {
   SellerAffiliatePanel,
   ShopAnalytics,
   TermsPage,
-  VideoTable,
   WhatsAppManagement,
 } from './lazyRouteComponents';
 import { protectedRouteCards, redirectRoutes } from './navigation';
@@ -32,7 +31,6 @@ const componentMap = {
   ScheduleManagement,
   BookingManagement,
   ChannelManagement,
-  VideoTable,
   ReportFilter,
   ChatbotManagement,
   WhatsAppManagement,

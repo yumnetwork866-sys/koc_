@@ -26,9 +26,8 @@ export const sidebarSections = [
         labelKey: 'navigation.tiktokChannel',
         icon: 'channels',
         children: [
-          { to: '/dashboard', labelKey: 'navigation.dashboard' },
+          { to: '/dashboard', labelKey: 'navigation.channelOverview' },
           { to: '/manage/channels', labelKey: 'navigation.channels' },
-          { to: '/videos', labelKey: 'navigation.videos' },
         ],
       },
     ],
@@ -133,14 +132,6 @@ export const protectedRouteCards = [
     },
   },
   {
-    path: '/videos',
-    component: 'VideoTable',
-    props: {
-      heroTitle: 'Video library',
-      heroSubtitle: '',
-    },
-  },
-  {
     path: '/reports',
     component: 'ReportFilter',
     props: {
@@ -200,6 +191,7 @@ export const protectedRouteCards = [
 export const redirectRoutes = [
   { path: '/manage', to: '/manage/users' },
   { path: '/manage/koc', to: '/manage/koc-performance' },
+  { path: '/videos', to: '/dashboard#videos' },
   { path: '/chatbot', to: '/chatbot/dashboard' },
   { path: '/whatsapp', to: '/whatsapp/dashboard' },
   { path: '/chatbot/rag', to: '/chatbot/chat-setting' },

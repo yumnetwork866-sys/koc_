@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { fetchChannels, fetchVideos } from '../lib/api';
 import { useI18n } from '../lib/language';
+import VideoTable, { ChannelPicker } from './VideoTable';
 
 const chartTick = { fill: 'var(--color-muted)', fontSize: 12 };
 
@@ -33,7 +34,7 @@ const Dashboard = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const [videos, setVideos] = useState([]);
   const [channels, setChannels] = useState([]);
-  const [selectedChannelId, setSelectedChannelId] = useState('all');
+  const [selectedChannelId, setSelectedChannelId] = useState('');
   const [chartMetric, setChartMetric] = useState('views');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -68,6 +69,14 @@ const Dashboard = ({ heroTitle }) => {
 
     return () => controller.abort();
   }, [t]);
+
+  useEffect(() => {
+    setSelectedChannelId((current) => (
+      channels.some((channel) => String(channel.id) === current)
+        ? current
+        : String(channels[0]?.id || '')
+    ));
+  }, [channels]);
 
   const filteredVideos = useMemo(() => {
     if (selectedChannelId === 'all') return videos;
@@ -172,14 +181,13 @@ const Dashboard = ({ heroTitle }) => {
           <div className="dashboard-chart-filters">
             <div className="field dashboard-channel-filter">
               <label htmlFor="dashboard-channel">{t('dashboard.channel')}</label>
-              <select id="dashboard-channel" value={selectedChannelId} onChange={(event) => setSelectedChannelId(event.target.value)}>
-                <option value="all">{t('dashboard.allChannels')}</option>
-                {channels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>
-                    {channel.display_name || channel.username || `${t('dashboard.channel')} #${channel.id}`}
-                  </option>
-                ))}
-              </select>
+              <ChannelPicker
+                id="dashboard-channel"
+                channels={channels}
+                value={selectedChannelId}
+                onChange={setSelectedChannelId}
+                disabled={loading}
+              />
             </div>
             <div className="field dashboard-metric-filter">
               <label htmlFor="dashboard-metric">{t('dashboard.metric')}</label>
@@ -219,6 +227,17 @@ const Dashboard = ({ heroTitle }) => {
         )}
       </section>
 
+      <VideoTable
+        embedded
+        data={{
+          videos,
+          channels,
+          loading,
+          error,
+        }}
+        selectedChannelId={selectedChannelId}
+        onSelectedChannelChange={setSelectedChannelId}
+      />
     </div>
   );
 };

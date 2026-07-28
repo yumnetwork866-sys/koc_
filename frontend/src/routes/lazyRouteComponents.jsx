@@ -13,7 +13,6 @@ export const HomePage = lazy(() => import('../components/HomePage'));
 export const Login = lazy(() => import('../components/Login'));
 export const ReportFilter = lazy(() => import('../components/ReportFilter'));
 export const PublicReport = lazy(() => import('../components/PublicReport'));
-export const VideoTable = lazy(() => import('../components/VideoTable'));
 export const WhatsAppManagement = lazy(() => import('../components/WhatsAppManagement'));
 export const TermsPage = lazy(() => import('../pages/legal/TermsPage'));
 export const PrivacyPage = lazy(() => import('../pages/legal/PrivacyPage'));

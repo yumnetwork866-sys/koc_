@@ -48,6 +48,105 @@ const ChannelAvatar = ({ channel, className, fallbackClassName, alt }) => {
   );
 };
 
+export const ChannelPicker = ({
+  id,
+  channels,
+  value,
+  onChange,
+  includeAll = false,
+  allLabel = '',
+  disabled = false,
+}) => {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const selectedChannel = channels.find((channel) => String(channel.id) === String(value)) || null;
+  const isAll = includeAll && value === 'all';
+  const selectedLabel = isAll
+    ? allLabel
+    : selectedChannel?.display_name || selectedChannel?.username || t('videoLibrary.noChannels');
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (!event.target.closest('.channel-picker')) setOpen(false);
+    };
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [open]);
+
+  const options = includeAll
+    ? [{ id: 'all', display_name: allLabel, isAll: true }, ...channels]
+    : channels;
+
+  return (
+    <div className="channel-picker">
+      <button
+        id={id}
+        className="channel-picker__trigger"
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled || (!channels.length && !includeAll)}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="channel-picker__current">
+          {isAll ? (
+            <span className="channel-picker__avatar channel-picker__avatar--empty" aria-hidden="true">ALL</span>
+          ) : (
+            <ChannelAvatar
+              channel={selectedChannel}
+              className="channel-picker__avatar"
+              fallbackClassName="channel-picker__avatar--empty"
+              alt={selectedLabel}
+            />
+          )}
+          <span className="channel-picker__label">{selectedLabel}</span>
+        </span>
+        <span className={`sidebar__chevron channel-picker__chevron ${open ? 'sidebar__chevron--open' : ''}`} aria-hidden="true" />
+      </button>
+
+      {open ? (
+        <div className="channel-picker__menu" role="listbox">
+          {options.map((channel) => {
+            const isActive = String(channel.id) === String(value);
+            const label = channel.display_name || channel.username || channel.id;
+            return (
+              <button
+                key={channel.id}
+                className={`channel-picker__option ${isActive ? 'channel-picker__option--active' : ''}`}
+                type="button"
+                role="option"
+                aria-selected={isActive}
+                onClick={() => {
+                  onChange(String(channel.id));
+                  setOpen(false);
+                }}
+              >
+                {channel.isAll ? (
+                  <span className="channel-picker__option-avatar channel-picker__option-avatar--empty" aria-hidden="true">ALL</span>
+                ) : (
+                  <ChannelAvatar
+                    channel={channel}
+                    className="channel-picker__option-avatar"
+                    fallbackClassName="channel-picker__option-avatar--empty"
+                    alt={label}
+                  />
+                )}
+                <span className="channel-picker__option-meta">
+                  <span className="channel-picker__option-title">{label}</span>
+                  {!channel.isAll && channel.username ? (
+                    <span className="channel-picker__option-subtitle">@{channel.username}</span>
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 const getVideoHashtags = (video) => {
   const provided = Array.isArray(video.hashtags)
     ? video.hashtags
@@ -61,16 +160,29 @@ const getVideoHashtags = (video) => {
     .map((tag) => tag.startsWith('#') ? tag : `#${tag}`))];
 };
 
-const VideoTable = ({ heroTitle }) => {
+const VideoTable = ({
+  heroTitle,
+  embedded = false,
+  data = null,
+  selectedChannelId: controlledChannelId,
+  onSelectedChannelChange,
+}) => {
   const { t, language } = useI18n();
   const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
-  const [videos, setVideos] = useState([]);
-  const [channels, setChannels] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [selectedChannelId, setSelectedChannelId] = useState('');
-  const [isChannelDropdownOpen, setIsChannelDropdownOpen] = useState(false);
+  const [localVideos, setLocalVideos] = useState([]);
+  const [localChannels, setLocalChannels] = useState([]);
+  const [localLoading, setLocalLoading] = useState(true);
+  const [localError, setLocalError] = useState('');
+  const [localSelectedChannelId, setLocalSelectedChannelId] = useState('');
   const [page, setPage] = useState(1);
+  const usesProvidedData = Array.isArray(data?.videos) && Array.isArray(data?.channels);
+  const videos = usesProvidedData ? data.videos : localVideos;
+  const channels = usesProvidedData ? data.channels : localChannels;
+  const loading = usesProvidedData ? Boolean(data.loading) : localLoading;
+  const error = usesProvidedData ? String(data.error || '') : localError;
+  const isChannelControlled = controlledChannelId !== undefined;
+  const selectedChannelId = isChannelControlled ? String(controlledChannelId) : localSelectedChannelId;
+  const changeSelectedChannel = isChannelControlled ? onSelectedChannelChange : setLocalSelectedChannelId;
 
   const loadData = async (signal) => {
     const [loadedVideos, loadedChannels] = await Promise.all([
@@ -78,30 +190,26 @@ const VideoTable = ({ heroTitle }) => {
       fetchChannels(signal),
     ]);
 
-    setVideos(loadedVideos);
-    setChannels(loadedChannels);
-    setSelectedChannelId((current) => (
-      loadedChannels.some((channel) => String(channel.id) === current)
-        ? current
-        : String(loadedChannels[0]?.id || '')
-    ));
+    setLocalVideos(loadedVideos);
+    setLocalChannels(loadedChannels);
   };
 
   useEffect(() => {
+    if (usesProvidedData) return undefined;
     const controller = new AbortController();
 
     const load = async () => {
       try {
-        setLoading(true);
-        setError('');
+        setLocalLoading(true);
+        setLocalError('');
         await loadData(controller.signal);
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setError(err.message || t('videoLibrary.loadError'));
+          setLocalError(err.message || t('videoLibrary.loadError'));
         }
       } finally {
         if (!controller.signal.aborted) {
-          setLoading(false);
+          setLocalLoading(false);
         }
       }
     };
@@ -109,20 +217,19 @@ const VideoTable = ({ heroTitle }) => {
     load();
 
     return () => controller.abort();
-  }, [t]);
+  }, [t, usesProvidedData]);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (!event.target.closest('.channel-picker')) {
-        setIsChannelDropdownOpen(false);
-      }
-    };
-
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, []);
+    if (isChannelControlled) return;
+    setLocalSelectedChannelId((current) => (
+      channels.some((channel) => String(channel.id) === current)
+        ? current
+        : String(channels[0]?.id || '')
+    ));
+  }, [channels, isChannelControlled]);
 
   const filteredVideos = useMemo(() => {
+    if (selectedChannelId === 'all') return videos;
     if (!selectedChannelId) return [];
     return videos.filter((video) => String(video.channel_id) === selectedChannelId);
   }, [videos, selectedChannelId]);
@@ -147,17 +254,9 @@ const VideoTable = ({ heroTitle }) => {
     setPage(1);
   }, [selectedChannelId]);
 
-  const selectedChannel = useMemo(() => {
-    return channels.find((channel) => String(channel.id) === selectedChannelId) || null;
-  }, [channels, selectedChannelId]);
-
-  const selectedChannelLabel = selectedChannel
-    ? selectedChannel.display_name || selectedChannel.username || t('videoLibrary.channel')
-    : t('videoLibrary.noChannels');
-
   return (
-    <div className="page">
-      <section className="page__hero">
+    <div className={embedded ? 'dashboard-video-library' : 'page'} id={embedded ? 'videos' : undefined}>
+      {!embedded ? <section className="page__hero">
         <h1 className="page__title">{t('videoLibrary.heroTitle') || heroTitle}</h1>
         <div className="page__stats page__stats--four">
           <article className="stat-card">
@@ -177,77 +276,34 @@ const VideoTable = ({ heroTitle }) => {
             <p className="stat-card__value">{formatNumber(filteredTotals.shares)}</p>
           </article>
         </div>
-      </section>
+      </section> : null}
 
-      {error ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
+      {error && !embedded ? <section className="section-card empty-state empty-state--compact">{error}</section> : null}
 
       <section className="section-card">
         <div className="section-card__header">
+          {embedded ? (
+            <div>
+              <h2 className="section-card__title">{t('videoLibrary.heroTitle') || heroTitle}</h2>
+            </div>
+          ) : null}
           <div className="chip-row">
             <span className="chip chip--blue">{t('videoLibrary.channels', { count: channels.length })}</span>
           </div>
         </div>
 
-        <div className="filter-panel filter-panel--compact">
+        {!embedded ? <div className="filter-panel filter-panel--compact">
           <div className="field">
             <label htmlFor="channel-filter">{t('videoLibrary.channel')}</label>
-            <div className="channel-picker">
-              <button
-                className="channel-picker__trigger"
-                type="button"
-                aria-haspopup="listbox"
-                aria-expanded={isChannelDropdownOpen}
-                disabled={!channels.length}
-                onClick={() => setIsChannelDropdownOpen((current) => !current)}
-              >
-                <span className="channel-picker__current">
-                  <ChannelAvatar
-                    channel={selectedChannel}
-                    className="channel-picker__avatar"
-                    fallbackClassName="channel-picker__avatar--empty"
-                    alt={selectedChannelLabel}
-                  />
-                  <span className="channel-picker__label">{selectedChannelLabel}</span>
-                </span>
-                <span className={`sidebar__chevron channel-picker__chevron ${isChannelDropdownOpen ? 'sidebar__chevron--open' : ''}`} aria-hidden="true" />
-              </button>
-
-              {isChannelDropdownOpen ? (
-                <div className="channel-picker__menu" role="listbox">
-                  {channels.map((channel) => {
-                    const isActive = String(channel.id) === selectedChannelId;
-                    return (
-                      <button
-                        key={channel.id}
-                        className={`channel-picker__option ${isActive ? 'channel-picker__option--active' : ''}`}
-                        type="button"
-                        role="option"
-                        aria-selected={isActive}
-                        onClick={() => {
-                          setSelectedChannelId(String(channel.id));
-                          setIsChannelDropdownOpen(false);
-                        }}
-                      >
-                        <ChannelAvatar
-                          channel={channel}
-                          className="channel-picker__option-avatar"
-                          fallbackClassName="channel-picker__option-avatar--empty"
-                          alt={channel.display_name || channel.username || t('videoLibrary.channelAvatar')}
-                        />
-                        <span className="channel-picker__option-meta">
-                          <span className="channel-picker__option-title">{channel.display_name || channel.username || channel.id}</span>
-                          {channel.username ? (
-                            <span className="channel-picker__option-subtitle">@{channel.username}</span>
-                          ) : null}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
+            <ChannelPicker
+              id="channel-filter"
+              channels={channels}
+              value={selectedChannelId}
+              onChange={changeSelectedChannel}
+              disabled={!channels.length}
+            />
           </div>
-        </div>
+        </div> : null}
 
         <div className="table-wrap">
           <table className="data-table">
