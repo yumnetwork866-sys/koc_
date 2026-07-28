@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const { Op, QueryTypes } = require('sequelize');
 const {
-  sequelize, TikTokShopAuthorization, TikTokShop, TikTokShopAnalyticsSnapshot,
+  sequelize, TikTokChannel, TikTokShopAuthorization, TikTokShop, TikTokShopAnalyticsSnapshot,
   TikTokCreatorPerformanceExport, TikTokCreatorPerformanceSnapshot,
   TikTokBasePerformanceSnapshot, TikTokMarketplaceCreator,
   TikTokMarketplaceCreatorDetail, TikTokMarketplaceDiscoveryState,
@@ -96,6 +96,35 @@ const safeShop = (instance) => {
   delete shop.authorization;
   return shop;
 };
+const comparableShopName = (value) => String(value || '')
+  .normalize('NFKC')
+  .trim()
+  .replace(/^@+/, '')
+  .replace(/\s+/g, ' ')
+  .toLocaleLowerCase('en');
+const getChannelAvatarIndex = async () => {
+  const channels = await TikTokChannel.findAll({
+    attributes: ['username', 'display_name', 'avatar_url', 'avatar_large_url'],
+  });
+  const index = new Map();
+  for (const channel of channels) {
+    const avatar = {
+      avatar_url: channel.avatar_url || channel.avatar_large_url || null,
+      avatar_large_url: channel.avatar_large_url || channel.avatar_url || null,
+    };
+    if (!avatar.avatar_url) continue;
+    for (const name of [channel.display_name, channel.username]) {
+      const key = comparableShopName(name);
+      if (key && !index.has(key)) index.set(key, avatar);
+    }
+  }
+  return index;
+};
+const addMatchingChannelAvatar = (shop, avatarIndex) => {
+  const value = shop?.toJSON ? shop.toJSON() : { ...(shop || {}) };
+  const avatar = avatarIndex.get(comparableShopName(value.name));
+  return avatar ? { ...value, ...avatar } : value;
+};
 const oauthErrorMessage = (error) => {
   const message = String(error?.message || '');
   if (/state is (?:invalid|expired)|authorization was denied|Seller token/i.test(message)) return message;
@@ -169,23 +198,35 @@ const handleShopOauthCallback = async (req, res) => {
 
 const listShopConnections = async (_req, res) => {
   try {
-    const authorizations = await TikTokShopAuthorization.findAll({
-      attributes: { exclude: ['access_token_encrypted', 'refresh_token_encrypted'] },
-      include: [{ model: TikTokShop, as: 'shops', attributes: { exclude: ['cipher'] } }],
-      order: [['connected_at', 'DESC']],
-    });
-    res.json(authorizations);
+    const [authorizations, avatarIndex] = await Promise.all([
+      TikTokShopAuthorization.findAll({
+        attributes: { exclude: ['access_token_encrypted', 'refresh_token_encrypted'] },
+        include: [{ model: TikTokShop, as: 'shops', attributes: { exclude: ['cipher'] } }],
+        order: [['connected_at', 'DESC']],
+      }),
+      getChannelAvatarIndex(),
+    ]);
+    res.json(authorizations.map((authorization) => {
+      const value = authorization.toJSON();
+      return {
+        ...value,
+        shops: (value.shops || []).map((shop) => addMatchingChannelAvatar(shop, avatarIndex)),
+      };
+    }));
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
 const listShops = async (_req, res) => {
   try {
-    const shops = await TikTokShop.findAll({
-      attributes: { exclude: ['cipher'] },
-      include: [{ model: TikTokShopAuthorization, as: 'authorization', attributes: ['id', 'granted_scopes', 'refresh_token_expires_at'] }],
-      order: [['name', 'ASC']],
-    });
-    res.json(shops);
+    const [shops, avatarIndex] = await Promise.all([
+      TikTokShop.findAll({
+        attributes: { exclude: ['cipher'] },
+        include: [{ model: TikTokShopAuthorization, as: 'authorization', attributes: ['id', 'granted_scopes', 'refresh_token_expires_at'] }],
+        order: [['name', 'ASC']],
+      }),
+      getChannelAvatarIndex(),
+    ]);
+    res.json(shops.map((shop) => addMatchingChannelAvatar(shop, avatarIndex)));
   } catch (error) { res.status(500).json({ message: error.message }); }
 };
 

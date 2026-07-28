@@ -12,9 +12,18 @@ const avatarTextOf = (shop) => String(shop?.name || shop?.code || 'TS')
 
 const ShopAvatar = ({ shop }) => {
   const avatarUrl = avatarUrlOf(shop);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatarUrl]);
+
+  const showImage = Boolean(avatarUrl) && !imageFailed;
   return (
-    <span className={`shop-dropdown__avatar${avatarUrl ? '' : ' shop-dropdown__avatar--fallback'}`} aria-hidden="true">
-      {avatarUrl ? <img src={avatarUrl} alt="" loading="lazy" /> : avatarTextOf(shop)}
+    <span className={`shop-dropdown__avatar${showImage ? '' : ' shop-dropdown__avatar--fallback'}`} aria-hidden="true">
+      {showImage
+        ? <img src={avatarUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} />
+        : avatarTextOf(shop)}
     </span>
   );
 };
