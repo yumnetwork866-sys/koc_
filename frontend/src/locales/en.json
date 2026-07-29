@@ -75,7 +75,7 @@
     "support": "Having trouble signing in? Contact your system administrator."
   },
   "ai": {
-    "assistant": "Analytics Assistant",
+    "assistant": "AI Assistant",
     "status": "Online · Usually replies instantly",
     "offlineStatus": "Offline · Temporarily unavailable",
     "openLabel": "Open AI assistant",
