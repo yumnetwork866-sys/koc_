@@ -29,7 +29,7 @@ const ProtectedLayout = () => {
             </div>
           </div>
         </main>
-        <AiChatBubble />
+        {location.pathname !== '/manage/creator-chat' ? <AiChatBubble /> : null}
       </div>
     </RequireSession>
   );

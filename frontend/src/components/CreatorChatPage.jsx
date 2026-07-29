@@ -6,6 +6,11 @@ import {
   sendTikTokSellerCreatorMessage,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import {
+  creatorMessagingErrorText,
+  creatorMessagingText,
+  isCreatorMessagingNotice,
+} from '../lib/tiktokCreatorMessaging';
 import ShopDropdown from './ShopDropdown';
 
 const MESSAGES_SCOPE = 'seller.affiliate_messages.write';
@@ -125,11 +130,11 @@ const CreatorChatPage = () => {
       );
       setConversation(result);
     } catch (requestError) {
-      if (requestError.name !== 'AbortError') setError(requestError.message);
+      if (requestError.name !== 'AbortError') setError(creatorMessagingErrorText(requestError, t));
     } finally {
       if (!signal?.aborted) setLoadingConversation(false);
     }
-  }, [shopId]);
+  }, [shopId, t]);
 
   useEffect(() => {
     if (!selectedCreator) return undefined;
@@ -176,7 +181,7 @@ const CreatorChatPage = () => {
       setText('');
       await loadConversation(selectedCreator);
     } catch (requestError) {
-      setError(requestError.message);
+      setError(creatorMessagingErrorText(requestError, t));
     } finally {
       setSending(false);
     }
@@ -188,7 +193,7 @@ const CreatorChatPage = () => {
   return (
     <div className="page creator-chat">
       <section className="page__hero creator-chat__hero">
-        <div><h1 className="page__title">{t('creatorChat.title')}</h1><p>{t('creatorChat.meta')}</p></div>
+        <div><h1 className="page__title">{t('creatorChat.title')}</h1></div>
         <div className="field creator-chat__shop"><label htmlFor="creator-chat-shop">{t('sellerAffiliate.shop')}</label><ShopDropdown id="creator-chat-shop" shops={shops} value={shopId} onChange={(value) => { setShopId(value); setSelectedCreator(null); setConversation(null); }} disabled={!shops.length} placeholder={t('sellerAffiliate.selectShop')} unknownLabel={t('common.unknown')} /></div>
       </section>
 
@@ -228,20 +233,34 @@ const CreatorChatPage = () => {
                   {!loadingConversation && !messages.length ? <div className="creator-chat__welcome creator-chat__welcome--small"><h3>{t('sellerAffiliate.noMessages')}</h3></div> : null}
                   {messages.map((message, index) => {
                     const body = messageBody(message);
+                    const rawText = messageText(message);
+                    if (isCreatorMessagingNotice(rawText)) {
+                      return (
+                        <aside className="creator-chat__system-notice" role="status" key={body.id || message.conversation_index || index}>
+                          <span aria-hidden="true">i</span>
+                          <p>{creatorMessagingText(rawText, t)}</p>
+                        </aside>
+                      );
+                    }
                     const incoming = message.local_direction !== 'out'
                       && String(body.sender_id || '') === String(conversation?.conversation?.creator_im_id || selectedCreator.creator_im_id || creatorIdOf(selectedCreator));
                     const timestamp = Number(body.create_time || 0);
                     return (
                       <article className={`creator-chat__message creator-chat__message--${incoming ? 'in' : 'out'}`} key={body.id || message.conversation_index || index}>
-                        <p>{messageText(message) || t('sellerAffiliate.unsupportedMessage')}</p>
+                        <p>{creatorMessagingText(rawText, t) || t('sellerAffiliate.unsupportedMessage')}</p>
                         <time>{timestamp ? new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp * 1000)) : ''}</time>
                       </article>
                     );
                   })}
                 </div>
                 <form className="creator-chat__compose" onSubmit={submitMessage}>
-                  <textarea rows="2" maxLength={2000} value={text} placeholder={t('sellerAffiliate.messagePlaceholder')} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
-                  <button className="button" type="submit" disabled={sending || loadingConversation || !text.trim()}>{sending ? t('common.loading') : t('sellerAffiliate.sendMessage')}</button>
+                  <div className="creator-chat__composer-input">
+                    <textarea rows="1" maxLength={2000} value={text} placeholder={t('sellerAffiliate.messagePlaceholder')} aria-label={t('sellerAffiliate.messagePlaceholder')} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} />
+                  </div>
+                  <button className="button creator-chat__send" type="submit" disabled={sending || loadingConversation || !text.trim()}>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 17 8-17 8 3-8-3-8Z" /><path d="M7 12h14" /></svg>
+                    <span>{sending ? t('common.loading') : t('sellerAffiliate.sendMessage')}</span>
+                  </button>
                 </form>
               </>
             )}

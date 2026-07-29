@@ -786,7 +786,6 @@
   },
   "creatorChat": {
     "title": "Chat với Creator",
-    "meta": "Trao đổi trực tiếp với nhà sáng tạo trong TikTok Shop.",
     "creators": "Nhà sáng tạo",
     "searchPlaceholder": "Tìm theo tên hoặc @username",
     "noCreators": "Không tìm thấy nhà sáng tạo.",
@@ -1013,6 +1012,7 @@
     "unsupportedMessage": "Tin nhắn không hỗ trợ hiển thị.",
     "messagePlaceholder": "Nhập tin nhắn…",
     "sendMessage": "Gửi",
+    "messageFiveBeforeResponse": "Bạn có thể gửi tối đa 5 tin nhắn trước khi nhà sáng tạo phản hồi. Nếu họ không phản hồi, bạn có thể nhắn lại sau 30 ngày kể từ tin nhắn gần nhất.",
     "noData": "Không có dữ liệu phù hợp.",
     "page": "Trang {{page}}"
   },

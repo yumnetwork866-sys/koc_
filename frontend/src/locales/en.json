@@ -786,7 +786,6 @@
   },
   "creatorChat": {
     "title": "Creator Chat",
-    "meta": "Message TikTok Shop creators directly.",
     "creators": "Creators",
     "searchPlaceholder": "Search by name or @username",
     "noCreators": "No creators found.",
@@ -1013,6 +1012,7 @@
     "unsupportedMessage": "Unsupported message.",
     "messagePlaceholder": "Write a message…",
     "sendMessage": "Send",
+    "messageFiveBeforeResponse": "You can send up to 5 messages before the creator responds. You can message the creator again 30 days after your last message, if they don't respond.",
     "noData": "No matching data.",
     "page": "Page {{page}}"
   },
