@@ -2712,6 +2712,10 @@
   box-shadow: var(--shadow-md);
 }
 
+.seller-affiliate__invite-picker {
+  width: min(780px, 100%);
+}
+
 .seller-affiliate__invite-modal > header,
 .seller-affiliate__invite-modal footer {
   display: flex;
@@ -2720,6 +2724,36 @@
   gap: 16px;
   padding: 18px 22px;
   border-bottom: 1px solid var(--color-border);
+}
+
+.seller-affiliate__invite-picker > header {
+  align-items: center;
+}
+
+.seller-affiliate__invite-picker > header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.35;
+}
+
+.seller-affiliate__invite-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  place-items: center;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.seller-affiliate__invite-close:hover {
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
 }
 
 .seller-affiliate__invite-modal > header h2,
@@ -2733,9 +2767,174 @@
 }
 
 .seller-affiliate__invite-modal footer {
+  position: sticky;
+  z-index: 4;
+  bottom: 0;
   justify-content: flex-end;
   border-top: 1px solid var(--color-border);
   border-bottom: 0;
+  background: var(--color-surface);
+}
+
+.seller-affiliate__invite-tabs {
+  display: flex;
+  gap: 28px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.seller-affiliate__invite-tabs button {
+  position: relative;
+  padding: 16px 2px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: .9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.seller-affiliate__invite-tabs button.is-active {
+  color: var(--color-accent-strong);
+}
+
+.seller-affiliate__invite-tabs button.is-active::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  border-radius: 999px 999px 0 0;
+  background: var(--color-accent-strong);
+  content: "";
+}
+
+.seller-affiliate__invite-existing {
+  display: grid;
+  gap: 16px;
+  min-height: 390px;
+  padding: 20px 24px 24px;
+  background: var(--color-surface-subtle);
+}
+
+.seller-affiliate__invite-search {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) 44px;
+  align-self: start;
+}
+
+.seller-affiliate__invite-search select,
+.seller-affiliate__invite-search input,
+.seller-affiliate__invite-search button {
+  min-height: 42px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.seller-affiliate__invite-search select {
+  border-radius: 8px 0 0 8px;
+}
+
+.seller-affiliate__invite-search input {
+  min-width: 0;
+  padding: 0 12px;
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+}
+
+.seller-affiliate__invite-search button {
+  display: grid;
+  padding: 0;
+  border-radius: 0 8px 8px 0;
+  place-items: center;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.seller-affiliate__invite-search svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.seller-affiliate__invitation-list {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.seller-affiliate__invitation-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 15px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.seller-affiliate__invitation-card:hover,
+.seller-affiliate__invitation-card.is-selected {
+  border-color: var(--color-accent-strong);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-strong) 20%, transparent);
+}
+
+.seller-affiliate__invitation-card > input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-accent-strong);
+}
+
+.seller-affiliate__invitation-card-body {
+  min-width: 0;
+}
+
+.seller-affiliate__invitation-card-body > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.seller-affiliate__invitation-card-body strong {
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seller-affiliate__invitation-id {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-surface-subtle);
+  color: var(--color-muted);
+  font-size: .66rem;
+  font-weight: 800;
+}
+
+.seller-affiliate__invitation-card-body p {
+  margin: 5px 0 0;
+  color: var(--color-muted);
+  font-size: .78rem;
+  line-height: 1.4;
+}
+
+.seller-affiliate__invitation-card > button {
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent-strong);
+  font-size: .82rem;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .seller-affiliate__invite-grid {
@@ -2747,6 +2946,369 @@
 
 .seller-affiliate__invite-grid--wide {
   grid-column: 1 / -1;
+}
+
+.seller-affiliate__invite-method {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px solid var(--color-accent-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-accent-soft) 55%, var(--color-surface));
+}
+
+.seller-affiliate__invite-method input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--color-accent-strong);
+}
+
+.seller-affiliate__invite-method strong {
+  color: var(--color-text);
+  font-size: .92rem;
+}
+
+.seller-affiliate__invite-method p {
+  margin: 5px 0 0;
+  color: var(--color-muted);
+  font-size: .82rem;
+  line-height: 1.5;
+}
+
+.seller-affiliate__invite-notes {
+  padding: 14px 16px;
+  border: 1px solid #dbe4ef;
+  border-radius: 9px;
+  background: var(--color-surface-subtle);
+}
+
+.seller-affiliate__invite-notes > strong {
+  color: var(--color-text);
+  font-size: .88rem;
+}
+
+.seller-affiliate__invite-notes ul {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--color-muted);
+  font-size: .8rem;
+  line-height: 1.45;
+}
+
+.seller-affiliate__invite-section-heading {
+  padding-top: 4px;
+}
+
+.seller-affiliate__invite-section-heading h3,
+.seller-affiliate__invite-section-heading p {
+  margin: 0;
+}
+
+.seller-affiliate__invite-section-heading h3 {
+  color: var(--color-text);
+  font-size: .96rem;
+}
+
+.seller-affiliate__invite-section-heading p {
+  margin-top: 5px;
+  color: var(--color-muted);
+  font-size: .8rem;
+  line-height: 1.45;
+}
+
+.seller-affiliate__invite-phone {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+}
+
+.seller-affiliate__invite-phone select {
+  border-radius: 8px 0 0 8px;
+}
+
+.seller-affiliate__invite-phone input {
+  min-width: 0;
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.seller-affiliate__invite-phone:focus-within {
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent-strong) 18%, transparent);
+}
+
+.seller-affiliate__invite-products {
+  display: grid;
+  gap: 9px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.seller-affiliate__invite-product-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.seller-affiliate__invite-product-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 15px;
+  border: 1px dashed var(--color-accent-strong);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--color-accent-soft) 30%, var(--color-surface));
+  color: var(--color-accent-strong);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.seller-affiliate__invite-product-trigger small {
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
+.seller-affiliate__selected-product-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.seller-affiliate__selected-product-list > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 190px;
+  max-width: 250px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.seller-affiliate__selected-product-list img {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.seller-affiliate__selected-product-list span {
+  display: grid;
+  min-width: 0;
+}
+
+.seller-affiliate__selected-product-list strong {
+  overflow: hidden;
+  font-size: .76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seller-affiliate__selected-product-list small {
+  margin-top: 3px;
+  color: var(--color-accent-strong);
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.seller-affiliate__product-drawer-backdrop {
+  position: fixed;
+  z-index: 1250;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(15 23 42 / 35%);
+  backdrop-filter: blur(2px);
+}
+
+.seller-affiliate__product-drawer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(560px, 96vw);
+  height: 100%;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: -14px 0 36px rgb(15 23 42 / 18%);
+  animation: drawer-enter var(--motion-duration-slow) var(--motion-ease-out) both;
+}
+
+.seller-affiliate__product-drawer > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.seller-affiliate__product-drawer > header h3,
+.seller-affiliate__product-drawer > header p {
+  margin: 0;
+}
+
+.seller-affiliate__product-drawer > header p {
+  margin-top: 5px;
+  color: var(--color-muted);
+  font-size: .78rem;
+  line-height: 1.4;
+}
+
+.seller-affiliate__product-drawer > header button {
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+.seller-affiliate__product-drawer > .seller-affiliate__invite-products {
+  max-height: none;
+  overflow-y: auto;
+  align-content: start;
+  padding: 16px;
+}
+
+.seller-affiliate__invite-modal .seller-affiliate__product-drawer > footer {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font-size: .82rem;
+}
+
+.seller-affiliate__invite-product-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 145px;
+  gap: 14px;
+  align-items: center;
+  padding: 11px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface);
+}
+
+.seller-affiliate__invite-product-option.is-selected {
+  border-color: var(--color-accent-strong);
+  background: color-mix(in srgb, var(--color-accent-soft) 35%, var(--color-surface));
+}
+
+.seller-affiliate__invite-product-option > label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.seller-affiliate__invite-product-option > label > input {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  accent-color: var(--color-accent-strong);
+}
+
+.seller-affiliate__invite-product-option > label > span {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+}
+
+.seller-affiliate__invite-product-option img {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.seller-affiliate__invite-product-option strong {
+  overflow: hidden;
+  font-size: .82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seller-affiliate__sample-offer {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.seller-affiliate__sample-offer > input,
+.seller-affiliate__sample-options input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--color-accent-strong);
+}
+
+.seller-affiliate__sample-offer span,
+.seller-affiliate__sample-options span {
+  display: grid;
+  gap: 5px;
+}
+
+.seller-affiliate__sample-offer small,
+.seller-affiliate__sample-options small {
+  color: var(--color-muted);
+  font-size: .78rem;
+  line-height: 1.45;
+}
+
+.seller-affiliate__sample-options {
+  display: grid;
+  gap: 9px;
+}
+
+.seller-affiliate__sample-options > label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.seller-affiliate__sample-options > label.is-selected {
+  border-color: var(--color-accent-strong);
+  background: color-mix(in srgb, var(--color-accent-soft) 35%, var(--color-surface));
+}
+
+.seller-affiliate__sample-options em {
+  width: fit-content;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: .68rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.seller-affiliate__sample-options > p {
+  margin: 2px 0 0;
+  color: var(--color-muted);
+  font-size: .76rem;
 }
 
 .seller-affiliate__invite-grid textarea {
@@ -2850,6 +3412,24 @@
 
   .seller-affiliate__invite-grid--wide {
     grid-column: auto;
+  }
+
+  .seller-affiliate__invite-product-option {
+    grid-template-columns: 1fr;
+  }
+
+  .seller-affiliate__invite-search {
+    grid-template-columns: 128px minmax(0, 1fr) 42px;
+  }
+
+  .seller-affiliate__invitation-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .seller-affiliate__invitation-card > button {
+    grid-column: 2;
+    justify-self: start;
+    padding-left: 0;
   }
 
   .seller-affiliate__chat-compose {

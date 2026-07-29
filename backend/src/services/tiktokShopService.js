@@ -305,6 +305,25 @@ const createTargetCollaboration = ({
   },
 }, fetchImpl);
 
+const updateTargetCollaboration = ({
+  authorization, shopCipher, collaborationId, name, endTime, products,
+  creatorOpenIds, sellerContactInfo, freeSampleRule,
+} = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: `${CREATE_TARGET_COLLABORATION_PATH}/${encodeURIComponent(collaborationId)}`,
+  method: 'PUT',
+  requiredScope: SELLER_AFFILIATE_WRITE_SCOPE,
+  body: {
+    name,
+    end_time: String(endTime),
+    products,
+    creator_user_open_ids: creatorOpenIds,
+    seller_contact_info: sellerContactInfo,
+    free_sample_rule: freeSampleRule,
+  },
+}, fetchImpl);
+
 const createAffiliateConversation = ({
   authorization, shopCipher, creatorOpenId,
 } = {}, fetchImpl) => sellerAffiliateRequest({
@@ -679,6 +698,7 @@ module.exports = {
   searchTargetCollaborations,
   getTargetCollaboration,
   createTargetCollaboration,
+  updateTargetCollaboration,
   createAffiliateConversation,
   getAffiliateConversationMessages,
   sendAffiliateMessage,

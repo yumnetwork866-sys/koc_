@@ -16,6 +16,7 @@ const {
   searchTargetCollaborations,
   getTargetCollaboration,
   createTargetCollaboration,
+  updateTargetCollaboration,
   createAffiliateConversation,
   getAffiliateConversationMessages,
   sendAffiliateMessage,
@@ -872,6 +873,8 @@ const createMarketplaceCreatorInvitation = async (req, res) => {
     const message = String(req.body?.message || '').trim();
     const endTime = Number(req.body?.end_time);
     const contactEmail = String(req.body?.contact_email || '').trim();
+    const whatsapp = String(req.body?.whatsapp || '').trim();
+    const telegram = String(req.body?.telegram || '').trim();
     const products = (Array.isArray(req.body?.products) ? req.body.products : []).map((product) => ({
       id: String(product?.id || '').trim(),
       target_commission_rate: Number(product?.target_commission_rate),
@@ -886,8 +889,13 @@ const createMarketplaceCreatorInvitation = async (req, res) => {
       error.statusCode = 400;
       throw error;
     }
-    if (!contactEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
-      const error = new Error('A valid seller contact email is required.');
+    if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+      const error = new Error('Seller contact email is invalid.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!contactEmail && !whatsapp && !telegram) {
+      const error = new Error('Add at least one supported seller contact: email, WhatsApp, or Telegram.');
       error.statusCode = 400;
       throw error;
     }
@@ -916,7 +924,11 @@ const createMarketplaceCreatorInvitation = async (req, res) => {
         endTime,
         products,
         creatorOpenIds: [creator.creator_open_id],
-        sellerContactInfo: { email: contactEmail },
+        sellerContactInfo: {
+          ...(contactEmail ? { email: contactEmail } : {}),
+          ...(whatsapp ? { whatsapp } : {}),
+          ...(telegram ? { telegram } : {}),
+        },
         freeSampleRule: {
           has_free_sample: Boolean(req.body?.has_free_sample),
           is_sample_approval_exempt: Boolean(req.body?.is_sample_approval_exempt),
@@ -927,6 +939,86 @@ const createMarketplaceCreatorInvitation = async (req, res) => {
     sellerAffiliateCache.clear();
     res.status(201).json({
       ...payload.data,
+      request_id: payload.request_id || null,
+    });
+  } catch (error) {
+    marketplaceMutationError(res, error);
+  }
+};
+
+const addMarketplaceCreatorToInvitation = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const creator = await loadMarketplaceCreatorForAction(shop, req.params.creatorId);
+    const collaborationId = String(req.params.collaborationId || '').trim();
+    if (!collaborationId) {
+      const error = new Error('Target collaboration ID is required.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (isDemoAuthorization(shop.authorization)) {
+      await recordCreatorContact(shop.id, creator, 'invite');
+      res.json({ target_collaboration: { id: collaborationId }, request_id: 'demo-update-target-collaboration' });
+      return;
+    }
+    const detailPayload = await getTargetCollaboration({
+      authorization: shop.authorization,
+      shopCipher: shop.cipher,
+      collaborationId,
+    });
+    const collaboration = detailPayload.data?.target_collaboration;
+    if (!collaboration) {
+      const error = new Error('TikTok did not return target collaboration details.');
+      error.requestId = detailPayload.request_id || null;
+      throw error;
+    }
+    const existingCreatorIds = (collaboration.creators || [])
+      .map((item) => item.creator_open_id || item.creator_user_open_id || item.user_open_id)
+      .filter(Boolean)
+      .map(String);
+    if (existingCreatorIds.includes(String(creator.creator_open_id))) {
+      const error = new Error('This creator is already included in the selected invitation.');
+      error.statusCode = 409;
+      throw error;
+    }
+    const products = (collaboration.products || []).map((item) => {
+      const product = item.product || item;
+      const commissionRate = Number(
+        item.commission_rate
+        ?? item.target_commission_rate
+        ?? item.current_commission?.rate
+        ?? product.commission_rate,
+      );
+      return {
+        id: String(product.id || item.id || ''),
+        commission_rate: commissionRate,
+        ...(item.target_ad_commission_rate !== undefined
+          ? { target_ad_commission_rate: Number(item.target_ad_commission_rate) }
+          : {}),
+      };
+    }).filter((item) => item.id && Number.isFinite(item.commission_rate));
+    if (!products.length) {
+      const error = new Error('The selected invitation has no updateable products.');
+      error.statusCode = 422;
+      throw error;
+    }
+    const payload = await updateTargetCollaboration({
+      authorization: shop.authorization,
+      shopCipher: shop.cipher,
+      collaborationId,
+      name: collaboration.name,
+      endTime: collaboration.end_time,
+      products,
+      creatorOpenIds: [...new Set([...existingCreatorIds, String(creator.creator_open_id)])],
+      sellerContactInfo: collaboration.seller_contact_info,
+      freeSampleRule: collaboration.free_sample_rule,
+    });
+    await recordCreatorContact(shop.id, creator, 'invite');
+    sellerAffiliateCache.clear();
+    res.json({
+      ...payload.data,
+      target_collaboration: payload.data?.target_collaboration || { id: collaborationId },
       request_id: payload.request_id || null,
     });
   } catch (error) {
@@ -1335,7 +1427,8 @@ module.exports = {
   listShopVideoPerformance, getShopVideoThumbnail,
   listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
   listAffiliateCreators, showAffiliateCreatorFulfillments, listMarketplaceCreators, showMarketplaceCreator,
-  createMarketplaceCreatorInvitation, getMarketplaceCreatorConversation, sendMarketplaceCreatorMessage,
+  createMarketplaceCreatorInvitation, addMarketplaceCreatorToInvitation,
+  getMarketplaceCreatorConversation, sendMarketplaceCreatorMessage,
   listCreatorContentDetails,
   listCreatorPerformance,
   syncCreatorPerformance,

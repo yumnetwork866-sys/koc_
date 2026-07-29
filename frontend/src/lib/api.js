@@ -197,6 +197,11 @@ export function inviteTikTokSellerMarketplaceCreator(shopId, creatorId, payload)
     body: payload,
   });
 }
+export function addTikTokSellerCreatorToInvitation(shopId, creatorId, collaborationId) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/affiliate/marketplace-creators/${encodeURIComponent(creatorId)}/invitations/${encodeURIComponent(collaborationId)}/creators`, {
+    method: 'POST',
+  });
+}
 export function fetchTikTokSellerCreatorConversation(shopId, creatorId, filters = {}) {
   const params = new URLSearchParams();
   if (filters.pageToken) params.set('page_token', filters.pageToken);

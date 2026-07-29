@@ -31,6 +31,7 @@ const {
   searchTargetCollaborations,
   getTargetCollaboration,
   createTargetCollaboration,
+  updateTargetCollaboration,
   createAffiliateConversation,
   getAffiliateConversationMessages,
   sendAffiliateMessage,
@@ -383,6 +384,28 @@ test('create target collaboration sends creator open ids and write-scope payload
       seller_contact_info: { email: 'seller@example.test' },
       free_sample_rule: { has_free_sample: true, is_sample_approval_exempt: false },
     });
+    return successResponse({ target_collaboration: { id: 'target-1' } });
+  });
+});
+
+test('update target collaboration adds creators through the current write endpoint', async (t) => {
+  configure(t);
+  const authorization = sellerAuthorization();
+  authorization.granted_scopes.push('seller.affiliate_collaboration.write');
+  await updateTargetCollaboration({
+    authorization,
+    shopCipher: 'cipher-1',
+    collaborationId: 'target-1',
+    name: 'Ongoing invitation',
+    endTime: 1800000000,
+    products: [{ id: 'product-1', commission_rate: 1500 }],
+    creatorOpenIds: ['creator-open-1', 'creator-open-2'],
+    sellerContactInfo: { email: 'seller@example.test' },
+    freeSampleRule: { has_free_sample: false, is_sample_approval_exempt: false },
+  }, async (url, options) => {
+    assert.equal(url.pathname, `${CREATE_TARGET_COLLABORATION_PATH}/target-1`);
+    assert.equal(options.method, 'PUT');
+    assert.deepEqual(JSON.parse(options.body).creator_user_open_ids, ['creator-open-1', 'creator-open-2']);
     return successResponse({ target_collaboration: { id: 'target-1' } });
   });
 });
