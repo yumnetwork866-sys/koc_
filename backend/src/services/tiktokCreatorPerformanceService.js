@@ -818,9 +818,9 @@ const processCreatorPerformanceExport = async (shop, exportRecord, {
           planType: exportRecord.plan_type,
           currency: REGION_CURRENCY[String(shop.region || '').toUpperCase()] || 'USD',
         });
-        // Marketplace profiles are refreshed by the minute-based background worker.
-        // Export processing only uses the sample API so it cannot start a second
-        // long-running Marketplace refresh.
+        // Performance is cache-first. Export processing may reuse profile data
+        // from Sample Applications, while Marketplace Discovery updates the
+        // shared cache independently without per-username background lookups.
         await enrichCreatorRows(shop, rows, {
           searchSamples,
           searchMarketplace,

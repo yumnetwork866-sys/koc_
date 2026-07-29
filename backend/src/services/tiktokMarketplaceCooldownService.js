@@ -4,8 +4,17 @@ const { TikTokApiCooldown } = require('../models');
 // Creator Performance and scheduled profile jobs keep their own cooldown.
 const MARKETPLACE_COOLDOWN_NAMESPACE = 'creator_marketplace_discovery';
 const DEFAULT_MARKETPLACE_COOLDOWN_MS = Math.max(
-  60 * 1000,
-  Number(process.env.TIKTOK_MARKETPLACE_RATE_LIMIT_COOLDOWN_MS) || 60 * 1000,
+  5 * 60 * 1000,
+  Number(process.env.TIKTOK_MARKETPLACE_RATE_LIMIT_COOLDOWN_MS) || 5 * 60 * 1000,
+);
+const MAX_MARKETPLACE_COOLDOWN_MS = Math.max(
+  DEFAULT_MARKETPLACE_COOLDOWN_MS,
+  Number(process.env.TIKTOK_MARKETPLACE_RATE_LIMIT_MAX_COOLDOWN_MS) || 60 * 60 * 1000,
+);
+
+const marketplaceRateLimitCooldownMs = (consecutiveRateLimits = 1) => Math.min(
+  MAX_MARKETPLACE_COOLDOWN_MS,
+  DEFAULT_MARKETPLACE_COOLDOWN_MS * (2 ** Math.max(0, Number(consecutiveRateLimits || 1) - 1)),
 );
 
 const loadMarketplaceCooldown = async (shopId, model = TikTokApiCooldown) => {
@@ -13,11 +22,7 @@ const loadMarketplaceCooldown = async (shopId, model = TikTokApiCooldown) => {
     where: { shop_id: shopId, namespace: MARKETPLACE_COOLDOWN_NAMESPACE },
   });
   if (!row?.cooldown_until) return 0;
-  const persistedUntil = new Date(row.cooldown_until).getTime();
-  if (!row.updated_at) return persistedUntil;
-  const updatedAt = new Date(row.updated_at || 0).getTime();
-  if (!Number.isFinite(updatedAt)) return persistedUntil;
-  return Math.min(persistedUntil, updatedAt + DEFAULT_MARKETPLACE_COOLDOWN_MS);
+  return new Date(row.cooldown_until).getTime();
 };
 
 const persistMarketplaceCooldown = async (
@@ -36,6 +41,8 @@ const persistMarketplaceCooldown = async (
 module.exports = {
   MARKETPLACE_COOLDOWN_NAMESPACE,
   DEFAULT_MARKETPLACE_COOLDOWN_MS,
+  MAX_MARKETPLACE_COOLDOWN_MS,
+  marketplaceRateLimitCooldownMs,
   loadMarketplaceCooldown,
   persistMarketplaceCooldown,
 };

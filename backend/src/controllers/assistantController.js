@@ -141,7 +141,7 @@ async function getRuntime() {
 }
 
 async function getKpiSnapshot() {
-  const [overviewRows, userRows, productRows, bookingRows] = await Promise.all([
+  const [overviewRows, userRows, productRows, bookingRows, employeeRows] = await Promise.all([
     sequelize.query(`
       SELECT
         (SELECT COUNT(*) FROM users)::int AS "totalUsers",
@@ -242,6 +242,83 @@ async function getKpiSnapshot() {
       ) performance ON TRUE
       ORDER BY b.updated_at DESC NULLS LAST, b.id DESC
     `, { type: QueryTypes.SELECT }),
+    sequelize.query(`
+      WITH attribution_candidates AS (
+        SELECT
+          v.id AS video_id,
+          u.id AS user_id,
+          ROW_NUMBER() OVER (PARTITION BY v.id ORDER BY u.id ASC) AS attribution_rank
+        FROM videos v
+        JOIN users u ON TRUE
+        JOIN user_content_attributions attribution ON attribution.user_id = u.id
+        WHERE v.published_at >= DATE_TRUNC('month', CURRENT_DATE)
+          AND v.published_at < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+          AND EXISTS (
+            SELECT 1
+            FROM JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(attribution.hashtags, '[]'::jsonb)) hashtag
+            WHERE LOWER(v.title) LIKE '%' || LOWER(hashtag.value) || '%'
+          )
+      ),
+      attributed_videos AS (
+        SELECT video_id, user_id
+        FROM attribution_candidates
+        WHERE attribution_rank = 1
+      ),
+      latest_sales AS (
+        SELECT DISTINCT ON (shop_video.platform_video_id)
+          shop_video.platform_video_id,
+          snapshot.gross_gmv,
+          snapshot.currency
+        FROM shop_videos shop_video
+        JOIN shop_video_performance_snapshots snapshot ON snapshot.shop_video_id = shop_video.id
+        ORDER BY shop_video.platform_video_id, snapshot.synced_at DESC, snapshot.id DESC
+      )
+      SELECT
+        u.id,
+        u.name,
+        u.email,
+        team.id AS "teamId",
+        team.name AS "teamName",
+        attribution.hashtags,
+        COUNT(video.id)::int AS "videoCount",
+        COALESCE(SUM(video.views), 0)::bigint AS "totalViews",
+        COALESCE(ROUND(AVG(video.views)), 0)::bigint AS "avgViewsPerVideo",
+        COALESCE(SUM(video.likes), 0)::bigint AS "totalLikes",
+        COALESCE(SUM(video.comments), 0)::bigint AS "totalComments",
+        COALESCE(SUM(video.shares), 0)::bigint AS "totalShares",
+        COUNT(sales.platform_video_id)::int AS "salesMappedVideos",
+        COALESCE(SUM(sales.gross_gmv), 0) AS "grossGmv",
+        MAX(sales.currency) AS currency,
+        CASE WHEN top_video.id IS NULL THEN NULL ELSE JSON_BUILD_OBJECT(
+          'id', top_video.id,
+          'title', top_video.title,
+          'views', top_video.views,
+          'channel', top_video.channel
+        ) END AS "topVideo"
+      FROM users u
+      JOIN user_content_attributions attribution ON attribution.user_id = u.id
+      LEFT JOIN content_teams team ON team.id = attribution.team_id
+      LEFT JOIN attributed_videos matched ON matched.user_id = u.id
+      LEFT JOIN videos video ON video.id = matched.video_id
+      LEFT JOIN latest_sales sales ON sales.platform_video_id = video.platform_video_id
+      LEFT JOIN LATERAL (
+        SELECT
+          ranked.id,
+          ranked.title,
+          ranked.views,
+          channel.username AS channel
+        FROM attributed_videos top_match
+        JOIN videos ranked ON ranked.id = top_match.video_id
+        LEFT JOIN tiktok_channels channel ON channel.id = ranked.channel_id
+        WHERE top_match.user_id = u.id
+        ORDER BY ranked.views DESC, ranked.id ASC
+        LIMIT 1
+      ) top_video ON TRUE
+      GROUP BY
+        u.id, u.name, u.email, team.id, team.name, attribution.hashtags,
+        top_video.id, top_video.title, top_video.views, top_video.channel
+      ORDER BY "totalViews" DESC, "videoCount" DESC, u.id ASC
+    `, { type: QueryTypes.SELECT }),
   ]);
 
   return {
@@ -256,6 +333,7 @@ async function getKpiSnapshot() {
     users: userRows || [],
     products: productRows || [],
     bookings: bookingRows || [],
+    employees: employeeRows || [],
   };
 }
 
@@ -372,6 +450,65 @@ function formatTopProducts(products) {
     .join('\n');
 }
 
+function formatEmployeeContext(employees) {
+  if (!employees?.length) {
+    return '- Chưa có cấu hình nhân viên/team/hashtag để lập báo cáo.';
+  }
+  return employees.slice(0, 50).map((employee, index) => {
+    const views = Number(employee.totalViews || 0);
+    const interactions = Number(employee.totalLikes || 0)
+      + Number(employee.totalComments || 0)
+      + Number(employee.totalShares || 0);
+    const engagementRate = views > 0 ? interactions / views * 100 : 0;
+    const hashtags = Array.isArray(employee.hashtags) ? employee.hashtags.join(', ') : '';
+    const salesCoverage = Number(employee.salesMappedVideos || 0);
+    const sales = salesCoverage
+      ? `; GMV map chính xác ${Number(employee.grossGmv || 0).toLocaleString()} ${employee.currency || 'MYR'} từ ${salesCoverage}/${employee.videoCount || 0} video`
+      : '; chưa có video khớp TikTok Shop Video Analytics, không kết luận doanh số bằng 0';
+    const topVideo = employee.topVideo
+      ? `; video nổi bật "${employee.topVideo.title}" (${Number(employee.topVideo.views || 0).toLocaleString()} views${employee.topVideo.channel ? `, @${employee.topVideo.channel}` : ''})`
+      : '; chưa có video nổi bật';
+    return `${index + 1}. ${employee.name} — team ${employee.teamName || 'chưa gán'}, hashtag [${hashtags || 'chưa gán'}]: ${employee.videoCount || 0} video, ${views.toLocaleString()} views, trung bình ${Number(employee.avgViewsPerVideo || 0).toLocaleString()} views/video, ${interactions.toLocaleString()} tương tác, engagement ${engagementRate.toFixed(2)}%${sales}${topVideo}`;
+  }).join('\n');
+}
+
+function formatEmployeeAnswer(snapshot) {
+  const employees = snapshot.employees || [];
+  if (!employees.length) {
+    return 'Chưa có dữ liệu để đánh giá nhân viên. Bạn cần gắn nhân viên vào team, cấu hình hashtag và đồng bộ video TikTok Channel trước.';
+  }
+  const active = employees.filter((employee) => Number(employee.videoCount || 0) > 0);
+  if (!active.length) {
+    return 'Tháng hiện tại chưa có video nào khớp hashtag nhân viên. Bạn nên kiểm tra cấu hình hashtag ở Quản lý User và trạng thái đồng bộ TikTok Channel.';
+  }
+  const leader = active[0];
+  const totalVideos = active.reduce((sum, employee) => sum + Number(employee.videoCount || 0), 0);
+  const totalViews = active.reduce((sum, employee) => sum + Number(employee.totalViews || 0), 0);
+  const noOutput = employees.filter((employee) => Number(employee.videoCount || 0) === 0);
+  const salesMapped = active.reduce((sum, employee) => sum + Number(employee.salesMappedVideos || 0), 0);
+  const leaderInteractions = Number(leader.totalLikes || 0)
+    + Number(leader.totalComments || 0)
+    + Number(leader.totalShares || 0);
+  const leaderEngagement = Number(leader.totalViews || 0) > 0
+    ? leaderInteractions / Number(leader.totalViews) * 100
+    : 0;
+
+  return [
+    `Trong tháng hiện tại, ${active.length} nhân viên tạo ${totalVideos} video được nhận diện qua hashtag, đạt ${totalViews.toLocaleString()} lượt xem.`,
+    `${leader.name} đang dẫn đầu với ${leader.videoCount || 0} video, ${Number(leader.totalViews || 0).toLocaleString()} lượt xem, trung bình ${Number(leader.avgViewsPerVideo || 0).toLocaleString()} lượt xem/video và engagement ${leaderEngagement.toFixed(2)}%.`,
+    leader.topVideo
+      ? `Video nổi bật của ${leader.name}: "${leader.topVideo.title}" với ${Number(leader.topVideo.views || 0).toLocaleString()} lượt xem.`
+      : `${leader.name} chưa có video nổi bật đủ dữ liệu.`,
+    noOutput.length
+      ? `${noOutput.length} nhân viên chưa có video khớp hashtag: ${noOutput.slice(0, 8).map((employee) => employee.name).join(', ')}.`
+      : 'Tất cả nhân viên đã cấu hình đều có video được nhận diện trong tháng.',
+    salesMapped
+      ? `Doanh số chỉ được tổng hợp cho ${salesMapped}/${totalVideos} video khớp chính xác TikTok Shop Analytics; không suy diễn doanh số cho video còn thiếu.`
+      : 'Chưa có video nào khớp chính xác TikTok Shop Analytics, vì vậy chưa dùng doanh số để xếp hạng nhân viên.',
+    'Gợi ý: đối chiếu format của video dẫn đầu, kiểm tra hashtag của nhân viên chưa có output và chỉ dùng chỉ số doanh số khi video ID đã map chính xác.',
+  ].join(' ');
+}
+
 function buildPrompt(message, snapshot) {
   const overview = snapshot.overview || {};
   return [
@@ -391,6 +528,16 @@ function buildPrompt(message, snapshot) {
     '',
     'Top KOC:',
     formatTopUsers(snapshot.users),
+    '',
+    'Báo cáo hiệu suất nhân viên tháng hiện tại từ TikTok Channel, phân bổ theo team + hashtag:',
+    formatEmployeeContext(snapshot.employees),
+    '',
+    'Quy tắc đánh giá nhân viên:',
+    '- Chỉ dùng dữ liệu trong mục Báo cáo hiệu suất nhân viên; không dùng Booking/KOC để đánh giá nhân viên nội bộ.',
+    '- Video được gán theo hashtag cấu hình của nhân viên, cùng quy tắc với page Báo cáo; nếu hashtag trùng, ưu tiên nhân viên có user ID nhỏ hơn để tránh đếm đôi.',
+    '- Nêu rõ kỳ là tháng hiện tại. So sánh video, views, views/video, tương tác, engagement và video nổi bật.',
+    '- Chỉ nhận xét doanh số trên số video salesMappedVideos đã khớp chính xác platform video ID; không coi video chưa map là doanh số 0.',
+    '- Đánh giá dựa trên dữ liệu, không quy kết năng lực cá nhân khi thiếu output hoặc thiếu mapping.',
     '',
     'Dữ liệu trang Booking và Creator Performance khớp theo creator:',
     formatBookingContext(snapshot.bookings),
@@ -474,6 +621,9 @@ function formatBookingAnswer(snapshot) {
 
 function fallbackAnswer(message, snapshot) {
   const text = String(message || '').toLowerCase();
+  if (/(nhân viên|employee|team|đánh giá staff|hiệu suất staff)/.test(text)) {
+    return formatEmployeeAnswer(snapshot);
+  }
   if (/(booking|chi phí|cost|deadline|quá hạn)/.test(text)) {
     return formatBookingAnswer(snapshot);
   }
@@ -483,7 +633,7 @@ function fallbackAnswer(message, snapshot) {
   if (/(koc|creator|influencer|đánh giá)/.test(text)) {
     return formatKocAnswer(snapshot);
   }
-  return 'Bạn có thể hỏi mình về báo cáo tổng quan hoặc đánh giá KOC.';
+  return 'Bạn có thể hỏi mình về báo cáo tổng quan, đánh giá nhân viên hoặc đánh giá KOC.';
 }
 
 function cleanAssistantAnswer(text) {
@@ -503,7 +653,7 @@ async function askAssistant(message) {
   const runtime = await getRuntime();
   const normalizedMessage = String(message || '').trim();
   const prompt = buildPrompt(normalizedMessage, snapshot);
-  const suggestions = ['Đánh giá KOC', 'Booking quá hạn', 'Tổng chi phí Booking'];
+  const suggestions = ['Đánh giá nhân viên', 'Đánh giá KOC', 'Booking quá hạn'];
   const systemPrompt = [
     'Bạn là trợ lý phân tích dữ liệu nội bộ cho YUM Network.',
     "Trả lời ngắn gọn, rõ ràng, lịch sự, xưng 'mình' gọi người dùng 'bạn'.",
@@ -511,6 +661,7 @@ async function askAssistant(message) {
     'Trình bày câu trả lời bằng markdown nhẹ khi phù hợp, dùng bullet list hoặc in đậm cho ý chính.',
     'Không mở đầu câu trả lời bằng lời chào; đi thẳng vào nội dung.',
     'Khi phù hợp, hãy đưa ra 1 đến 3 gợi ý hành động cụ thể.',
+    'Khi đánh giá nhân viên, chỉ dùng mục Báo cáo hiệu suất nhân viên từ TikTok Channel và phân bổ team/hashtag; không trộn dữ liệu Booking/KOC.',
     'Khi đánh giá KOC, phải ưu tiên dữ liệu Booking; không được xem hiệu suất tổng của creator là doanh thu trực tiếp từ Booking.',
   ].join(' ');
   const userPrompt = [
@@ -608,6 +759,7 @@ async function streamAssistantAnswer(message, onDelta) {
     'Ưu tiên số liệu, không bịa, nếu thiếu dữ liệu thì nói rõ.',
     'Trình bày câu trả lời bằng markdown nhẹ khi phù hợp.',
     'Không mở đầu câu trả lời bằng lời chào; đi thẳng vào nội dung.',
+    'Khi đánh giá nhân viên, chỉ dùng mục Báo cáo hiệu suất nhân viên từ TikTok Channel và phân bổ team/hashtag; không trộn dữ liệu Booking/KOC.',
     'Khi đánh giá KOC, phải ưu tiên dữ liệu Booking; không được xem hiệu suất tổng của creator là doanh thu trực tiếp từ Booking.',
   ].join(' ');
   const userPrompt = buildPrompt(normalizedMessage, snapshot);
@@ -735,6 +887,9 @@ module.exports = {
     summarizeBookingKocs,
     formatBookingContext,
     formatBookingAnswer,
+    formatEmployeeContext,
+    formatEmployeeAnswer,
+    fallbackAnswer,
     getKpiSnapshot,
   },
 };

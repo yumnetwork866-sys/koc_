@@ -96,7 +96,7 @@
     "offlineMessage": "You're offline. Reconnect to continue the conversation.",
     "unreadCount": "{{count}} unread assistant messages",
     "closeHint": "Close suggestion",
-    "quickPrompts": ["Summarize today", "Review KOC bookings"]
+    "quickPrompts": ["Summarize today", "Review KOC bookings", "Review employees"]
   },
   "home": {
     "heroTitle": "Manage, review, and report",

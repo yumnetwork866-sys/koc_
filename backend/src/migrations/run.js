@@ -53,6 +53,9 @@ const migrations = [
   require('./043_add_creator_performance_six_month_schedule'),
   require('./044_add_channel_content_attribution_rules'),
   require('./045_create_content_teams'),
+  require('./046_add_marketplace_discovery_crawl_state'),
+  require('./047_expand_video_title'),
+  require('./048_backfill_marketplace_creator_profiles'),
 ];
 
 const createMigrationRunner = ({

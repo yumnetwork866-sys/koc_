@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const { TikTokCreatorProfile } = require('../models');
+const { cacheCreatorAvatars } = require('./creatorAvatarStorageService');
 
 const normalizeUsername = (value) => String(value || '').trim().replace(/^@/, '').toLowerCase();
 
@@ -63,7 +64,11 @@ const loadCreatorProfiles = async (shopId, creators = []) => {
 const saveCreatorProfiles = async (shopId, creators = [], source = 'unknown', {
   logger = console,
 } = {}) => {
-  const profiles = creators.map(normalizeCreatorProfile).filter((profile) => profile.username);
+  const cacheLocally = ['marketplace_discovery', 'performance'].includes(source);
+  const localizedCreators = cacheLocally
+    ? await cacheCreatorAvatars(shopId, creators, { logger })
+    : creators;
+  const profiles = localizedCreators.map(normalizeCreatorProfile).filter((profile) => profile.username);
   if (!profiles.length) return new Map();
   const existingMap = await loadCreatorProfiles(shopId, profiles);
   const unique = new Map();

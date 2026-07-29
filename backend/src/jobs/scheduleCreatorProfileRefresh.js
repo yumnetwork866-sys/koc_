@@ -30,7 +30,7 @@ const refreshLatestProfiles = async () => {
 };
 
 const startCreatorProfileRefreshJob = () => {
-  const enabled = String(process.env.TIKTOK_CREATOR_PROFILE_JOB_ENABLED ?? 'true').toLowerCase() !== 'false';
+  const enabled = String(process.env.TIKTOK_CREATOR_PROFILE_JOB_ENABLED ?? 'false').toLowerCase() === 'true';
   if (!enabled) {
     console.info('[Creator Profile Refresh Scheduler] Background job disabled');
     return null;

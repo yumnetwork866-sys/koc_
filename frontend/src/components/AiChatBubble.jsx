@@ -541,7 +541,7 @@ const AiChatBubble = () => {
           </div>
 
           <div className="ai-chat-panel__quick-actions" aria-label={t('ai.suggestionsLabel')}>
-            {quickPrompts.slice(0, 2).map((prompt) => (
+            {quickPrompts.slice(0, 3).map((prompt) => (
               <button
                 key={prompt}
                 type="button"

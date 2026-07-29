@@ -499,6 +499,11 @@ const TikTokMarketplaceDiscoveryState = sequelize.define('TikTokMarketplaceDisco
   shop_id: { type: DataTypes.INTEGER, primaryKey: true },
   next_page_token: DataTypes.TEXT,
   search_key: DataTypes.TEXT,
+  segment_index: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  crawl_status: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'ACTIVE' },
+  completed_at: DataTypes.DATE,
+  next_refresh_at: DataTypes.DATE,
+  consecutive_rate_limits: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   last_requested_at: DataTypes.DATE,
   last_succeeded_at: DataTypes.DATE,
   last_status: DataTypes.STRING(32),
@@ -744,7 +749,7 @@ const Video = sequelize.define('Video', {
     allowNull: false,
   },
   title: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: false,
   },
   video_url: {

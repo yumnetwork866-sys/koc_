@@ -52,6 +52,9 @@ const defaultMigrationNames = [
   '043_add_creator_performance_six_month_schedule',
   '044_add_channel_content_attribution_rules',
   '045_create_content_teams',
+  '046_add_marketplace_discovery_crawl_state',
+  '047_expand_video_title',
+  '048_backfill_marketplace_creator_profiles',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

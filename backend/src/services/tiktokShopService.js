@@ -387,9 +387,23 @@ const summarizeSampleFulfillments = (fulfillments) => {
 };
 
 const searchMarketplaceCreators = ({
-  authorization, shopCipher, pageToken, pageSize = 20, keyword, searchKey,
+  authorization, shopCipher, pageToken, pageSize = 20, keyword, searchKey, filters = {},
 } = {}, fetchImpl) => {
   const normalizedKeyword = String(keyword || '').trim().replace(/^@+/, '');
+  const supportedFilterFields = [
+    'follower_demographics',
+    'gmv_ranges',
+    'units_sold_ranges',
+    'category',
+    'content_performance',
+    'affiliate_data',
+    'advanced_filters',
+  ];
+  const filterBody = Object.fromEntries(
+    supportedFilterFields
+      .filter((field) => filters[field] !== undefined)
+      .map((field) => [field, filters[field]]),
+  );
   return sellerAffiliateRequest({
     authorization,
     shopCipher,
@@ -400,6 +414,7 @@ const searchMarketplaceCreators = ({
       ...(pageToken ? { page_token: pageToken } : {}),
     },
     body: {
+      ...filterBody,
       ...(normalizedKeyword ? { keyword: normalizedKeyword } : {}),
       ...(searchKey ? { search_key: searchKey } : {}),
     },

@@ -17,7 +17,8 @@
     "seed:demo:full": "node src/scripts/seedFullDemoData.js",
     "seed:facebook:test": "node src/scripts/seedFacebookTestData.js",
     "sync:tiktok": "node src/jobs/syncTiktokChannels.js",
-    "sync:tiktok:scheduler": "node src/jobs/scheduleTiktokSync.js"
+    "sync:tiktok:scheduler": "node src/jobs/scheduleTiktokSync.js",
+    "cache:creator-avatars": "node src/scripts/backfillCreatorAvatarStorage.js"
   },
   "keywords": [],
   "author": "",

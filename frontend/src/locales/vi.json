@@ -96,7 +96,7 @@
     "offlineMessage": "Bạn đang ngoại tuyến. Hãy kết nối lại để tiếp tục trò chuyện.",
     "unreadCount": "{{count}} tin nhắn chưa đọc từ trợ lý",
     "closeHint": "Đóng gợi ý",
-    "quickPrompts": ["Tóm tắt hôm nay", "Đánh giá KOC"]
+    "quickPrompts": ["Tóm tắt hôm nay", "Đánh giá KOC", "Đánh giá nhân viên"]
   },
   "home": {
     "heroTitle": "Quản lý, đánh giá và báo cáo",

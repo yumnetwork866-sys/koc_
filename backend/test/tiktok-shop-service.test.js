@@ -488,6 +488,27 @@ test('search Marketplace creators supports an unfiltered first page and stable p
   });
 });
 
+test('search Marketplace creators sends supported discovery filters', async (t) => {
+  configure(t);
+  const authorization = sellerAuthorization();
+  authorization.granted_scopes.push('seller.creator_marketplace.read');
+  await searchMarketplaceCreators({
+    authorization,
+    shopCipher: 'cipher-1',
+    filters: {
+      gmv_ranges: ['GMV_RANGE_1000_10000'],
+      units_sold_ranges: ['UNITS_SOLD_RANGE_100_1000'],
+      unsupported_filter: 'ignored',
+    },
+  }, async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), {
+      gmv_ranges: ['GMV_RANGE_1000_10000'],
+      units_sold_ranges: ['UNITS_SOLD_RANGE_100_1000'],
+    });
+    return successResponse({ creators: [] });
+  });
+});
+
 test('search Marketplace creators requires seller creator marketplace scope', async (t) => {
   configure(t);
   await assert.rejects(

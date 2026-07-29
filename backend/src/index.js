@@ -2,6 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const {
+  CREATOR_AVATAR_STORAGE_ROOT,
+  CREATOR_AVATAR_PUBLIC_PREFIX,
+} = require('./services/creatorAvatarStorageService');
 require('dotenv').config();
 
 const PORT = process.env.PORT || 8000;
@@ -31,7 +35,6 @@ const { requireAdmin } = require('./lib/session');
 const { getAdminAccount } = require('./lib/adminAccount');
 const { startDatabaseScheduler } = require('./services/scheduledJobService');
 const { startMarketplaceCreatorDiscoveryJob } = require('./jobs/scheduleMarketplaceCreatorDiscovery');
-const { startCreatorProfileRefreshJob } = require('./jobs/scheduleCreatorProfileRefresh');
 
 const httpLogFormat = process.env.HTTP_LOG_FORMAT || ':method :url :status :response-time ms';
 
@@ -49,6 +52,11 @@ const createApp = () => {
     verify: (req, _res, buffer) => {
       req.rawBody = buffer;
     },
+  }));
+  app.use(CREATOR_AVATAR_PUBLIC_PREFIX, express.static(CREATOR_AVATAR_STORAGE_ROOT, {
+    dotfiles: 'deny',
+    fallthrough: false,
+    maxAge: '7d',
   }));
   app.use(chatbotRoutes.publicRouter);
   app.use(whatsappRoutes.publicRouter);
@@ -128,7 +136,6 @@ const startServer = async () => {
       console.log(`Server is running on port ${PORT}`);
     });
     startDatabaseScheduler();
-    startCreatorProfileRefreshJob();
     startMarketplaceCreatorDiscoveryJob();
   } catch (error) {
     console.error('Failed to start server:', error);

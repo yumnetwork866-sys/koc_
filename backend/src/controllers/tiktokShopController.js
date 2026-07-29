@@ -785,6 +785,10 @@ const listMarketplaceCreators = async (req, res) => {
       search_poll_after_ms: queuedSearch?.status === 'PENDING' ? 60 * 1000 : 0,
       discovery_sync: state ? {
         status: state.last_status,
+        crawl_status: state.crawl_status,
+        segment_index: state.segment_index,
+        completed_at: state.completed_at,
+        next_refresh_at: state.next_refresh_at,
         last_requested_at: state.last_requested_at,
         last_succeeded_at: state.last_succeeded_at,
       } : { status: 'PENDING', last_requested_at: null, last_succeeded_at: null },
@@ -1078,7 +1082,7 @@ const listCreatorPerformance = async (req, res) => {
       totals: totals[0],
       page,
       page_size: pageSize,
-      profile_refresh: { status: 'BACKGROUND' },
+      profile_refresh: { status: 'CACHE_ONLY' },
       ...basePayload,
     });
   } catch (error) { res.status(500).json({ message: error.message }); }
