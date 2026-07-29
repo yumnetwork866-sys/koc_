@@ -152,7 +152,8 @@ const BookingManagement = ({ heroTitle }) => {
     const formatter = new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: currencyCode,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     });
     return currencyCode === 'MYR'
       ? formatter.formatToParts(finiteNumber(value))
