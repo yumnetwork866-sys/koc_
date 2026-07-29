@@ -17,6 +17,7 @@ export const sidebarSections = [
           { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
            { to: '/manage/video-analytics', labelKey: 'navigation.videoAnalytics' },
            { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
+           { to: '/manage/creator-chat', labelKey: 'navigation.creatorChat' },
            { to: '/bookings', labelKey: 'navigation.bookings' },
          ],
       },
@@ -100,6 +101,11 @@ export const protectedRouteCards = [
   {
     path: '/manage/affiliate',
     component: 'SellerAffiliatePanel',
+    props: {},
+  },
+  {
+    path: '/manage/creator-chat',
+    component: 'CreatorChatPage',
     props: {},
   },
   {

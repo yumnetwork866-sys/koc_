@@ -171,6 +171,7 @@ function fetchTikTokSellerAffiliate(shopId, resource, filters = {}) {
   if (filters.pageSize) params.set('page_size', filters.pageSize);
   if (filters.keyword) params.set('keyword', filters.keyword);
   if (filters.searchKey) params.set('search_key', filters.searchKey);
+  if (filters.sort) params.set('sort', filters.sort);
   if (filters.status) params.set('status', filters.status);
   if (filters.startTime) params.set('create_time_ge', filters.startTime);
   if (filters.endTime) params.set('create_time_lt', filters.endTime);

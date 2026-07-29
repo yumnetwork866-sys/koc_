@@ -6,6 +6,7 @@ import {
   ChannelManagement,
   ChannelReport,
   ChatbotManagement,
+  CreatorChatPage,
   Dashboard,
   DataDeletionPage,
   EmployeeTable,
@@ -33,6 +34,7 @@ const componentMap = {
   ChannelManagement,
   ChannelReport,
   ChatbotManagement,
+  CreatorChatPage,
   WhatsAppManagement,
 };
 

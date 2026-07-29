@@ -700,6 +700,7 @@ const listMarketplaceCreators = async (req, res) => {
       ? Math.max(0, Number(req.query.page_token))
       : 0;
     const keyword = String(req.query.keyword || '').trim().replace(/^@+/, '');
+    const mostRecentFirst = req.query.sort === 'most_recent';
     const browseSeed = marketplaceBrowseSeed(req.query.search_key);
     const rows = await sequelize.query(`
       WITH candidates AS (
@@ -709,18 +710,19 @@ const listMarketplaceCreators = async (req, res) => {
           c.profile || COALESCE(d.detail, '{}'::jsonb) AS metric_payload
           , contact.previously_invited
           , contact.previously_invited_at
+          , contact.last_messaged_at
         FROM tiktok_marketplace_creators c
         LEFT JOIN tiktok_marketplace_creator_details d
           ON d.shop_id = c.shop_id
           AND d.creator_open_id = c.creator_open_id
         LEFT JOIN LATERAL (
           SELECT
-            TRUE AS previously_invited,
-            GREATEST(h.last_invited_at, h.last_messaged_at) AS previously_invited_at
+            GREATEST(h.last_invited_at, h.last_messaged_at) >= NOW() - INTERVAL '90 days' AS previously_invited,
+            GREATEST(h.last_invited_at, h.last_messaged_at) AS previously_invited_at,
+            h.last_messaged_at
           FROM tiktok_creator_contact_histories h
           WHERE h.shop_id = c.shop_id
             AND (h.creator_open_id = c.creator_open_id OR LOWER(h.username) = LOWER(c.username))
-            AND GREATEST(h.last_invited_at, h.last_messaged_at) >= NOW() - INTERVAL '90 days'
           ORDER BY GREATEST(h.last_invited_at, h.last_messaged_at) DESC
           LIMIT 1
         ) contact ON TRUE
@@ -737,7 +739,9 @@ const listMarketplaceCreators = async (req, res) => {
       )
       SELECT ranked.*, COUNT(*) OVER()::integer AS total_count
       FROM ranked
-      ORDER BY completeness_score DESC, MD5(creator_open_id || :browseSeed), creator_open_id
+      ORDER BY ${mostRecentFirst
+    ? 'last_messaged_at DESC NULLS LAST, last_seen_at DESC NULLS LAST, creator_open_id'
+    : 'completeness_score DESC, MD5(creator_open_id || :browseSeed), creator_open_id'}
       LIMIT :pageSize OFFSET :offset
     `, {
       replacements: {
@@ -764,6 +768,7 @@ const listMarketplaceCreators = async (req, res) => {
       marketplace_last_seen_at: row.last_seen_at,
       previously_invited: Boolean(row.previously_invited),
       previously_invited_at: row.previously_invited_at || null,
+      last_messaged_at: row.last_messaged_at || null,
     }));
     let exchangeRate = null;
     try {

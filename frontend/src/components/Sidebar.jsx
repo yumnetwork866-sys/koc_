@@ -93,6 +93,7 @@ const routeIconMap = {
   '/dashboard': 'dashboard',
   '/channel-reports': 'reports',
   '/manage/affiliate': 'analytics',
+  '/manage/creator-chat': 'chat',
   '/manage/users': 'users',
   '/manage/shops': 'shop',
   '/manage/schedules': 'schedule',
