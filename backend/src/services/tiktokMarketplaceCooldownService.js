@@ -38,6 +38,12 @@ const persistMarketplaceCooldown = async (
   });
 };
 
+const clearMarketplaceCooldown = async (shopId, model = TikTokApiCooldown) => {
+  await model.destroy({
+    where: { shop_id: shopId, namespace: MARKETPLACE_COOLDOWN_NAMESPACE },
+  });
+};
+
 module.exports = {
   MARKETPLACE_COOLDOWN_NAMESPACE,
   DEFAULT_MARKETPLACE_COOLDOWN_MS,
@@ -45,4 +51,5 @@ module.exports = {
   marketplaceRateLimitCooldownMs,
   loadMarketplaceCooldown,
   persistMarketplaceCooldown,
+  clearMarketplaceCooldown,
 };

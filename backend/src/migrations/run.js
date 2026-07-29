@@ -56,6 +56,8 @@ const migrations = [
   require('./046_add_marketplace_discovery_crawl_state'),
   require('./047_expand_video_title'),
   require('./048_backfill_marketplace_creator_profiles'),
+  require('./049_add_marketplace_discovery_recovery_state'),
+  require('./050_add_marketplace_discovery_segment_limits'),
 ];
 
 const createMigrationRunner = ({

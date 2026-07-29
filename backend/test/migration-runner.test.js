@@ -55,6 +55,8 @@ const defaultMigrationNames = [
   '046_add_marketplace_discovery_crawl_state',
   '047_expand_video_title',
   '048_backfill_marketplace_creator_profiles',
+  '049_add_marketplace_discovery_recovery_state',
+  '050_add_marketplace_discovery_segment_limits',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

@@ -191,6 +191,27 @@ export const fetchTikTokSellerMarketplaceCreators = (shopId, filters) => fetchTi
 export function fetchTikTokSellerMarketplaceCreator(shopId, creatorId, signal) {
   return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/affiliate/marketplace-creators/${encodeURIComponent(creatorId)}`, { signal });
 }
+export function inviteTikTokSellerMarketplaceCreator(shopId, creatorId, payload) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/affiliate/marketplace-creators/${encodeURIComponent(creatorId)}/invitations`, {
+    method: 'POST',
+    body: payload,
+  });
+}
+export function fetchTikTokSellerCreatorConversation(shopId, creatorId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.pageToken) params.set('page_token', filters.pageToken);
+  if (filters.pageSize) params.set('page_size', filters.pageSize);
+  const query = params.toString();
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/affiliate/marketplace-creators/${encodeURIComponent(creatorId)}/conversation${query ? `?${query}` : ''}`, {
+    signal: filters.signal,
+  });
+}
+export function sendTikTokSellerCreatorMessage(shopId, creatorId, text) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/affiliate/marketplace-creators/${encodeURIComponent(creatorId)}/conversation/messages`, {
+    method: 'POST',
+    body: { text },
+  });
+}
 export const fetchTikTokSellerCreatorContentDetails = (shopId, filters) => fetchTikTokSellerAffiliate(shopId, 'creator-content-details', filters);
 export const fetchTikTokSellerOpenCollaborationSettings = (shopId, signal) => fetchTikTokSellerAffiliate(shopId, 'open-collaboration-settings', { signal });
 

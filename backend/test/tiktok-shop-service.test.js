@@ -9,6 +9,9 @@ const {
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
   TARGET_COLLABORATION_DETAIL_PATH,
+  CREATE_TARGET_COLLABORATION_PATH,
+  AFFILIATE_CONVERSATIONS_PATH,
+  AFFILIATE_MESSAGES_PATH,
   AFFILIATE_ORDERS_PATH,
   SAMPLE_APPLICATIONS_PATH,
   SAMPLE_APPLICATION_FULFILLMENTS_PATH,
@@ -27,6 +30,10 @@ const {
   searchOpenCollaborations,
   searchTargetCollaborations,
   getTargetCollaboration,
+  createTargetCollaboration,
+  createAffiliateConversation,
+  getAffiliateConversationMessages,
+  sendAffiliateMessage,
   searchAffiliateOrders,
   attachAffiliateOrderMetadata,
   searchSellerSampleApplications,
@@ -347,6 +354,78 @@ test('get target collaboration loads creator profiles from the detail endpoint',
     assert.equal(options.method, 'GET');
     assert.equal(options.body, undefined);
     return successResponse({ target_collaboration: { creators: [{ username: 'creator.one' }] } });
+  });
+});
+
+test('create target collaboration sends creator open ids and write-scope payload', async (t) => {
+  configure(t);
+  const authorization = sellerAuthorization();
+  authorization.granted_scopes.push('seller.affiliate_collaboration.write');
+  await createTargetCollaboration({
+    authorization,
+    shopCipher: 'cipher-1',
+    name: 'Creator launch',
+    message: 'Let us collaborate',
+    endTime: 1800000000,
+    products: [{ id: 'product-1', target_commission_rate: 1500 }],
+    creatorOpenIds: ['creator-open-1'],
+    sellerContactInfo: { email: 'seller@example.test' },
+    freeSampleRule: { has_free_sample: true, is_sample_approval_exempt: false },
+  }, async (url, options) => {
+    assert.equal(url.pathname, CREATE_TARGET_COLLABORATION_PATH);
+    assert.equal(options.method, 'POST');
+    assert.deepEqual(JSON.parse(options.body), {
+      name: 'Creator launch',
+      message: 'Let us collaborate',
+      end_time: '1800000000',
+      products: [{ id: 'product-1', target_commission_rate: 1500 }],
+      creator_user_open_ids: ['creator-open-1'],
+      seller_contact_info: { email: 'seller@example.test' },
+      free_sample_rule: { has_free_sample: true, is_sample_approval_exempt: false },
+    });
+    return successResponse({ target_collaboration: { id: 'target-1' } });
+  });
+});
+
+test('affiliate messaging creates a conversation, reads history, and sends text', async (t) => {
+  configure(t);
+  const authorization = sellerAuthorization();
+  authorization.granted_scopes.push('seller.affiliate_messages.write');
+  await createAffiliateConversation({
+    authorization,
+    shopCipher: 'cipher-1',
+    creatorOpenId: 'creator-open-1',
+  }, async (url, options) => {
+    assert.equal(url.pathname, AFFILIATE_CONVERSATIONS_PATH);
+    assert.deepEqual(JSON.parse(options.body), {
+      creator_open_id: 'creator-open-1',
+      only_need_conversation_id: false,
+    });
+    return successResponse({ conversation: { id: 'conversation-1' } });
+  });
+  await getAffiliateConversationMessages({
+    authorization,
+    shopCipher: 'cipher-1',
+    conversationId: 'conversation-1',
+    pageSize: 20,
+  }, async (url, options) => {
+    assert.equal(url.pathname, `${AFFILIATE_MESSAGES_PATH}/conversation/conversation-1/messages`);
+    assert.equal(url.searchParams.get('page_size'), '20');
+    assert.equal(options.method, 'GET');
+    return successResponse({ messages: [] });
+  });
+  await sendAffiliateMessage({
+    authorization,
+    shopCipher: 'cipher-1',
+    conversationId: 'conversation-1',
+    text: 'Hello creator',
+  }, async (url, options) => {
+    assert.equal(url.pathname, `${AFFILIATE_MESSAGES_PATH}/conversations/conversation-1/messages`);
+    assert.deepEqual(JSON.parse(options.body), {
+      msg_type: 'TEXT',
+      content: JSON.stringify({ content: 'Hello creator' }),
+    });
+    return successResponse({ message_id: 'message-1' });
   });
 });
 

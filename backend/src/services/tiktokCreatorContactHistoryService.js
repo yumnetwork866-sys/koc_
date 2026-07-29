@@ -70,4 +70,31 @@ const recordTargetCollaborationInvites = async (shopId, collaborations = [], {
   return contacts.size;
 };
 
-module.exports = { contactDate, invitationDate, recordTargetCollaborationInvites };
+const recordCreatorContact = async (shopId, creator, type, {
+  contactedAt = new Date(),
+  model = TikTokCreatorContactHistory,
+} = {}) => {
+  const profile = normalizeCreatorProfile(creator);
+  if (!profile.username) return null;
+  const timestampField = type === 'message' ? 'last_messaged_at' : 'last_invited_at';
+  const existing = await model.findOne({ where: { shop_id: shopId, username: profile.username } });
+  const values = {
+    shop_id: shopId,
+    creator_open_id: profile.creator_open_id,
+    username: profile.username,
+    [timestampField]: contactedAt,
+    updated_at: contactedAt,
+  };
+  if (!existing) return model.create(values);
+  existing.creator_open_id = profile.creator_open_id || existing.creator_open_id;
+  existing[timestampField] = contactedAt;
+  existing.updated_at = contactedAt;
+  return existing.save();
+};
+
+module.exports = {
+  contactDate,
+  invitationDate,
+  recordTargetCollaborationInvites,
+  recordCreatorContact,
+};

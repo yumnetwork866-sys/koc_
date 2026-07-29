@@ -9,8 +9,8 @@ const {
   SELLER_CREATOR_MARKETPLACE_SCOPE,
 } = require('./tiktokShopService');
 const {
+  clearMarketplaceCooldown,
   loadMarketplaceCooldown,
-  marketplaceRateLimitCooldownMs,
   persistMarketplaceCooldown,
 } = require('./tiktokMarketplaceCooldownService');
 const { createMarketplaceRequestGate } = require('./tiktokMarketplaceRequestGate');
@@ -32,6 +32,23 @@ const DEFAULT_REFRESH_INTERVAL_MS = Math.max(
 const DEFAULT_AUTO_DETAIL_ENABLED = String(
   process.env.TIKTOK_MARKETPLACE_AUTO_DETAIL_ENABLED ?? 'false',
 ).toLowerCase() === 'true';
+const DEFAULT_RECOVERY_SUCCESS_THRESHOLD = Math.max(
+  2,
+  Number(process.env.TIKTOK_MARKETPLACE_RECOVERY_SUCCESS_THRESHOLD) || 3,
+);
+const DEFAULT_RATE_LIMIT_RETRY_MS = Math.max(
+  60 * 1000,
+  Number(process.env.TIKTOK_MARKETPLACE_DISCOVERY_RATE_LIMIT_RETRY_MS) || MINUTE_MS,
+);
+const DEFAULT_SEGMENT_MAX_PAGES = Math.max(
+  1,
+  Number(process.env.TIKTOK_MARKETPLACE_DISCOVERY_SEGMENT_MAX_PAGES) || 5,
+);
+const DEFAULT_DUPLICATE_PAGE_LIMIT = Math.max(
+  1,
+  Number(process.env.TIKTOK_MARKETPLACE_DISCOVERY_DUPLICATE_PAGE_LIMIT) || 3,
+);
+const COOLDOWN_BOUNDARY_TOLERANCE_MS = 1000;
 const runBackgroundMarketplaceRequest = createMarketplaceRequestGate({ minIntervalMs: MINUTE_MS });
 const scheduledMinuteValue = (date) => new Date(Math.floor(date.getTime() / MINUTE_MS) * MINUTE_MS);
 
@@ -43,6 +60,7 @@ const createMarketplaceDiscoverySyncService = ({
   runRequest = runBackgroundMarketplaceRequest,
   loadCooldown = loadMarketplaceCooldown,
   persistCooldown = persistMarketplaceCooldown,
+  clearCooldown = clearMarketplaceCooldown,
   profileRefreshActive = isCreatorProfileRefreshActive,
   queueCreatorDetails = (shop, creators) => marketplaceCreatorDetailService.enrichAndQueue(shop, creators),
   cacheCreatorProfiles = (shopId, creators, options) => (
@@ -52,7 +70,10 @@ const createMarketplaceDiscoverySyncService = ({
   searchQueue = marketplaceSearchQueueService,
   discoverySegments = MARKETPLACE_DISCOVERY_SEGMENTS,
   refreshIntervalMs = DEFAULT_REFRESH_INTERVAL_MS,
-  rateLimitCooldownMs = marketplaceRateLimitCooldownMs,
+  rateLimitCooldownMs = () => DEFAULT_RATE_LIMIT_RETRY_MS,
+  recoverySuccessThreshold = DEFAULT_RECOVERY_SUCCESS_THRESHOLD,
+  segmentMaxPages = DEFAULT_SEGMENT_MAX_PAGES,
+  duplicatePageLimit = DEFAULT_DUPLICATE_PAGE_LIMIT,
   now = () => new Date(),
   logger = console,
 } = {}) => {
@@ -66,20 +87,56 @@ const createMarketplaceDiscoverySyncService = ({
 
   const syncShop = async (shop, scheduledMinute = scheduledMinuteValue(now())) => {
     const run = await claimRun(shop, scheduledMinute);
-    if (!run) return { skipped: true, reason: 'already_claimed' };
+    if (!run) {
+      logger?.info?.('[Marketplace Discovery] Request skipped', {
+        shopId: shop.id,
+        reason: 'already_claimed',
+      });
+      return { skipped: true, reason: 'already_claimed' };
+    }
     const scopes = Array.isArray(shop.authorization?.granted_scopes) ? shop.authorization.granted_scopes : [];
     if (!scopes.includes(SELLER_CREATOR_MARKETPLACE_SCOPE)) {
       await run.update({ status: 'SKIPPED', completed_at: now(), error: 'Missing Creator Marketplace scope.' });
+      logger?.info?.('[Marketplace Discovery] Request skipped', {
+        shopId: shop.id,
+        reason: 'missing_scope',
+      });
       return { skipped: true, reason: 'missing_scope' };
     }
 
-    const cooldownUntil = await loadCooldown(shop.id).catch(() => 0);
-    if (cooldownUntil > now().getTime()) {
-      await run.update({ status: 'SKIPPED', completed_at: now(), error: 'Creator Discovery is cooling down.' });
-      return { skipped: true, reason: 'cooldown' };
+    const state = await StateModel.findByPk(shop.id);
+    const persistedCooldownUntil = await loadCooldown(shop.id).catch(() => 0);
+    const previousRequestAt = state?.last_requested_at
+      ? new Date(state.last_requested_at).getTime()
+      : 0;
+    const previousFailureWasRateLimit = Number(state?.consecutive_rate_limits) > 0
+      && /36009002|too many requests/i.test(String(state?.last_error || ''));
+    // Older versions persisted exponential cooldowns. In one-minute probe mode,
+    // cap those legacy rows at one minute from the failed request.
+    const cooldownUntil = previousFailureWasRateLimit && previousRequestAt
+      ? Math.min(
+        persistedCooldownUntil,
+        previousRequestAt + rateLimitCooldownMs(Number(state.consecutive_rate_limits)),
+      )
+      : persistedCooldownUntil;
+    if (cooldownUntil - now().getTime() > COOLDOWN_BOUNDARY_TOLERANCE_MS) {
+      const skippedAt = now();
+      await run.update({ status: 'SKIPPED', completed_at: skippedAt, error: 'Creator Discovery is cooling down.' });
+      logger?.info?.('[Marketplace Discovery] Request skipped', {
+        shopId: shop.id,
+        reason: 'cooldown',
+        cooldownUntil: new Date(cooldownUntil).toISOString(),
+        retryAfterMs: Math.max(0, cooldownUntil - skippedAt.getTime()),
+        consecutiveRateLimits: Number(state?.consecutive_rate_limits) || 0,
+        recoverySuccesses: Number(state?.recovery_successes) || 0,
+      });
+      return {
+        skipped: true,
+        reason: 'cooldown',
+        cooldown_until: new Date(cooldownUntil),
+      };
     }
 
-    const state = await StateModel.findByPk(shop.id);
     const pendingSearch = await searchQueue.nextPendingSearch(shop.id);
     const pendingKeyword = pendingSearch?.payload?.keyword || '';
     const currentTime = now();
@@ -90,6 +147,11 @@ const createMarketplaceDiscoverySyncService = ({
         status: 'SKIPPED',
         completed_at: currentTime,
         error: `Discovery crawl complete until ${new Date(state.next_refresh_at).toISOString()}.`,
+      });
+      logger?.info?.('[Marketplace Discovery] Request skipped', {
+        shopId: shop.id,
+        reason: 'crawl_complete',
+        nextRefreshAt: new Date(state.next_refresh_at).toISOString(),
       });
       return {
         skipped: true,
@@ -111,6 +173,11 @@ const createMarketplaceDiscoverySyncService = ({
       completed_at: restartingCrawl ? null : (state?.completed_at || null),
       next_refresh_at: restartingCrawl ? null : (state?.next_refresh_at || null),
       consecutive_rate_limits: Number(state?.consecutive_rate_limits) || 0,
+      recovery_successes: Number(state?.recovery_successes) || 0,
+      segment_page_count: restartingCrawl ? 0 : (Number(state?.segment_page_count) || 0),
+      consecutive_duplicate_pages: restartingCrawl
+        ? 0
+        : (Number(state?.consecutive_duplicate_pages) || 0),
       last_requested_at: requestedAt,
       last_succeeded_at: state?.last_succeeded_at || null,
       last_status: 'PROCESSING',
@@ -190,16 +257,50 @@ const createMarketplaceDiscoverySyncService = ({
       }
       if (pendingSearch) await searchQueue.completeSearch(pendingSearch, rows.length);
       const responseNextPageToken = payload.data?.next_page_token || null;
-      const segmentComplete = !pendingKeyword && !responseNextPageToken;
+      const previousSegmentPageCount = restartingCrawl
+        ? 0
+        : (Number(state?.segment_page_count) || 0);
+      const previousDuplicatePages = restartingCrawl
+        ? 0
+        : (Number(state?.consecutive_duplicate_pages) || 0);
+      const completedSegmentPageCount = previousSegmentPageCount + 1;
+      const consecutiveDuplicatePages = newCreatorCount === 0
+        ? previousDuplicatePages + 1
+        : 0;
+      const segmentResultsExhausted = !responseNextPageToken;
+      const segmentPageLimitReached = completedSegmentPageCount >= segmentMaxPages;
+      const duplicatePageLimitReached = consecutiveDuplicatePages >= duplicatePageLimit;
+      const segmentComplete = !pendingKeyword && (
+        segmentResultsExhausted
+        || segmentPageLimitReached
+        || duplicatePageLimitReached
+      );
+      const segmentStopReason = !segmentComplete
+        ? null
+        : (
+          segmentResultsExhausted
+            ? 'results_exhausted'
+            : (duplicatePageLimitReached ? 'duplicate_page_limit' : 'page_limit')
+        );
       const nextSegmentIndex = segmentComplete ? segmentIndex + 1 : segmentIndex;
       const crawlComplete = segmentComplete && nextSegmentIndex >= discoverySegments.length;
       const completedAt = crawlComplete ? seenAt : null;
       const nextRefreshAt = crawlComplete
         ? new Date(seenAt.getTime() + refreshIntervalMs)
         : null;
+      const previousRateLimits = Number(state?.consecutive_rate_limits) || 0;
+      const wasRecovering = previousRateLimits > 0;
+      const recoverySuccesses = wasRecovering
+        ? (Number(state?.recovery_successes) || 0) + 1
+        : 0;
+      const fullyRecovered = !wasRecovering
+        || crawlComplete
+        || recoverySuccesses >= recoverySuccessThreshold;
+      const nextRateLimitCount = fullyRecovered ? 0 : previousRateLimits;
+      const nextRecoverySuccesses = fullyRecovered ? 0 : recoverySuccesses;
       const nextPageToken = pendingKeyword
         ? (state?.next_page_token || null)
-        : responseNextPageToken;
+        : (segmentComplete ? null : responseNextPageToken);
       await StateModel.upsert({
         shop_id: shop.id,
         next_page_token: nextPageToken,
@@ -214,13 +315,30 @@ const createMarketplaceDiscoverySyncService = ({
           : (crawlComplete ? 'COMPLETED' : 'ACTIVE'),
         completed_at: pendingKeyword ? (state?.completed_at || null) : completedAt,
         next_refresh_at: pendingKeyword ? (state?.next_refresh_at || null) : nextRefreshAt,
-        consecutive_rate_limits: 0,
+        consecutive_rate_limits: nextRateLimitCount,
+        recovery_successes: nextRecoverySuccesses,
+        segment_page_count: pendingKeyword
+          ? (Number(state?.segment_page_count) || 0)
+          : (segmentComplete ? 0 : completedSegmentPageCount),
+        consecutive_duplicate_pages: pendingKeyword
+          ? (Number(state?.consecutive_duplicate_pages) || 0)
+          : (segmentComplete ? 0 : consecutiveDuplicatePages),
         last_requested_at: requestedAt,
         last_succeeded_at: seenAt,
         last_status: 'SUCCEEDED',
         last_error: null,
         updated_at: seenAt,
       });
+      if (wasRecovering) {
+        if (fullyRecovered) {
+          await clearCooldown(shop.id).catch((error) => {
+            logger.warn('[Marketplace Discovery] Could not clear recovery cooldown', {
+              shopId: shop.id,
+              message: error.message,
+            });
+          });
+        }
+      }
       await run.update({
         status: 'SUCCEEDED',
         creator_count: rows.length,
@@ -236,8 +354,16 @@ const createMarketplaceDiscoverySyncService = ({
         duplicateCreators: Math.max(0, rows.length - newCreatorCount),
         hasNextPage: Boolean(responseNextPageToken),
         segmentComplete,
+        segmentStopReason,
+        segmentPageCount: pendingKeyword ? null : completedSegmentPageCount,
+        consecutiveDuplicatePages: pendingKeyword ? null : consecutiveDuplicatePages,
+        segmentMaxPages,
+        duplicatePageLimit,
         nextSegmentIndex: pendingKeyword || crawlComplete ? null : nextSegmentIndex,
         crawlComplete,
+        recoveryMode: wasRecovering && !fullyRecovered,
+        recoverySuccesses: nextRecoverySuccesses,
+        recoverySuccessThreshold,
       });
       return {
         skipped: false,
@@ -257,11 +383,12 @@ const createMarketplaceDiscoverySyncService = ({
         ? (Number(state?.consecutive_rate_limits) || 0) + 1
         : (Number(state?.consecutive_rate_limits) || 0);
       if (rateLimited || dailyQuotaReached) {
+        const cooldownMs = dailyQuotaReached
+          ? DAY_MS
+          : rateLimitCooldownMs(consecutiveRateLimits);
         await persistCooldown({
           shopId: shop.id,
-          cooldownUntil: failedAt.getTime() + (
-            dailyQuotaReached ? DAY_MS : rateLimitCooldownMs(consecutiveRateLimits)
-          ),
+          cooldownUntil: failedAt.getTime() + cooldownMs,
           reason: error.message,
         }).catch(() => {});
       }
@@ -275,6 +402,11 @@ const createMarketplaceDiscoverySyncService = ({
         completed_at: restartingCrawl ? null : (state?.completed_at || null),
         next_refresh_at: restartingCrawl ? null : (state?.next_refresh_at || null),
         consecutive_rate_limits: consecutiveRateLimits,
+        recovery_successes: 0,
+        segment_page_count: restartingCrawl ? 0 : (Number(state?.segment_page_count) || 0),
+        consecutive_duplicate_pages: restartingCrawl
+          ? 0
+          : (Number(state?.consecutive_duplicate_pages) || 0),
         last_requested_at: requestedAt,
         last_succeeded_at: state?.last_succeeded_at || null,
         last_status: 'FAILED',
@@ -293,6 +425,7 @@ const createMarketplaceDiscoverySyncService = ({
         tiktokCode: Number(error.tiktokCode) || null,
         requestId: error.requestId || error.request_id || null,
         consecutiveRateLimits,
+        cursorRetained: Boolean(state?.next_page_token || state?.search_key),
         message,
       });
       return { skipped: false, failed: true, error: message };
@@ -306,6 +439,10 @@ const marketplaceDiscoverySyncService = createMarketplaceDiscoverySyncService();
 
 module.exports = {
   DEFAULT_REFRESH_INTERVAL_MS,
+  DEFAULT_RATE_LIMIT_RETRY_MS,
+  DEFAULT_RECOVERY_SUCCESS_THRESHOLD,
+  DEFAULT_SEGMENT_MAX_PAGES,
+  DEFAULT_DUPLICATE_PAGE_LIMIT,
   MARKETPLACE_DISCOVERY_SEGMENTS,
   createMarketplaceDiscoverySyncService,
   marketplaceDiscoverySyncService,

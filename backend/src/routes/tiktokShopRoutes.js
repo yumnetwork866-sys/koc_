@@ -17,6 +17,9 @@ adminRouter.get('/shops/:shopId/affiliate/creators', controller.listAffiliateCre
 adminRouter.get('/shops/:shopId/affiliate/creators/:applicationId/fulfillments', controller.showAffiliateCreatorFulfillments);
 adminRouter.get('/shops/:shopId/affiliate/marketplace-creators', controller.listMarketplaceCreators);
 adminRouter.get('/shops/:shopId/affiliate/marketplace-creators/:creatorId', controller.showMarketplaceCreator);
+adminRouter.post('/shops/:shopId/affiliate/marketplace-creators/:creatorId/invitations', controller.createMarketplaceCreatorInvitation);
+adminRouter.get('/shops/:shopId/affiliate/marketplace-creators/:creatorId/conversation', controller.getMarketplaceCreatorConversation);
+adminRouter.post('/shops/:shopId/affiliate/marketplace-creators/:creatorId/conversation/messages', controller.sendMarketplaceCreatorMessage);
 adminRouter.get('/shops/:shopId/affiliate/creator-content-details', controller.listCreatorContentDetails);
 adminRouter.get('/shops/:shopId/creator-performance', controller.listCreatorPerformance);
 adminRouter.post('/shops/:shopId/creator-performance/sync', controller.syncCreatorPerformance);

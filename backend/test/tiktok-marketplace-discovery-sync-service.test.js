@@ -88,6 +88,8 @@ test('Marketplace Discovery job stores one page and advances its pagination stat
   assert.equal(cachedProfiles[0].shopId, 7);
   assert.deepEqual(cachedProfiles[0].creators.map((creator) => creator.creator_open_id), ['creator-1']);
   assert.equal(stateUpserts.at(-1).next_page_token, 'page-3');
+  assert.equal(stateUpserts.at(-1).segment_page_count, 1);
+  assert.equal(stateUpserts.at(-1).consecutive_duplicate_pages, 0);
   assert.equal(runUpdates.at(-1).status, 'SUCCEEDED');
   assert.equal(infoLogs[0].message, '[Marketplace Discovery] Request started');
   assert.equal(infoLogs[0].details.segmentKey, 'all');
@@ -98,6 +100,119 @@ test('Marketplace Discovery job stores one page and advances its pagination stat
   assert.equal(infoLogs[1].details.validCreators, 1);
   assert.equal(infoLogs[1].details.newCreators, 1);
   assert.equal(infoLogs[1].details.duplicateCreators, 0);
+});
+
+test('Marketplace Discovery moves to the next segment after repeated duplicate-only pages', async () => {
+  const stateUpserts = [];
+  const infoLogs = [];
+  const service = createMarketplaceDiscoverySyncService({
+    RunModel: {
+      async findOrCreate() { return [{ async update() {} }, true]; },
+    },
+    StateModel: {
+      async findByPk() {
+        return {
+          segment_index: 0,
+          crawl_status: 'ACTIVE',
+          next_page_token: 'page-3',
+          search_key: 'stable-search',
+          segment_page_count: 2,
+          consecutive_duplicate_pages: 2,
+        };
+      },
+      async upsert(value) { stateUpserts.push(value); },
+    },
+    CreatorModel: {
+      async findAll() { return [{ creator_open_id: 'existing-creator' }]; },
+      async bulkCreate() {},
+    },
+    discoverySegments: [
+      { key: 'all', filters: {} },
+      { key: 'filtered', filters: { gmv_ranges: ['GMV_RANGE_0_100'] } },
+    ],
+    searchMarketplace: async () => ({
+      data: {
+        creators: [{ creator_open_id: 'existing-creator' }],
+        next_page_token: 'page-4',
+        search_key: 'stable-search',
+      },
+    }),
+    runRequest: async (_shopId, operation) => operation(),
+    loadCooldown: async () => 0,
+    cacheCreatorProfiles: async () => {},
+    duplicatePageLimit: 3,
+    segmentMaxPages: 5,
+    searchQueue: emptySearchQueue,
+    now: () => new Date('2026-07-22T03:19:17.000Z'),
+    logger: {
+      info(message, details) { infoLogs.push({ message, details }); },
+      warn() {},
+    },
+  });
+
+  const result = await service.syncShop(marketplaceShop());
+
+  assert.equal(result.crawl_complete, false);
+  assert.equal(stateUpserts.at(-1).segment_index, 1);
+  assert.equal(stateUpserts.at(-1).next_page_token, null);
+  assert.equal(stateUpserts.at(-1).search_key, null);
+  assert.equal(stateUpserts.at(-1).segment_page_count, 0);
+  assert.equal(stateUpserts.at(-1).consecutive_duplicate_pages, 0);
+  const completedLog = infoLogs.find((entry) => entry.message === '[Marketplace Discovery] Request completed');
+  assert.equal(completedLog.details.newCreators, 0);
+  assert.equal(completedLog.details.segmentStopReason, 'duplicate_page_limit');
+  assert.equal(completedLog.details.nextSegmentIndex, 1);
+});
+
+test('Marketplace Discovery caps each segment even while it is finding new creators', async () => {
+  const stateUpserts = [];
+  const service = createMarketplaceDiscoverySyncService({
+    RunModel: {
+      async findOrCreate() { return [{ async update() {} }, true]; },
+    },
+    StateModel: {
+      async findByPk() {
+        return {
+          segment_index: 0,
+          crawl_status: 'ACTIVE',
+          next_page_token: 'page-5',
+          search_key: 'stable-search',
+          segment_page_count: 4,
+          consecutive_duplicate_pages: 0,
+        };
+      },
+      async upsert(value) { stateUpserts.push(value); },
+    },
+    CreatorModel: {
+      async findAll() { return []; },
+      async bulkCreate() {},
+    },
+    discoverySegments: [
+      { key: 'first', filters: {} },
+      { key: 'second', filters: { units_sold_ranges: ['UNITS_SOLD_RANGE_0_10'] } },
+    ],
+    searchMarketplace: async () => ({
+      data: {
+        creators: [{ creator_open_id: 'new-creator' }],
+        next_page_token: 'page-6',
+        search_key: 'stable-search',
+      },
+    }),
+    runRequest: async (_shopId, operation) => operation(),
+    loadCooldown: async () => 0,
+    cacheCreatorProfiles: async () => {},
+    duplicatePageLimit: 3,
+    segmentMaxPages: 5,
+    searchQueue: emptySearchQueue,
+    now: () => new Date('2026-07-22T03:19:17.000Z'),
+  });
+
+  await service.syncShop(marketplaceShop());
+
+  assert.equal(stateUpserts.at(-1).segment_index, 1);
+  assert.equal(stateUpserts.at(-1).next_page_token, null);
+  assert.equal(stateUpserts.at(-1).segment_page_count, 0);
+  assert.equal(stateUpserts.at(-1).consecutive_duplicate_pages, 0);
 });
 
 test('Marketplace Discovery job claims each shop and minute only once across instances', async () => {
@@ -115,7 +230,7 @@ test('Marketplace Discovery job claims each shop and minute only once across ins
   assert.equal(searchCalls, 0);
 });
 
-test('Marketplace Discovery uses its alternating minute while Creator Performance refresh is active', async () => {
+test('Marketplace Discovery continues while Creator Performance refresh is active', async () => {
   let searchCalls = 0;
   let detailQueues = 0;
   const run = { async update() {} };
@@ -303,7 +418,14 @@ test('Marketplace Discovery job persists cooldown after TikTok rate limiting', a
       async findOrCreate() { return [{ async update(value) { runUpdates.push(value); } }, true]; },
     },
     StateModel: {
-      async findByPk() { return null; },
+      async findByPk() {
+        return {
+          next_page_token: 'page-3',
+          search_key: 'stable-search',
+          consecutive_rate_limits: 2,
+          recovery_successes: 1,
+        };
+      },
       async upsert(value) { stateUpserts.push(value); },
     },
     CreatorModel: { async bulkCreate() {} },
@@ -315,6 +437,7 @@ test('Marketplace Discovery job persists cooldown after TikTok rate limiting', a
     runRequest: async (_shopId, operation) => operation(),
     loadCooldown: async () => 0,
     persistCooldown: async (value) => { cooldowns.push(value); },
+    rateLimitCooldownMs: () => 60_000,
     searchQueue: emptySearchQueue,
     now: () => new Date(currentTime),
     logger: { warn() {} },
@@ -325,8 +448,105 @@ test('Marketplace Discovery job persists cooldown after TikTok rate limiting', a
   assert.equal(result.failed, true);
   assert.equal(cooldowns.length, 1);
   assert.equal(cooldowns[0].shopId, 7);
+  assert.equal(cooldowns[0].cooldownUntil, currentTime.getTime() + 60_000);
+  assert.equal(stateUpserts.at(-1).next_page_token, 'page-3');
+  assert.equal(stateUpserts.at(-1).search_key, 'stable-search');
+  assert.equal(stateUpserts.at(-1).consecutive_rate_limits, 3);
+  assert.equal(stateUpserts.at(-1).recovery_successes, 0);
   assert.equal(stateUpserts.at(-1).last_status, 'FAILED');
   assert.equal(runUpdates.at(-1).status, 'FAILED');
+});
+
+test('Marketplace Discovery checks again next minute after one successful recovery probe', async () => {
+  const stateUpserts = [];
+  const cooldowns = [];
+  let clearCalls = 0;
+  const service = createMarketplaceDiscoverySyncService({
+    RunModel: {
+      async findOrCreate() { return [{ async update() {} }, true]; },
+    },
+    StateModel: {
+      async findByPk() {
+        return {
+          segment_index: 0,
+          crawl_status: 'ACTIVE',
+          next_page_token: 'page-3',
+          search_key: 'stable-search',
+          consecutive_rate_limits: 5,
+          recovery_successes: 0,
+        };
+      },
+      async upsert(value) { stateUpserts.push(value); },
+    },
+    CreatorModel: { async bulkCreate() {} },
+    searchMarketplace: async () => ({
+      data: {
+        creators: [],
+        next_page_token: 'page-4',
+        search_key: 'stable-search',
+      },
+    }),
+    runRequest: async (_shopId, operation) => operation(),
+    loadCooldown: async () => 0,
+    persistCooldown: async (value) => { cooldowns.push(value); },
+    clearCooldown: async () => { clearCalls += 1; },
+    recoverySuccessThreshold: 3,
+    searchQueue: emptySearchQueue,
+    now: () => new Date('2026-07-22T03:19:17.000Z'),
+  });
+
+  await service.syncShop(marketplaceShop());
+
+  assert.equal(stateUpserts.at(-1).next_page_token, 'page-4');
+  assert.equal(stateUpserts.at(-1).search_key, 'stable-search');
+  assert.equal(stateUpserts.at(-1).consecutive_rate_limits, 5);
+  assert.equal(stateUpserts.at(-1).recovery_successes, 1);
+  assert.equal(cooldowns.length, 0);
+  assert.equal(clearCalls, 0);
+});
+
+test('Marketplace Discovery exits recovery mode after three consecutive successful probes', async () => {
+  const stateUpserts = [];
+  let clearCalls = 0;
+  const service = createMarketplaceDiscoverySyncService({
+    RunModel: {
+      async findOrCreate() { return [{ async update() {} }, true]; },
+    },
+    StateModel: {
+      async findByPk() {
+        return {
+          segment_index: 0,
+          crawl_status: 'ACTIVE',
+          next_page_token: 'page-4',
+          search_key: 'stable-search',
+          consecutive_rate_limits: 5,
+          recovery_successes: 2,
+        };
+      },
+      async upsert(value) { stateUpserts.push(value); },
+    },
+    CreatorModel: { async bulkCreate() {} },
+    searchMarketplace: async () => ({
+      data: {
+        creators: [],
+        next_page_token: 'page-5',
+        search_key: 'stable-search',
+      },
+    }),
+    runRequest: async (_shopId, operation) => operation(),
+    loadCooldown: async () => 0,
+    persistCooldown: async () => { throw new Error('should not persist cooldown'); },
+    clearCooldown: async () => { clearCalls += 1; },
+    recoverySuccessThreshold: 3,
+    searchQueue: emptySearchQueue,
+    now: () => new Date('2026-07-22T03:19:17.000Z'),
+  });
+
+  await service.syncShop(marketplaceShop());
+
+  assert.equal(stateUpserts.at(-1).consecutive_rate_limits, 0);
+  assert.equal(stateUpserts.at(-1).recovery_successes, 0);
+  assert.equal(clearCalls, 1);
 });
 
 test('Marketplace Discovery waits 24 hours after TikTok daily query quota is reached', async () => {

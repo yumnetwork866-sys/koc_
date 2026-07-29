@@ -15,6 +15,10 @@ const {
   searchOpenCollaborations,
   searchTargetCollaborations,
   getTargetCollaboration,
+  createTargetCollaboration,
+  createAffiliateConversation,
+  getAffiliateConversationMessages,
+  sendAffiliateMessage,
   searchAffiliateOrders,
   attachAffiliateOrderMetadata,
   getOpenCollaborationSettings,
@@ -43,7 +47,10 @@ const {
   hydrateCreatorRows,
   syncAndHydrateCollaborationCreators,
 } = require('../services/tiktokCreatorProfileService');
-const { recordTargetCollaborationInvites } = require('../services/tiktokCreatorContactHistoryService');
+const {
+  recordTargetCollaborationInvites,
+  recordCreatorContact,
+} = require('../services/tiktokCreatorContactHistoryService');
 const { saveTargetCollaborationSnapshots } = require('../services/tiktokTargetCollaborationSnapshotService');
 const { targetCollaborationSyncService } = require('../services/tiktokTargetCollaborationSyncService');
 
@@ -828,6 +835,198 @@ const showMarketplaceCreator = async (req, res) => {
   }
 };
 
+const marketplaceMutationError = (res, error) => {
+  const missingScope = /grant seller\.(affiliate_collaboration\.write|affiliate_messages\.write)/i.test(error.message);
+  res.status(missingScope ? 403 : error.statusCode || 502).json({
+    message: error.message,
+    ...(error.tiktokCode !== undefined && error.tiktokCode !== null
+      ? { tiktok_code: Number(error.tiktokCode) }
+      : {}),
+    ...(error.requestId ? { request_id: error.requestId } : {}),
+  });
+};
+
+const loadMarketplaceCreatorForAction = async (shop, creatorId) => {
+  const creator = await TikTokMarketplaceCreator.findOne({
+    where: { shop_id: shop.id, creator_open_id: String(creatorId || '') },
+  });
+  if (!creator) {
+    const error = new Error('Marketplace creator has not been discovered yet.');
+    error.statusCode = 404;
+    throw error;
+  }
+  return {
+    ...(creator.profile || {}),
+    creator_open_id: creator.creator_open_id,
+    username: creator.username || creator.profile?.username,
+    nickname: creator.nickname || creator.profile?.nickname,
+  };
+};
+
+const createMarketplaceCreatorInvitation = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const creator = await loadMarketplaceCreatorForAction(shop, req.params.creatorId);
+    const name = String(req.body?.name || '').trim();
+    const message = String(req.body?.message || '').trim();
+    const endTime = Number(req.body?.end_time);
+    const contactEmail = String(req.body?.contact_email || '').trim();
+    const products = (Array.isArray(req.body?.products) ? req.body.products : []).map((product) => ({
+      id: String(product?.id || '').trim(),
+      target_commission_rate: Number(product?.target_commission_rate),
+    }));
+    if (!name || name.length > 100) {
+      const error = new Error('Invitation name is required and must be at most 100 characters.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!Number.isInteger(endTime) || endTime <= Math.floor(Date.now() / 1000)) {
+      const error = new Error('Invitation end time must be in the future.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!contactEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+      const error = new Error('A valid seller contact email is required.');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!products.length || products.length > 100 || products.some((product) => (
+      !product.id
+      || !Number.isInteger(product.target_commission_rate)
+      || product.target_commission_rate < 1
+      || product.target_commission_rate > 8000
+    ))) {
+      const error = new Error('Select 1–100 products and use commission rates between 0.01% and 80%.');
+      error.statusCode = 400;
+      throw error;
+    }
+    let payload;
+    if (isDemoAuthorization(shop.authorization)) {
+      payload = {
+        data: { target_collaboration: { id: `demo-invite-${Date.now()}` } },
+        request_id: 'demo-create-target-collaboration',
+      };
+    } else {
+      payload = await createTargetCollaboration({
+        authorization: shop.authorization,
+        shopCipher: shop.cipher,
+        name,
+        message,
+        endTime,
+        products,
+        creatorOpenIds: [creator.creator_open_id],
+        sellerContactInfo: { email: contactEmail },
+        freeSampleRule: {
+          has_free_sample: Boolean(req.body?.has_free_sample),
+          is_sample_approval_exempt: Boolean(req.body?.is_sample_approval_exempt),
+        },
+      });
+    }
+    await recordCreatorContact(shop.id, creator, 'invite');
+    sellerAffiliateCache.clear();
+    res.status(201).json({
+      ...payload.data,
+      request_id: payload.request_id || null,
+    });
+  } catch (error) {
+    marketplaceMutationError(res, error);
+  }
+};
+
+const conversationFromPayload = (payload) => (
+  payload?.data?.conversation
+  || payload?.data?.conversations?.[0]
+  || payload?.data
+  || {}
+);
+
+const openCreatorConversation = async (shop, creator) => {
+  if (isDemoAuthorization(shop.authorization)) {
+    return {
+      payload: { request_id: 'demo-create-conversation' },
+      conversation: {
+        id: `demo-conversation-${creator.creator_open_id}`,
+        username: creator.username,
+        avatar: creator.avatar?.url || creator.avatar_url || null,
+        unread_count: 0,
+      },
+    };
+  }
+  const payload = await createAffiliateConversation({
+    authorization: shop.authorization,
+    shopCipher: shop.cipher,
+    creatorOpenId: creator.creator_open_id,
+  });
+  const conversation = conversationFromPayload(payload);
+  if (!conversation.id && !conversation.conversation_id) {
+    const error = new Error('TikTok did not return a conversation ID.');
+    error.requestId = payload.request_id || null;
+    throw error;
+  }
+  return { payload, conversation };
+};
+
+const getMarketplaceCreatorConversation = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const creator = await loadMarketplaceCreatorForAction(shop, req.params.creatorId);
+    const { payload, conversation } = await openCreatorConversation(shop, creator);
+    const conversationId = conversation.id || conversation.conversation_id;
+    const messagesPayload = isDemoAuthorization(shop.authorization)
+      ? { data: { messages: [], has_more: false, next_page_token: '' } }
+      : await getAffiliateConversationMessages({
+        authorization: shop.authorization,
+        shopCipher: shop.cipher,
+        conversationId,
+        pageToken: req.query.page_token,
+        pageSize: pageSizeValue(req.query.page_size),
+      });
+    res.json({
+      conversation: { ...conversation, id: conversationId },
+      messages: messagesPayload.data?.messages || [],
+      has_more: Boolean(messagesPayload.data?.has_more),
+      next_page_token: messagesPayload.data?.next_page_token || '',
+      request_id: messagesPayload.request_id || payload.request_id || null,
+    });
+  } catch (error) {
+    marketplaceMutationError(res, error);
+  }
+};
+
+const sendMarketplaceCreatorMessage = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const creator = await loadMarketplaceCreatorForAction(shop, req.params.creatorId);
+    const text = String(req.body?.text || '').trim();
+    if (!text || text.length > 2000) {
+      const error = new Error('Message is required and must be at most 2,000 characters.');
+      error.statusCode = 400;
+      throw error;
+    }
+    const { conversation } = await openCreatorConversation(shop, creator);
+    const conversationId = conversation.id || conversation.conversation_id;
+    const payload = isDemoAuthorization(shop.authorization)
+      ? { data: { message_id: `demo-message-${Date.now()}` }, request_id: 'demo-send-message' }
+      : await sendAffiliateMessage({
+        authorization: shop.authorization,
+        shopCipher: shop.cipher,
+        conversationId,
+        text,
+      });
+    await recordCreatorContact(shop.id, creator, 'message');
+    res.status(201).json({
+      ...payload.data,
+      conversation_id: conversationId,
+      request_id: payload.request_id || null,
+    });
+  } catch (error) {
+    marketplaceMutationError(res, error);
+  }
+};
+
 const listCreatorContentDetails = affiliateResponse('creator-content-details', (shop, req) => getSellerCreatorContentDetails({
   authorization: shop.authorization,
   shopCipher: shop.cipher,
@@ -1136,6 +1335,7 @@ module.exports = {
   listShopVideoPerformance, getShopVideoThumbnail,
   listOpenCollaborations, listTargetCollaborations, listAffiliateOrders, showOpenCollaborationSettings,
   listAffiliateCreators, showAffiliateCreatorFulfillments, listMarketplaceCreators, showMarketplaceCreator,
+  createMarketplaceCreatorInvitation, getMarketplaceCreatorConversation, sendMarketplaceCreatorMessage,
   listCreatorContentDetails,
   listCreatorPerformance,
   syncCreatorPerformance,

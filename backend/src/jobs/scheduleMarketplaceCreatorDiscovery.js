@@ -8,8 +8,7 @@ const startMarketplaceCreatorDiscoveryJob = () => {
     console.info('[Marketplace Discovery] Background job disabled');
     return null;
   }
-  // Odd minutes alternate with Creator Performance on even minutes.
-  const task = cron.schedule('0 1-59/2 * * * *', async () => {
+  const task = cron.schedule('0 * * * * *', async () => {
     const shops = await TikTokShop.findAll({
       include: [{ model: TikTokShopAuthorization, as: 'authorization' }],
       order: [['id', 'ASC']],
@@ -24,8 +23,7 @@ const startMarketplaceCreatorDiscoveryJob = () => {
     }
   }, { name: 'marketplace-creator-discovery', noOverlap: true });
   console.info('[Marketplace Discovery] Background job started', {
-    interval: '2 minutes',
-    minuteOffset: 1,
+    interval: '1 minute',
   });
   return task;
 };

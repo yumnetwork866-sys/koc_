@@ -9,10 +9,15 @@ const SHOP_VIDEO_PERFORMANCE_PATH = '/analytics/202605/shop_videos/performance';
 const SELLER_AFFILIATE_SCOPE = 'seller.affiliate_collaboration.read';
 const SELLER_CREATOR_MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
 const SELLER_PRODUCT_BASIC_SCOPE = 'seller.product.basic';
+const SELLER_AFFILIATE_WRITE_SCOPE = 'seller.affiliate_collaboration.write';
+const SELLER_AFFILIATE_MESSAGES_SCOPE = 'seller.affiliate_messages.write';
 const PRODUCT_CATEGORIES_PATH = '/product/202309/categories';
 const OPEN_COLLABORATIONS_PATH = '/affiliate_seller/202412/open_collaborations/search';
 const TARGET_COLLABORATIONS_PATH = '/affiliate_seller/202409/target_collaborations/search';
 const TARGET_COLLABORATION_DETAIL_PATH = '/affiliate_seller/202409/target_collaborations';
+const CREATE_TARGET_COLLABORATION_PATH = '/affiliate_seller/202508/target_collaborations';
+const AFFILIATE_CONVERSATIONS_PATH = '/affiliate_seller/202508/conversations';
+const AFFILIATE_MESSAGES_PATH = '/affiliate_seller/202412';
 const AFFILIATE_ORDERS_PATH = '/affiliate_seller/202410/orders/search';
 const OPEN_COLLABORATION_SETTINGS_PATH = '/affiliate_seller/202409/open_collaboration_settings';
 const SAMPLE_APPLICATIONS_PATH = '/affiliate_seller/202508/sample_applications/search';
@@ -280,6 +285,65 @@ const getTargetCollaboration = ({ authorization, shopCipher, collaborationId } =
     method: 'GET',
   }, fetchImpl);
 };
+
+const createTargetCollaboration = ({
+  authorization, shopCipher, name, message, endTime, products,
+  creatorOpenIds, sellerContactInfo, freeSampleRule,
+} = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: CREATE_TARGET_COLLABORATION_PATH,
+  requiredScope: SELLER_AFFILIATE_WRITE_SCOPE,
+  body: {
+    name,
+    ...(message ? { message } : {}),
+    end_time: String(endTime),
+    products,
+    creator_user_open_ids: creatorOpenIds,
+    seller_contact_info: sellerContactInfo,
+    free_sample_rule: freeSampleRule,
+  },
+}, fetchImpl);
+
+const createAffiliateConversation = ({
+  authorization, shopCipher, creatorOpenId,
+} = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: AFFILIATE_CONVERSATIONS_PATH,
+  requiredScope: SELLER_AFFILIATE_MESSAGES_SCOPE,
+  body: {
+    creator_open_id: creatorOpenId,
+    only_need_conversation_id: false,
+  },
+}, fetchImpl);
+
+const getAffiliateConversationMessages = ({
+  authorization, shopCipher, conversationId, pageToken, pageSize = 20,
+} = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: `${AFFILIATE_MESSAGES_PATH}/conversation/${encodeURIComponent(conversationId)}/messages`,
+  method: 'GET',
+  requiredScope: SELLER_AFFILIATE_MESSAGES_SCOPE,
+  query: {
+    page_size: Math.min(20, Math.max(1, Number(pageSize) || 20)),
+    ...(pageToken ? { page_token: pageToken } : {}),
+  },
+}, fetchImpl);
+
+const sendAffiliateMessage = ({
+  authorization, shopCipher, conversationId, text,
+} = {}, fetchImpl) => sellerAffiliateRequest({
+  authorization,
+  shopCipher,
+  path: `${AFFILIATE_MESSAGES_PATH}/conversations/${encodeURIComponent(conversationId)}/messages`,
+  requiredScope: SELLER_AFFILIATE_MESSAGES_SCOPE,
+  body: {
+    msg_type: 'TEXT',
+    content: JSON.stringify({ content: text }),
+  },
+}, fetchImpl);
 
 const searchAffiliateOrders = ({ authorization, shopCipher, pageToken, pageSize = 20, startTime, endTime, programId } = {}, fetchImpl) => sellerAffiliateRequest({
   authorization,
@@ -585,10 +649,15 @@ module.exports = {
   SELLER_AFFILIATE_SCOPE,
   SELLER_CREATOR_MARKETPLACE_SCOPE,
   SELLER_PRODUCT_BASIC_SCOPE,
+  SELLER_AFFILIATE_WRITE_SCOPE,
+  SELLER_AFFILIATE_MESSAGES_SCOPE,
   PRODUCT_CATEGORIES_PATH,
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
   TARGET_COLLABORATION_DETAIL_PATH,
+  CREATE_TARGET_COLLABORATION_PATH,
+  AFFILIATE_CONVERSATIONS_PATH,
+  AFFILIATE_MESSAGES_PATH,
   AFFILIATE_ORDERS_PATH,
   SAMPLE_APPLICATIONS_PATH,
   SAMPLE_APPLICATION_FULFILLMENTS_PATH,
@@ -609,6 +678,10 @@ module.exports = {
   searchOpenCollaborations,
   searchTargetCollaborations,
   getTargetCollaboration,
+  createTargetCollaboration,
+  createAffiliateConversation,
+  getAffiliateConversationMessages,
+  sendAffiliateMessage,
   searchAffiliateOrders,
   attachAffiliateOrderMetadata,
   getOpenCollaborationSettings,
