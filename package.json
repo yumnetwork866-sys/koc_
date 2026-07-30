@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "packageManager": "pnpm@11.13.1",
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "dev": "pnpm -r --parallel --filter backend --filter frontend dev",
