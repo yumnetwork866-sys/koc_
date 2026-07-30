@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "start": "vite",
+    "prestart": "vite build",
+    "start": "vite preview",
     "build": "vite build",
     "lint": "oxlint src test --deny-warnings --report-unused-disable-directives",
     "test": "node --test test/*.test.js",

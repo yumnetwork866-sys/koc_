@@ -9,7 +9,8 @@ pnpm dev
 ```
 
 `pnpm dev` runs both backend and frontend in parallel from the repo root.
-`pnpm start` runs the frontend on port 3005 and the backend API on port 8000.
+`pnpm start` builds and serves the minified frontend on port 3005 and runs the
+backend API on port 8000. Use `pnpm dev` for the unminified development server.
 `pnpm build` builds the frontend bundle.
 
 For a split Cloudflare Tunnel deployment, route the two processes separately:
