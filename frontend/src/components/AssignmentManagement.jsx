@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { createAssignment, fetchAssignments, fetchUsers, fetchVideos } from '../lib/api';
+import {
+  createAssignment,
+  fetchAssignments,
+  fetchUsers,
+  fetchVideoOptions,
+} from '../lib/api';
 
 const initialForm = {
   video_id: '',
@@ -21,7 +26,7 @@ const AssignmentManagement = ({ heroTitle, heroSubtitle }) => {
   const loadData = async (signal) => {
     const [loadedAssignments, loadedVideos, loadedUsers] = await Promise.all([
       fetchAssignments(signal),
-      fetchVideos(signal),
+      fetchVideoOptions(signal),
       fetchUsers(signal),
     ]);
     setAssignments(loadedAssignments);

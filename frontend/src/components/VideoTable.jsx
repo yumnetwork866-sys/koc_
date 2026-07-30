@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Heart, MessageCircle, Share2 } from 'lucide-react';
-import { fetchChannels, fetchVideos } from '../lib/api';
+import { fetchChannels, fetchVideoPage } from '../lib/api';
 import { useI18n } from '../lib/language';
 import Pagination from './Pagination';
 
@@ -166,6 +166,9 @@ const VideoTable = ({
   data = null,
   selectedChannelId: controlledChannelId,
   onSelectedChannelChange,
+  pagination: controlledPagination = null,
+  currentPage: controlledPage,
+  onPageChange,
 }) => {
   const { t, language } = useI18n();
   const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
@@ -174,6 +177,8 @@ const VideoTable = ({
   const [localLoading, setLocalLoading] = useState(true);
   const [localError, setLocalError] = useState('');
   const [localSelectedChannelId, setLocalSelectedChannelId] = useState('');
+  const [localPagination, setLocalPagination] = useState({ total: 0, total_pages: 1 });
+  const [localSummary, setLocalSummary] = useState({});
   const [page, setPage] = useState(1);
   const usesProvidedData = Array.isArray(data?.videos) && Array.isArray(data?.channels);
   const videos = usesProvidedData ? data.videos : localVideos;
@@ -183,16 +188,10 @@ const VideoTable = ({
   const isChannelControlled = controlledChannelId !== undefined;
   const selectedChannelId = isChannelControlled ? String(controlledChannelId) : localSelectedChannelId;
   const changeSelectedChannel = isChannelControlled ? onSelectedChannelChange : setLocalSelectedChannelId;
-
-  const loadData = async (signal) => {
-    const [loadedVideos, loadedChannels] = await Promise.all([
-      fetchVideos(signal),
-      fetchChannels(signal),
-    ]);
-
-    setLocalVideos(loadedVideos);
-    setLocalChannels(loadedChannels);
-  };
+  const isPageControlled = controlledPage !== undefined;
+  const activePage = isPageControlled ? Number(controlledPage) : page;
+  const changePage = isPageControlled ? onPageChange : setPage;
+  const usesServerPagination = Boolean(usesProvidedData && controlledPagination);
 
   useEffect(() => {
     if (usesProvidedData) return undefined;
@@ -202,7 +201,19 @@ const VideoTable = ({
       try {
         setLocalLoading(true);
         setLocalError('');
-        await loadData(controller.signal);
+        const [videoPayload, loadedChannels] = await Promise.all([
+          fetchVideoPage({
+            signal: controller.signal,
+            page: activePage,
+            pageSize: PAGE_SIZE,
+            channelId: localSelectedChannelId || null,
+          }),
+          fetchChannels(controller.signal),
+        ]);
+        setLocalVideos(videoPayload.items || []);
+        setLocalPagination(videoPayload.pagination || { total: 0, total_pages: 1 });
+        setLocalSummary(videoPayload.summary || {});
+        setLocalChannels(loadedChannels);
       } catch (err) {
         if (err.name !== 'AbortError') {
           setLocalError(err.message || t('videoLibrary.loadError'));
@@ -217,7 +228,7 @@ const VideoTable = ({
     load();
 
     return () => controller.abort();
-  }, [t, usesProvidedData]);
+  }, [activePage, localSelectedChannelId, t, usesProvidedData]);
 
   useEffect(() => {
     if (isChannelControlled) return;
@@ -234,7 +245,7 @@ const VideoTable = ({
     return videos.filter((video) => String(video.channel_id) === selectedChannelId);
   }, [videos, selectedChannelId]);
 
-  const filteredTotals = useMemo(() => {
+  const clientFilteredTotals = useMemo(() => {
     return filteredVideos.reduce((acc, video) => {
       acc.views += Number(video.views || 0);
       acc.likes += Number(video.likes || 0);
@@ -243,16 +254,27 @@ const VideoTable = ({
       return acc;
     }, { views: 0, likes: 0, comments: 0, shares: 0 });
   }, [filteredVideos]);
+  const filteredTotals = usesProvidedData ? clientFilteredTotals : localSummary;
 
-  const pageCount = Math.max(1, Math.ceil(filteredVideos.length / PAGE_SIZE));
+  const totalVideos = usesServerPagination
+    ? Number(controlledPagination.total || 0)
+    : usesProvidedData
+      ? filteredVideos.length
+      : Number(localPagination.total || 0);
+  const pageCount = usesServerPagination
+    ? Math.max(1, Number(controlledPagination.total_pages || 1))
+    : usesProvidedData
+    ? Math.max(1, Math.ceil(filteredVideos.length / PAGE_SIZE))
+    : Math.max(1, Number(localPagination.total_pages || 1));
   const paginatedVideos = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
+    if (!usesProvidedData || usesServerPagination) return filteredVideos;
+    const start = (activePage - 1) * PAGE_SIZE;
     return filteredVideos.slice(start, start + PAGE_SIZE);
-  }, [filteredVideos, page]);
+  }, [activePage, filteredVideos, usesProvidedData, usesServerPagination]);
 
   useEffect(() => {
-    setPage(1);
-  }, [selectedChannelId]);
+    if (!isPageControlled) setPage(1);
+  }, [isPageControlled, selectedChannelId]);
 
   return (
     <div className={embedded ? 'dashboard-video-library' : 'page'} id={embedded ? 'videos' : undefined}>
@@ -261,7 +283,7 @@ const VideoTable = ({
         <div className="page__stats page__stats--four">
           <article className="stat-card">
             <p className="stat-card__label">{t('videoLibrary.videos')}</p>
-            <p className="stat-card__value">{filteredVideos.length}</p>
+            <p className="stat-card__value">{totalVideos}</p>
           </article>
           <article className="stat-card">
             <p className="stat-card__label">{t('videoLibrary.views')}</p>
@@ -408,11 +430,11 @@ const VideoTable = ({
             </tbody>
           </table>
         </div>
-        {filteredVideos.length > PAGE_SIZE ? (
+        {pageCount > 1 ? (
           <Pagination
-            currentPage={page}
+            currentPage={activePage}
             totalPages={pageCount}
-            onPageChange={setPage}
+            onPageChange={changePage}
             previousLabel={t('common.previous')}
             nextLabel={t('common.next')}
             ariaLabel={t('videoLibrary.pagination')}

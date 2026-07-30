@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getVideos,
+  getVideoOptions,
   getVideoById,
   createVideo,
   updateVideo,
@@ -10,6 +11,7 @@ const {
 
 // GET /api/videos
 router.get('/', getVideos);
+router.get('/options', getVideoOptions);
 
 // GET /api/videos/:id
 router.get('/:id', getVideoById);

@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { fetchChannels, fetchVideos } from '../lib/api';
+import { fetchDashboard } from '../lib/api';
 import { useI18n } from '../lib/language';
 import VideoTable, { ChannelPicker } from './VideoTable';
 
@@ -34,6 +34,21 @@ const Dashboard = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const [videos, setVideos] = useState([]);
   const [channels, setChannels] = useState([]);
+  const [totals, setTotals] = useState({
+    video_count: 0,
+    views: 0,
+    likes: 0,
+    comments: 0,
+    shares: 0,
+  });
+  const [chartRows, setChartRows] = useState([]);
+  const [videoPage, setVideoPage] = useState(1);
+  const [videoPagination, setVideoPagination] = useState({
+    page: 1,
+    page_size: 20,
+    total: 0,
+    total_pages: 1,
+  });
   const [selectedChannelId, setSelectedChannelId] = useState('');
   const [chartMetric, setChartMetric] = useState('views');
   const [loading, setLoading] = useState(true);
@@ -48,12 +63,23 @@ const Dashboard = ({ heroTitle }) => {
       try {
         setLoading(true);
         setError('');
-        const [loadedVideos, loadedChannels] = await Promise.all([
-          fetchVideos(controller.signal),
-          fetchChannels(controller.signal),
-        ]);
-        setVideos(loadedVideos);
-        setChannels(loadedChannels);
+        const payload = await fetchDashboard({
+          signal: controller.signal,
+          channelId: selectedChannelId || null,
+          metric: chartMetric,
+          page: videoPage,
+          pageSize: 20,
+        });
+        setVideos(payload.videos || []);
+        setChannels(payload.channels || []);
+        setTotals(payload.totals || {});
+        setChartRows(payload.chart || []);
+        setVideoPagination(payload.video_pagination || {
+          page: 1,
+          page_size: 20,
+          total: 0,
+          total_pages: 1,
+        });
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || t('dashboard.errorLoad') || 'Failed to load dashboard data');
@@ -68,7 +94,7 @@ const Dashboard = ({ heroTitle }) => {
     load();
 
     return () => controller.abort();
-  }, [t]);
+  }, [chartMetric, selectedChannelId, t, videoPage]);
 
   useEffect(() => {
     setSelectedChannelId((current) => (
@@ -78,55 +104,38 @@ const Dashboard = ({ heroTitle }) => {
     ));
   }, [channels]);
 
-  const filteredVideos = useMemo(() => {
-    if (selectedChannelId === 'all') return videos;
-    return videos.filter((video) => String(video.channel_id) === selectedChannelId);
-  }, [selectedChannelId, videos]);
-
-  const totals = useMemo(() => filteredVideos.reduce((result, video) => ({
-    views: result.views + Number(video.views || 0),
-    likes: result.likes + Number(video.likes || 0),
-    shares: result.shares + Number(video.shares || 0),
-  }), { views: 0, likes: 0, shares: 0 }), [filteredVideos]);
+  useEffect(() => {
+    setVideoPage(1);
+  }, [selectedChannelId]);
 
   const chartData = useMemo(() => {
     if (chartMetric === 'date') {
-      const byDate = new Map();
-      filteredVideos.forEach((video) => {
-        const date = String(video.published_at || '').slice(0, 10);
-        if (!date) return;
-        const current = byDate.get(date) || { date, videoCount: 0, views: 0, likes: 0, shares: 0 };
-        current.videoCount += 1;
-        current.views += Number(video.views || 0);
-        current.likes += Number(video.likes || 0);
-        current.shares += Number(video.shares || 0);
-        byDate.set(date, current);
-      });
-
-      return [...byDate.values()]
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, 10)
+      return chartRows
         .map((item) => {
-          const dateLabel = new Date(`${item.date}T00:00:00`).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US');
-          return { ...item, name: dateLabel, fullName: dateLabel, value: item.videoCount };
+          const date = String(item.date || '').slice(0, 10);
+          const dateLabel = new Date(`${date}T00:00:00`).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US');
+          return {
+            ...item,
+            videoCount: Number(item.video_count || 0),
+            name: dateLabel,
+            fullName: dateLabel,
+            value: Number(item.video_count || 0),
+          };
         });
     }
 
-    return [...filteredVideos]
-      .sort((a, b) => Number(b[chartMetric] || 0) - Number(a[chartMetric] || 0))
-      .slice(0, 10)
-      .map((video, index) => {
-        const title = String(video.title || `${t('dashboard.video')} ${index + 1}`);
+    return chartRows.map((row, index) => {
+        const title = String(row.title || `${t('dashboard.video')} ${index + 1}`);
         return {
           name: title.length > 14 ? `${title.slice(0, 14)}…` : title,
           fullName: title,
-          value: Number(video[chartMetric] || 0),
-          views: Number(video.views || 0),
-          likes: Number(video.likes || 0),
-          shares: Number(video.shares || 0),
+          value: Number(row[chartMetric] || 0),
+          views: Number(row.views || 0),
+          likes: Number(row.likes || 0),
+          shares: Number(row.shares || 0),
         };
       });
-  }, [chartMetric, filteredVideos, language, t]);
+  }, [chartMetric, chartRows, language, t]);
 
   const averageChartValue = chartData.length
     ? chartData.reduce((sum, item) => sum + item.value, 0) / chartData.length
@@ -152,7 +161,7 @@ const Dashboard = ({ heroTitle }) => {
           <div className="dashboard-hero__mini-grid">
             <article className="stat-card stat-card--soft">
               <p className="stat-card__label">{t('dashboard.totalVideos')}</p>
-              <p className="stat-card__value">{formatNumber(filteredVideos.length)}</p>
+            <p className="stat-card__value">{formatNumber(totals.video_count)}</p>
             </article>
             <article className="stat-card stat-card--soft">
               <p className="stat-card__label">{t('dashboard.totalLikes')}</p>
@@ -237,6 +246,9 @@ const Dashboard = ({ heroTitle }) => {
         }}
         selectedChannelId={selectedChannelId}
         onSelectedChannelChange={setSelectedChannelId}
+        pagination={videoPagination}
+        currentPage={videoPage}
+        onPageChange={setVideoPage}
       />
     </div>
   );

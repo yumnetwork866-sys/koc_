@@ -11,8 +11,10 @@ const {
   getKocDetail,
   generateWeeklyReport
 } = require('../controllers/reportController');
+const { getDashboard } = require('../controllers/dashboardController');
 
 // GET /api/reports/kpis
+router.get('/dashboard', getDashboard);
 router.get('/kpis', getKpis);
 router.get('/koc/:creatorId/detail', getKocDetail);
 

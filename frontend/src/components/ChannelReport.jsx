@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  fetchAllVideos,
   fetchChannels,
   fetchContentTeams,
   fetchTikTokShopVideoAnalytics,
   fetchTikTokShops,
   fetchUsers,
-  fetchVideos,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 
@@ -77,8 +77,11 @@ const ChannelReport = () => {
       try {
         setLoading(true);
         setError('');
+        const [year, month] = selectedMonth.split('-').map(Number);
+        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+        const endDate = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
         const [loadedVideos, loadedChannels, loadedShops, loadedUsers, loadedTeams] = await Promise.all([
-          fetchVideos(controller.signal),
+          fetchAllVideos({ signal: controller.signal, startDate, endDate }),
           fetchChannels(controller.signal),
           fetchTikTokShops(controller.signal).catch(() => []),
           fetchUsers(controller.signal),
@@ -97,7 +100,7 @@ const ChannelReport = () => {
     };
     load();
     return () => controller.abort();
-  }, []);
+  }, [selectedMonth]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -168,19 +171,10 @@ const ChannelReport = () => {
   }, [selectedMonth, videos]);
 
   const monthOptions = useMemo(() => {
-    const indexes = videos
-      .map((video) => {
-        if (!video.published_at) return null;
-        const publishedAt = new Date(video.published_at);
-        return Number.isFinite(publishedAt.getTime())
-          ? publishedAt.getFullYear() * 12 + publishedAt.getMonth()
-          : null;
-      })
-      .filter((value) => value !== null);
     const selectedIndex = monthIndex(selectedMonth);
     const currentIndex = monthIndex(currentMonthValue());
-    const firstIndex = Math.min(selectedIndex, currentIndex, ...indexes);
-    const lastIndex = Math.max(selectedIndex, currentIndex, ...indexes);
+    const firstIndex = Math.min(selectedIndex, currentIndex) - 11;
+    const lastIndex = Math.max(selectedIndex, currentIndex);
 
     return Array.from({ length: lastIndex - firstIndex + 1 }, (_, offset) => {
       const value = lastIndex - offset;
@@ -189,7 +183,7 @@ const ChannelReport = () => {
       const normalizedValue = `${year}-${String(month).padStart(2, '0')}`;
       return { value: normalizedValue, label: formatMonth(normalizedValue) };
     });
-  }, [selectedMonth, videos]);
+  }, [selectedMonth]);
 
   const employeeRules = useMemo(() => users
     .filter((user) => user.content_attribution?.team_id)

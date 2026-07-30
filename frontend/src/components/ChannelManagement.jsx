@@ -276,7 +276,7 @@ const ChannelManagement = ({ heroTitle }) => {
                         </a>
                       ) : <div className="channel-cell">{renderChannelIdentity(channel)}</div>}
                     </td>
-                    <td className="cell-number">{channel.videos?.length || 0}</td>
+                    <td className="cell-number">{Number(channel.video_count || 0)}</td>
                     <td className="cell-actions">
                       <div className="action-menu">
                         <button

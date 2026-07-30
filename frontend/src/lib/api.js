@@ -259,8 +259,49 @@ export function fetchTikTokPartnerCreatorOverview(creatorId, signal) {
   return apiRequest(`/bookings/tiktok-partner/creators/${encodeURIComponent(creatorId)}/overview`, { signal });
 }
 
-export function fetchVideos(signal) {
-  return apiRequest('/videos', { signal });
+const videoQuery = (filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.page) params.set('page', filters.page);
+  if (filters.pageSize) params.set('page_size', filters.pageSize);
+  if (filters.startDate) params.set('start_date', filters.startDate);
+  if (filters.endDate) params.set('end_date', filters.endDate);
+  if (filters.channelId) params.set('channel_id', filters.channelId);
+  const query = params.toString();
+  return `/videos${query ? `?${query}` : ''}`;
+};
+
+export function fetchVideoPage(filters = {}) {
+  return apiRequest(videoQuery(filters), { signal: filters.signal });
+}
+
+export async function fetchVideos(signalOrFilters) {
+  const filters = signalOrFilters && typeof signalOrFilters === 'object' && 'aborted' in signalOrFilters
+    ? { signal: signalOrFilters }
+    : (signalOrFilters || {});
+  const payload = await fetchVideoPage({ pageSize: 100, ...filters });
+  return Array.isArray(payload) ? payload : payload.items || [];
+}
+
+export async function fetchAllVideos(filters = {}) {
+  const pageSize = filters.pageSize || 100;
+  const items = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const payload = await fetchVideoPage({
+      ...filters,
+      page,
+      pageSize,
+    });
+    items.push(...(payload.items || []));
+    totalPages = Number(payload.pagination?.total_pages || 1);
+    page += 1;
+  } while (page <= totalPages);
+  return items;
+}
+
+export function fetchVideoOptions(signal) {
+  return apiRequest('/videos/options', { signal });
 }
 
 export function fetchReports(signal) {
@@ -278,6 +319,26 @@ export function fetchKpis(signal, role, filters = {}) {
   if (filters.endDate) params.set('end_date', filters.endDate);
   const query = params.toString();
   return apiRequest(`/reports/kpis${query ? `?${query}` : ''}`, { signal });
+}
+
+export function fetchDashboard({
+  signal,
+  channelId,
+  startDate,
+  endDate,
+  metric,
+  page,
+  pageSize,
+} = {}) {
+  const params = new URLSearchParams();
+  if (channelId) params.set('channel_id', channelId);
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
+  if (metric) params.set('metric', metric);
+  if (page) params.set('page', page);
+  if (pageSize) params.set('page_size', pageSize);
+  const query = params.toString();
+  return apiRequest(`/reports/dashboard${query ? `?${query}` : ''}`, { signal });
 }
 
 export function fetchKocDetail(creatorId, { signal, startDate, endDate } = {}) {

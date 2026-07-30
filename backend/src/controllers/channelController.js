@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { Op } = require('sequelize');
+const { literal, Op } = require('sequelize');
 const { decryptToken, encryptToken } = require('../lib/tokenEncryption');
 const {
   TikTokChannel,
@@ -839,10 +839,15 @@ const startTiktokOauth = async (req, res) => {
 const getChannels = async (req, res) => {
   try {
     const channels = await TikTokChannel.findAll({
-      include: [
-        { model: Video, as: 'videos' },
-        { model: User, as: 'creator', attributes: ['id', 'name', 'email', 'role'], required: false },
-      ],
+      attributes: {
+        exclude: ['video_count'],
+        include: [[literal(`(
+          SELECT COUNT(*)::int
+          FROM videos
+          WHERE videos.channel_id = "TikTokChannel"."id"
+        )`), 'video_count']],
+      },
+      include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email', 'role'], required: false }],
       order: [['id', 'ASC']],
     });
     res.json(channels.map(serializeChannel));
@@ -854,7 +859,15 @@ const getChannels = async (req, res) => {
 const getChannelById = async (req, res) => {
   try {
     const channel = await TikTokChannel.findByPk(req.params.id, {
-      include: [{ model: Video, as: 'videos' }],
+      attributes: {
+        exclude: ['video_count'],
+        include: [[literal(`(
+          SELECT COUNT(*)::int
+          FROM videos
+          WHERE videos.channel_id = "TikTokChannel"."id"
+        )`), 'video_count']],
+      },
+      include: [{ model: User, as: 'creator', attributes: ['id', 'name', 'email', 'role'], required: false }],
     });
     if (!channel) {
       return res.status(404).json({ message: 'Channel not found' });
