@@ -163,7 +163,7 @@ const syncAndHydrateCollaborationCreators = async (shopId, rows = [], options = 
         creator_open_id: shared.creator_open_id || creator.creator_open_id || null,
         username: shared.username || creator.username,
         nickname: shared.nickname || creator.nickname || null,
-        avatar: { ...(creator.avatar || {}), ...(shared.avatar_url ? { url: shared.avatar_url } : {}) },
+        avatar: { ...creator.avatar, ...(shared.avatar_url ? { url: shared.avatar_url } : {}) },
         avatar_url: shared.avatar_url || creator.avatar_url || null,
       };
     }),

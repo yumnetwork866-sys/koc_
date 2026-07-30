@@ -722,7 +722,7 @@ const matchBookingVideo = async (req, res) => {
       ? 'MANUAL_URL'
       : selected.cached_catalog ? 'SHOP_VIDEO_CATALOG' : 'TIKTOK_SHOP_VIDEO_PERFORMANCE';
     const evaluationSnapshot = {
-      ...(booking.evaluation_snapshot || {}),
+      ...booking.evaluation_snapshot,
       video_match: {
         source: mappingSource,
         matched_at: new Date().toISOString(),

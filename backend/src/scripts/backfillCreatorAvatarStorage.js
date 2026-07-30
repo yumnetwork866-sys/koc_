@@ -37,7 +37,7 @@ const run = async ({
     if (!rows.length) break;
     lastId = Number(rows.at(-1).id);
     const creators = rows.map((row) => row.toJSON());
-    const localized = new Array(creators.length);
+    const localized = Array.from({ length: creators.length });
     const indexesByShop = new Map();
     creators.forEach((creator, index) => {
       const key = String(creator.shop_id);

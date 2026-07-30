@@ -12,6 +12,22 @@ pnpm dev
 `pnpm start` does the same with the packages' `start` scripts.
 `pnpm build` builds the frontend bundle.
 
+## Quality checks
+
+Run the same quality gate used by CI before opening a pull request:
+
+```bash
+pnpm check
+```
+
+The gate runs backend and frontend lint with warnings treated as failures, all
+tests, and the production frontend build. To inspect the current test coverage
+without enforcing a threshold:
+
+```bash
+pnpm test:coverage
+```
+
 This project is structured for multi-platform content performance reporting.
 
 ## TikTok OAuth

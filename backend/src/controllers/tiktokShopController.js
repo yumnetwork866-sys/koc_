@@ -99,7 +99,7 @@ const idValue = (value) => /^[1-9]\d*$/.test(String(value || '')) ? Number(value
 const pageSizeValue = (value) => Math.min(100, Math.max(1, Number(value) || 20));
 const unixTimeValue = (value) => /^\d{1,12}$/.test(String(value || '')) ? Number(value) : null;
 const safeShop = (instance) => {
-  const shop = instance?.toJSON ? instance.toJSON() : { ...(instance || {}) };
+  const shop = instance?.toJSON ? instance.toJSON() : { ...instance };
   delete shop.cipher;
   delete shop.authorization;
   return shop;
@@ -129,7 +129,7 @@ const getChannelAvatarIndex = async () => {
   return index;
 };
 const addMatchingChannelAvatar = (shop, avatarIndex) => {
-  const value = shop?.toJSON ? shop.toJSON() : { ...(shop || {}) };
+  const value = shop?.toJSON ? shop.toJSON() : { ...shop };
   const avatar = avatarIndex.get(comparableShopName(value.name));
   return avatar ? { ...value, ...avatar } : value;
 };
@@ -478,7 +478,7 @@ const affiliateResponse = (namespace, operation) => async (req, res) => {
 };
 
 const mapWithConcurrency = async (items, concurrency, mapper) => {
-  const results = new Array(items.length);
+  const results = Array.from({ length: items.length });
   let cursor = 0;
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (cursor < items.length) {
@@ -539,7 +539,7 @@ const listTargetCollaborations = affiliateResponse('target-collaborations', asyn
   const detailedRows = await mapWithConcurrency(rows, 1, async (row) => {
     try {
       const detail = await getTargetCollaborationWithRetry(shop, row.id);
-      return { ...row, ...(detail.data?.target_collaboration || {}) };
+      return { ...row, ...detail.data?.target_collaboration };
     } catch (error) {
       console.warn('[Target Collaborations] Creator detail unavailable', {
         shopId: shop.id,
@@ -759,8 +759,8 @@ const listMarketplaceCreators = async (req, res) => {
       : null;
     const state = await TikTokMarketplaceDiscoveryState.findByPk(shop.id);
     let creators = rows.map((row) => ({
-      ...(row.profile || {}),
-      ...(row.detail || {}),
+      ...row.profile,
+      ...row.detail,
       creator_open_id: row.creator_open_id,
       username: row.username || row.profile?.username,
       nickname: row.nickname || row.profile?.nickname,
@@ -832,7 +832,7 @@ const showMarketplaceCreator = async (req, res) => {
       where: { shop_id: shop.id, creator_open_id: req.params.creatorId },
     });
     res.json({
-      creator: { ...(creator.profile || {}), ...(detail?.detail || {}) },
+      creator: { ...creator.profile, ...detail?.detail },
       detail_refresh: { pending: false, pending_count: 0, poll_after_ms: 0 },
       discovery_source: 'DATABASE',
     });
@@ -862,7 +862,7 @@ const loadMarketplaceCreatorForAction = async (shop, creatorId) => {
     throw error;
   }
   return {
-    ...(creator.profile || {}),
+    ...creator.profile,
     creator_open_id: creator.creator_open_id,
     username: creator.username || creator.profile?.username,
     nickname: creator.nickname || creator.profile?.nickname,

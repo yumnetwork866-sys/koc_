@@ -4,30 +4,6 @@ const { ChatbotSetting, sequelize } = require('../models');
 const DEFAULT_MODEL = process.env.AI_CHAT_MODEL || process.env.GEMINI_MODEL || 'gemma-3-27b-it';
 const DEFAULT_PROVIDER = process.env.AI_CHAT_PROVIDER || 'gemini';
 const DEFAULT_OLLAMA_HOST = process.env.AI_CHAT_OLLAMA_HOST || process.env.OLLAMA_HOST || 'http://127.0.0.1:11434';
-const EMBED_MODEL = 'text-embedding-004';
-
-function parseModelList(rawValue) {
-  return String(rawValue || '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => {
-      const separatorIndex = item.indexOf(':');
-      if (separatorIndex === -1) {
-        return { provider: 'gemini', model: item, label: item };
-      }
-      const provider = item.slice(0, separatorIndex).trim().toLowerCase();
-      const model = item.slice(separatorIndex + 1).trim();
-      if (!model) {
-        return { provider: 'gemini', model: item, label: item };
-      }
-      return {
-        provider: provider === 'ollama' ? 'ollama' : 'gemini',
-        model,
-        label: `${provider === 'ollama' ? 'Ollama' : 'Gemini'}: ${model}`,
-      };
-    });
-}
 
 function parseSingleModel(rawValue, fallbackProvider = DEFAULT_PROVIDER) {
   const value = String(rawValue || '').trim();
@@ -652,7 +628,6 @@ async function askAssistant(message) {
   const snapshot = await getKpiSnapshot();
   const runtime = await getRuntime();
   const normalizedMessage = String(message || '').trim();
-  const prompt = buildPrompt(normalizedMessage, snapshot);
   const suggestions = ['Đánh giá nhân viên', 'Đánh giá KOC', 'Booking quá hạn'];
   const systemPrompt = [
     'Bạn là trợ lý phân tích dữ liệu nội bộ cho YUM Network.',

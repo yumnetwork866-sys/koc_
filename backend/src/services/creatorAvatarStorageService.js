@@ -146,7 +146,7 @@ const cacheCreatorAvatars = async (shopId, creators = [], {
   logger = console,
   ...options
 } = {}) => {
-  const results = new Array(creators.length);
+  const results = Array.from({ length: creators.length });
   let nextIndex = 0;
   const worker = async () => {
     while (nextIndex < creators.length) {

@@ -117,7 +117,7 @@ const createTargetCollaborationSyncService = ({
             shopCipher: shop.cipher,
             collaborationId: row.id,
           }), { signal });
-          const detailed = { ...row, ...(detail.data?.target_collaboration || {}), status, collaboration_status: status };
+          const detailed = { ...row, ...detail.data?.target_collaboration, status, collaboration_status: status };
           const [hydrated] = await hydrate(shop.id, [detailed], {
             logger: { info() {} },
           });

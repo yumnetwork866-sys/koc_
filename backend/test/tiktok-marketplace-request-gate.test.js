@@ -42,7 +42,7 @@ test('Creator Discovery request gate enforces at most one request per shop per m
     async transaction(operation) { return operation({}); },
     async query(sql, options) {
       if (sql.includes('SELECT next_request_at')) {
-        return [[...(persistedNextRequestAt ? [{ next_request_at: persistedNextRequestAt }] : [])], {}];
+        return [persistedNextRequestAt ? [{ next_request_at: persistedNextRequestAt }] : [], {}];
       }
       if (sql.includes('INSERT INTO tiktok_marketplace_request_gates')) {
         persistedNextRequestAt = options.replacements.nextRequestAt;

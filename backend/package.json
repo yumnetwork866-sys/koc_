@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "lint": "oxlint src test --deny-warnings --report-unused-disable-directives",
     "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage",
     "db:init": "node src/migrations/run.js init",
     "db:migrate": "node src/migrations/run.js migrate",
     "db:rollback": "node src/migrations/run.js rollback",
@@ -36,6 +38,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^3.0.1",
+    "oxlint": "^1.71.0"
   }
 }
