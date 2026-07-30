@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const path = require('path');
 const {
   CREATOR_AVATAR_STORAGE_ROOT,
   CREATOR_AVATAR_PUBLIC_PREFIX,
@@ -10,7 +9,6 @@ const {
 require('dotenv').config();
 
 const PORT = process.env.PORT || 8000;
-const frontendDistPath = path.resolve(__dirname, '../../frontend/dist');
 
 // Import routes
 const userRoutes = require('./routes/userRoutes');
@@ -65,6 +63,10 @@ const createApp = () => {
   app.use('/api/bookings/tiktok-partner', tiktokPartnerPublicRoutes);
   app.use('/api/public/reports', publicReportRoutes);
 
+  app.get('/', (_req, res) => {
+    res.json({ message: 'Content Performance Reporting API' });
+  });
+
   app.use('/api/users', requireAdmin, userRoutes);
   app.use('/api/roles', requireAdmin, roleRoutes);
   app.use('/api/content-teams', requireAdmin, contentTeamRoutes);
@@ -81,11 +83,6 @@ const createApp = () => {
   app.use('/api/whatsapp', requireAdmin, whatsappRoutes.adminRouter);
   app.use('/api/tiktok-shop', requireAdmin, tiktokShopRoutes.adminRouter);
   app.use('/api/schedules', requireAdmin, scheduleRoutes);
-
-  app.use(express.static(frontendDistPath));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendDistPath, 'index.html'));
-  });
 
   return app;
 };

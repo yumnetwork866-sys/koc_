@@ -9,8 +9,23 @@ pnpm dev
 ```
 
 `pnpm dev` runs both backend and frontend in parallel from the repo root.
-`pnpm start` does the same with the packages' `start` scripts.
+`pnpm start` runs the frontend on port 3005 and the backend API on port 8000.
 `pnpm build` builds the frontend bundle.
+
+For a split Cloudflare Tunnel deployment, route the two processes separately:
+
+```yaml
+- hostname: report.yumnetwork.vn
+  service: http://localhost:3005
+
+- hostname: report-api.yumnetwork.vn
+  service: http://127.0.0.1:8000
+```
+
+Keep `VITE_API_BASE_URL=/api` so Vite proxies browser API requests to the local
+backend. Set `FRONTEND_URL=https://report.yumnetwork.vn` and
+`BASE_URL=https://report-api.yumnetwork.vn` in `backend/.env` for CORS and
+public OAuth/webhook callbacks.
 
 ## Quality checks
 

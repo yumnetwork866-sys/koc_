@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "pnpm -r --parallel --filter backend --filter frontend dev",
-    "start": "pnpm build && pnpm --filter backend start",
+    "start": "pnpm -r --parallel --filter backend --filter frontend start",
     "build": "pnpm --filter frontend build",
     "lint": "pnpm --filter backend lint && pnpm --filter frontend lint",
     "test": "pnpm --filter backend test && pnpm --filter frontend test",
