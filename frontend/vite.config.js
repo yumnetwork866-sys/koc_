@@ -9,9 +9,28 @@ const apiProxy = {
   },
 }
 
+const productionCacheHeaders = () => ({
+  name: 'production-cache-headers',
+  configurePreviewServer(server) {
+    server.middlewares.use((req, res, next) => {
+      const pathname = req.url?.split('?', 1)[0] || '/'
+
+      if (pathname.startsWith('/assets/')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      } else if (pathname === '/favicon.png') {
+        res.setHeader('Cache-Control', 'public, max-age=2592000')
+      } else {
+        res.setHeader('Cache-Control', 'no-cache')
+      }
+
+      next()
+    })
+  },
+})
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), productionCacheHeaders()],
   build: {
     minify: 'oxc',
     sourcemap: false,
