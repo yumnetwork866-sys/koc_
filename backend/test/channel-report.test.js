@@ -6,6 +6,7 @@ const { mockModule } = require('./helpers/mockModule');
 const loadController = (t, query) => {
   const modelsPath = require.resolve('../src/models');
   const controllerPath = require.resolve('../src/controllers/reportController');
+  const revenueServicePath = require.resolve('../src/services/channelReportRevenueService');
   const restoreModels = mockModule(modelsPath, {
     Booking: {},
     BookingVideo: {},
@@ -14,9 +15,16 @@ const loadController = (t, query) => {
     WeeklyReport: {},
     sequelize: { query },
   });
+  const restoreRevenueService = mockModule(revenueServicePath, {
+    loadMonthlyShopVideoRevenue: async () => ({
+      rows: [{ platform_video_id: 'video-88', revenue: 12.5, currency: 'MYR' }],
+      errors: [],
+    }),
+  });
   delete require.cache[controllerPath];
   t.after(() => {
     delete require.cache[controllerPath];
+    restoreRevenueService();
     restoreModels();
   });
   return require(controllerPath);
@@ -123,6 +131,11 @@ test('channel report aggregates server-side and returns only one video page', as
     assert.equal(call.replacements.startDate, '2026-07-01');
     assert.equal(call.replacements.nextMonth, '2026-08-01');
     assert.equal(call.replacements.teamId, 4);
+    assert.deepEqual(JSON.parse(call.replacements.revenueRows), [{
+      platform_video_id: 'video-88',
+      gross_gmv: 12.5,
+      currency: 'MYR',
+    }]);
   });
   const videoCall = calls.find((call) => call.sql.includes('channel-report-videos'));
   assert.equal(videoCall.replacements.limit, 20);

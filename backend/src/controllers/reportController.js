@@ -9,6 +9,7 @@ const {
   sequelize,
 } = require('../models');
 const { serializeBookingWithActual } = require('../services/bookingVideoPerformanceService');
+const { loadMonthlyShopVideoRevenue } = require('../services/channelReportRevenueService');
 
 const toDateOnly = (date) => date.toISOString().slice(0, 10);
 const REPORT_OLLAMA_HOST = String(
@@ -70,29 +71,16 @@ const channelReportOptions = (query = {}) => {
 };
 
 const channelReportBaseSql = `
-  WITH latest_shop_revenue AS (
-    SELECT DISTINCT ON (shop_video.id)
-      shop_video.id AS shop_video_id,
-      shop_video.platform_video_id,
-      performance.gross_gmv,
-      performance.currency
-    FROM shop_videos shop_video
-    JOIN shop_video_performance_snapshots performance
-      ON performance.shop_video_id = shop_video.id
-    WHERE performance.window_start <= CAST(:nextMonth AS date)
-      AND performance.window_end >= CAST(:startDate AS date)
-    ORDER BY
-      shop_video.id,
-      performance.synced_at DESC NULLS LAST,
-      performance.snapshot_date DESC,
-      performance.id DESC
-  ),
-  platform_revenue AS (
+  WITH platform_revenue AS (
     SELECT
       platform_video_id,
       SUM(gross_gmv) AS revenue,
       MIN(currency) AS currency
-    FROM latest_shop_revenue
+    FROM jsonb_to_recordset(CAST(:revenueRows AS jsonb)) AS source(
+      platform_video_id text,
+      gross_gmv numeric,
+      currency text
+    )
     GROUP BY platform_video_id
   ),
   attribution_rules AS (
@@ -170,7 +158,20 @@ const getChannelReport = async (req, res) => {
       page,
       pageSize,
     } = channelReportOptions(req.query);
-    const replacements = { startDate, nextMonth, teamId };
+    const monthlyRevenue = await loadMonthlyShopVideoRevenue({
+      startDate,
+      endDate: nextMonth,
+    });
+    const replacements = {
+      startDate,
+      nextMonth,
+      teamId,
+      revenueRows: JSON.stringify(monthlyRevenue.rows.map((row) => ({
+        platform_video_id: row.platform_video_id,
+        gross_gmv: row.revenue,
+        currency: row.currency,
+      }))),
+    };
     const [aggregateRows, teamRows, videoRows] = await Promise.all([
       sequelize.query(`${channelReportBaseSql}
         /* channel-report-summary */
@@ -401,6 +402,11 @@ const getChannelReport = async (req, res) => {
           name: team.label,
           member_count: team.members.length,
         })),
+      },
+      revenue_sync: {
+        source: 'tiktok_shop_monthly',
+        partial: monthlyRevenue.errors.length > 0,
+        errors: monthlyRevenue.errors,
       },
     });
   } catch (error) {
