@@ -5,6 +5,7 @@ const {
   TikTokCreatorPerformanceExport, TikTokCreatorPerformanceSnapshot,
   TikTokBasePerformanceSnapshot, TikTokMarketplaceCreator,
   TikTokMarketplaceCreatorDetail, TikTokMarketplaceDiscoveryState,
+  TikTokTargetCollaborationSnapshot,
 } = require('../models');
 const {
   buildShopAuthorizationUrl,
@@ -523,7 +524,7 @@ const listOpenCollaborations = affiliateResponse('open-collaborations', (shop, r
   keyword: req.query.keyword,
 }));
 
-const listTargetCollaborations = affiliateResponse('target-collaborations', async (shop, req) => {
+const loadTargetCollaborationsFromTikTok = async (shop, req) => {
   const payload = await searchTargetCollaborations({
     authorization: shop.authorization,
     shopCipher: shop.cipher,
@@ -555,11 +556,72 @@ const listTargetCollaborations = affiliateResponse('target-collaborations', asyn
   await saveTargetCollaborationSnapshots(shop.id, sharedProfileRows);
   await recordTargetCollaborationInvites(shop.id, sharedProfileRows);
   return { ...payload, data: { ...payload.data, target_collaborations: sharedProfileRows } };
+};
+
+const listTargetCollaborations = affiliateResponse('target-collaborations', async (shop, req) => {
+  const status = ['ONGOING', 'EXPIRING', 'VALID', 'CANCELING', 'COMPLETED'].includes(req.query.status)
+    ? req.query.status
+    : 'ONGOING';
+  const pageSize = pageSizeValue(req.query.page_size);
+  const offset = /^\d+$/.test(String(req.query.page_token || ''))
+    ? Math.max(0, Number(req.query.page_token))
+    : 0;
+  const keyword = String(req.query.keyword || '').trim();
+  const where = {
+    shop_id: shop.id,
+    status,
+    ...(keyword ? { name: { [Op.iLike]: `%${keyword}%` } } : {}),
+  };
+  const { count, rows } = await TikTokTargetCollaborationSnapshot.findAndCountAll({
+    where,
+    order: [['end_at', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
+    limit: pageSize,
+    offset,
+  });
+  if (!count) return loadTargetCollaborationsFromTikTok(shop, req);
+  const targetCollaborations = rows.map((instance) => {
+    const snapshot = instance.toJSON();
+    return {
+      ...(snapshot.raw_data || {}),
+      id: snapshot.collaboration_id,
+      name: snapshot.name,
+      status: snapshot.status,
+      collaboration_status: snapshot.status,
+      snapshot_synced_at: snapshot.synced_at,
+    };
+  });
+  const nextOffset = offset + targetCollaborations.length;
+  return {
+    request_id: null,
+    data: {
+      target_collaborations: targetCollaborations,
+      total_count: count,
+      next_page_token: nextOffset < count ? String(nextOffset) : '',
+      source: 'DATABASE_SNAPSHOT',
+    },
+  };
 });
 
 const loadTargetCollaborationSummaries = async (shop, targetIds) => {
   if (!targetIds.size) return [];
-  const rows = [];
+  const snapshots = await TikTokTargetCollaborationSnapshot.findAll({
+    where: {
+      shop_id: shop.id,
+      collaboration_id: { [Op.in]: [...targetIds] },
+    },
+  });
+  const rows = snapshots.map((instance) => {
+    const snapshot = instance.toJSON();
+    return {
+      ...(snapshot.raw_data || {}),
+      id: snapshot.collaboration_id,
+      name: snapshot.name,
+      status: snapshot.status,
+    };
+  });
+  const foundIds = new Set(rows.map((row) => String(row.id)));
+  const missingIds = new Set([...targetIds].filter((id) => !foundIds.has(String(id))));
+  if (!missingIds.size) return rows;
   let pageToken;
   for (let page = 0; page < 5; page += 1) {
     const payload = await searchTargetCollaborations({
@@ -570,7 +632,7 @@ const loadTargetCollaborationSummaries = async (shop, targetIds) => {
       status: 'ONGOING',
     });
     const pageRows = Array.isArray(payload.data?.target_collaborations) ? payload.data.target_collaborations : [];
-    rows.push(...pageRows.filter((row) => targetIds.has(String(row.id))));
+    rows.push(...pageRows.filter((row) => missingIds.has(String(row.id))));
     if (rows.length >= targetIds.size || !payload.data?.next_page_token) break;
     pageToken = payload.data.next_page_token;
   }
@@ -702,30 +764,47 @@ const listMarketplaceCreators = async (req, res) => {
     const keyword = String(req.query.keyword || '').trim().replace(/^@+/, '');
     const mostRecentFirst = req.query.sort === 'most_recent';
     const browseSeed = marketplaceBrowseSeed(req.query.search_key);
+    const recentContactColumns = mostRecentFirst
+      ? `,
+          recent_contact.previously_invited,
+          recent_contact.previously_invited_at,
+          recent_contact.last_messaged_at`
+      : '';
+    const recentContactJoin = mostRecentFirst
+      ? `
+        LEFT JOIN LATERAL (
+          SELECT
+            GREATEST(history.last_invited_at, history.last_messaged_at) >= NOW() - INTERVAL '90 days' AS previously_invited,
+            GREATEST(history.last_invited_at, history.last_messaged_at) AS previously_invited_at,
+            history.last_messaged_at
+          FROM (
+            SELECT h.last_invited_at, h.last_messaged_at
+            FROM tiktok_creator_contact_histories h
+            WHERE h.shop_id = c.shop_id
+              AND h.creator_open_id = c.creator_open_id
+            UNION ALL
+            SELECT h.last_invited_at, h.last_messaged_at
+            FROM tiktok_creator_contact_histories h
+            WHERE h.shop_id = c.shop_id
+              AND h.username = LOWER(c.username)
+              AND h.creator_open_id IS DISTINCT FROM c.creator_open_id
+          ) history
+          ORDER BY GREATEST(history.last_invited_at, history.last_messaged_at) DESC
+          LIMIT 1
+        ) recent_contact ON TRUE`
+      : '';
     const rows = await sequelize.query(`
       WITH candidates AS (
         SELECT
           c.*,
           COALESCE(d.detail, '{}'::jsonb) AS detail,
           c.profile || COALESCE(d.detail, '{}'::jsonb) AS metric_payload
-          , contact.previously_invited
-          , contact.previously_invited_at
-          , contact.last_messaged_at
+          ${recentContactColumns}
         FROM tiktok_marketplace_creators c
         LEFT JOIN tiktok_marketplace_creator_details d
           ON d.shop_id = c.shop_id
           AND d.creator_open_id = c.creator_open_id
-        LEFT JOIN LATERAL (
-          SELECT
-            GREATEST(h.last_invited_at, h.last_messaged_at) >= NOW() - INTERVAL '90 days' AS previously_invited,
-            GREATEST(h.last_invited_at, h.last_messaged_at) AS previously_invited_at,
-            h.last_messaged_at
-          FROM tiktok_creator_contact_histories h
-          WHERE h.shop_id = c.shop_id
-            AND (h.creator_open_id = c.creator_open_id OR LOWER(h.username) = LOWER(c.username))
-          ORDER BY GREATEST(h.last_invited_at, h.last_messaged_at) DESC
-          LIMIT 1
-        ) contact ON TRUE
+        ${recentContactJoin}
         WHERE c.shop_id = :shopId
           ${keyword ? `AND (c.username ILIKE :keywordPattern OR c.nickname ILIKE :keywordPattern)` : ''}
       ), ranked AS (
@@ -734,15 +813,46 @@ const listMarketplaceCreators = async (req, res) => {
           (CASE WHEN metric_payload ?| ARRAY['units_sold', 'items_sold'] THEN 1 ELSE 0 END
             + CASE WHEN metric_payload ?| ARRAY['avg_video_views', 'avg_ec_video_play_count', 'avg_ec_video_view_count'] THEN 1 ELSE 0 END
             + CASE WHEN metric_payload ?| ARRAY['video_engagement_rate', 'ec_video_engagement_rate', 'avg_ec_video_engagement_rate'] THEN 1 ELSE 0 END
-          ) AS completeness_score
+          ) AS completeness_score,
+          COUNT(*) OVER()::integer AS total_count
         FROM candidates
-      )
-      SELECT ranked.*, COUNT(*) OVER()::integer AS total_count
-      FROM ranked
-      ORDER BY ${mostRecentFirst
+      ), paged AS (
+        SELECT *
+        FROM ranked
+        ORDER BY ${mostRecentFirst
     ? 'last_messaged_at DESC NULLS LAST, last_seen_at DESC NULLS LAST, creator_open_id'
     : 'completeness_score DESC, MD5(creator_open_id || :browseSeed), creator_open_id'}
-      LIMIT :pageSize OFFSET :offset
+        LIMIT :pageSize OFFSET :offset
+      )
+      SELECT
+        paged.*,
+        contact.previously_invited,
+        contact.previously_invited_at,
+        contact.last_messaged_at
+      FROM paged
+      LEFT JOIN LATERAL (
+        SELECT
+          GREATEST(history.last_invited_at, history.last_messaged_at) >= NOW() - INTERVAL '90 days' AS previously_invited,
+          GREATEST(history.last_invited_at, history.last_messaged_at) AS previously_invited_at,
+          history.last_messaged_at
+        FROM (
+          SELECT h.last_invited_at, h.last_messaged_at
+          FROM tiktok_creator_contact_histories h
+          WHERE h.shop_id = paged.shop_id
+            AND h.creator_open_id = paged.creator_open_id
+          UNION ALL
+          SELECT h.last_invited_at, h.last_messaged_at
+          FROM tiktok_creator_contact_histories h
+          WHERE h.shop_id = paged.shop_id
+            AND h.username = LOWER(paged.username)
+            AND h.creator_open_id IS DISTINCT FROM paged.creator_open_id
+        ) history
+        ORDER BY GREATEST(history.last_invited_at, history.last_messaged_at) DESC
+        LIMIT 1
+      ) contact ON TRUE
+      ORDER BY ${mostRecentFirst
+    ? 'paged.last_messaged_at DESC NULLS LAST, paged.last_seen_at DESC NULLS LAST, paged.creator_open_id'
+    : 'paged.completeness_score DESC, MD5(paged.creator_open_id || :browseSeed), paged.creator_open_id'}
     `, {
       replacements: {
         shopId: shop.id,

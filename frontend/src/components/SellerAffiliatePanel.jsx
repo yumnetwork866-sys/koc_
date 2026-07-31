@@ -623,9 +623,14 @@ const SellerAffiliatePanel = () => {
     ? ((data.page || 1) * (data.page_size || PAGE_SIZE) < (data.total_count || 0) ? 'next' : '')
     : data.next_page_token || '';
   const currentPage = pageTokens.length + 1;
+  const supportsNumberedPagination = section === 'performance'
+    || section === 'discover'
+    || (section === 'target' && data.source === 'DATABASE_SNAPSHOT');
   const totalPages = Math.max(
     currentPage + (nextPageToken ? 1 : 0),
-    Math.ceil(Number(data.total_count || 0) / Number(data.page_size || PAGE_SIZE)),
+    supportsNumberedPagination
+      ? Math.ceil(Number(data.total_count || 0) / Number(data.page_size || PAGE_SIZE))
+      : 1,
     1,
   );
   const changePage = async (targetPage) => {
@@ -643,6 +648,13 @@ const SellerAffiliatePanel = () => {
     }
 
     if (section === 'discover') {
+      setPageTokens(Array.from(
+        { length: target - 1 },
+        (_, index) => String((index + 1) * PAGE_SIZE),
+      ));
+      return;
+    }
+    if (section === 'target' && data.source === 'DATABASE_SNAPSHOT') {
       setPageTokens(Array.from(
         { length: target - 1 },
         (_, index) => String((index + 1) * PAGE_SIZE),
