@@ -281,14 +281,6 @@ const resolveSellerShopId = async (authorization, requestedShopId) => {
   return String(sellerShop?.platform_shop_id || authorization?.shop_id || '').trim();
 };
 
-const creatorIdentityKeys = (shopId, creator = {}) => {
-  const keys = [];
-  const creatorOpenId = String(creator.creator_open_id || '').trim();
-  const username = String(creator.username || '').trim().toLowerCase();
-  if (creatorOpenId) keys.push(`${shopId}:open:${creatorOpenId}`);
-  if (username) keys.push(`${shopId}:username:${username}`);
-  return keys;
-};
 const canonicalCreatorKey = (shopId, creator = {}) => {
   const username = String(creator.username || '').trim().replace(/^@+/, '').toLowerCase();
   const creatorOpenId = String(creator.creator_open_id || '').trim();
@@ -367,17 +359,54 @@ const enrichPerformanceViews = async (performance) => {
     : { ...performance, video_views: catalogViews, video_views_source: 'SHOP_VIDEO_CATALOG' };
 };
 
+const targetKocPageParams = (query = {}) => {
+  const requestedPage = Number.parseInt(query.page, 10);
+  const requestedPageSize = Number.parseInt(query.page_size, 10);
+  return {
+    page: Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1,
+    pageSize: Number.isInteger(requestedPageSize)
+      ? Math.min(100, Math.max(1, requestedPageSize))
+      : 20,
+  };
+};
+
 const getTargetKocs = async (req, res) => {
   try {
     const keyword = String(req.query.keyword || '').trim();
-    const normalizedKeyword = keyword.toLowerCase();
-    const collaborations = await TikTokTargetCollaborationSnapshot.findAll({
-      where: { status: { [Op.in]: ['ONGOING', 'VALID', 'EXPIRING'] } },
-      order: [['end_at', 'DESC'], ['synced_at', 'DESC']],
-    });
-    const performanceRows = await sequelize.query(`
-      WITH ranked AS (
-        SELECT snapshot.*,
+    const { page, pageSize } = targetKocPageParams(req.query);
+    const rows = await sequelize.query(`
+      WITH collaboration_creators AS (
+        SELECT
+          collaboration.shop_id,
+          NULLIF(COALESCE(
+            creator ->> 'creator_open_id',
+            creator ->> 'creator_user_open_id',
+            creator ->> 'user_id'
+          ), '') AS creator_open_id,
+          NULLIF(LOWER(REGEXP_REPLACE(TRIM(creator ->> 'username'), '^@+', '')), '') AS username,
+          NULLIF(creator ->> 'nickname', '') AS nickname,
+          NULLIF(COALESCE(creator ->> 'avatar_url', creator #>> '{avatar,url}'), '') AS avatar_url,
+          collaboration.collaboration_id,
+          collaboration.name AS collaboration_name,
+          collaboration.end_at,
+          1 AS source_priority
+        FROM tiktok_target_collaboration_snapshots collaboration
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(collaboration.raw_data -> 'creators') = 'array'
+              THEN collaboration.raw_data -> 'creators'
+            ELSE '[]'::jsonb
+          END
+        ) creator
+        WHERE collaboration.status IN ('ONGOING', 'VALID', 'EXPIRING')
+      ),
+      ranked_performance AS (
+        SELECT
+          snapshot.shop_id,
+          NULLIF(snapshot.creator_open_id, '') AS creator_open_id,
+          NULLIF(LOWER(REGEXP_REPLACE(TRIM(snapshot.username), '^@+', '')), '') AS username,
+          NULLIF(snapshot.nickname, '') AS nickname,
+          NULLIF(snapshot.avatar_url, '') AS avatar_url,
           ROW_NUMBER() OVER (
             PARTITION BY shop_id, COALESCE(NULLIF(creator_open_id, ''), LOWER(username))
             ORDER BY
@@ -385,94 +414,79 @@ const getTargetKocs = async (req, res) => {
               end_date DESC, synced_at DESC, id DESC
           ) AS benchmark_rank
         FROM tiktok_creator_performance_snapshots snapshot
+      ),
+      candidates AS (
+        SELECT * FROM collaboration_creators
+        UNION ALL
+        SELECT
+          shop_id, creator_open_id, username, nickname, avatar_url,
+          NULL::varchar AS collaboration_id,
+          NULL::varchar AS collaboration_name,
+          NULL::timestamptz AS end_at,
+          0 AS source_priority
+        FROM ranked_performance
+        WHERE benchmark_rank = 1
+      ),
+      grouped AS (
+        SELECT
+          shop_id,
+          COALESCE(username, 'open:' || creator_open_id) AS identity,
+          (ARRAY_AGG(creator_open_id ORDER BY source_priority DESC, end_at DESC NULLS LAST)
+            FILTER (WHERE creator_open_id IS NOT NULL))[1] AS creator_open_id,
+          (ARRAY_AGG(username ORDER BY source_priority DESC, end_at DESC NULLS LAST)
+            FILTER (WHERE username IS NOT NULL))[1] AS username,
+          (ARRAY_AGG(nickname ORDER BY source_priority DESC, end_at DESC NULLS LAST)
+            FILTER (WHERE nickname IS NOT NULL))[1] AS nickname,
+          (ARRAY_AGG(avatar_url ORDER BY source_priority DESC, end_at DESC NULLS LAST)
+            FILTER (WHERE avatar_url IS NOT NULL))[1] AS avatar_url,
+          COUNT(DISTINCT collaboration_id)::integer AS collaboration_count,
+          STRING_AGG(DISTINCT collaboration_name, ' ') AS collaboration_names
+        FROM candidates
+        WHERE username IS NOT NULL OR creator_open_id IS NOT NULL
+        GROUP BY shop_id, COALESCE(username, 'open:' || creator_open_id)
+      ),
+      filtered AS (
+        SELECT *
+        FROM grouped
+        WHERE :keyword = ''
+          OR CONCAT_WS(' ', nickname, username, collaboration_names) ILIKE '%' || :keyword || '%'
       )
-      SELECT ranked.*,
-        COALESCE(
-          ranked.video_views,
-          (
-            SELECT SUM(latest.views)::bigint
-            FROM shop_videos video
-            JOIN LATERAL (
-              SELECT performance.views
-              FROM shop_video_performance_snapshots performance
-              WHERE performance.shop_video_id = video.id
-              ORDER BY performance.snapshot_date DESC, performance.synced_at DESC, performance.id DESC
-              LIMIT 1
-            ) latest ON TRUE
-            WHERE video.shop_id = ranked.shop_id
-              AND LOWER(video.creator_username) = LOWER(ranked.username)
-              AND video.posted_at::date BETWEEN ranked.start_date AND ranked.end_date
-          )
-        ) AS video_views
-      FROM ranked
-      WHERE benchmark_rank = 1
-    `, { type: QueryTypes.SELECT });
-    const performanceByCreator = new Map();
-    for (const performance of performanceRows) {
-      if (performance.creator_open_id) performanceByCreator.set(`${performance.shop_id}:open:${performance.creator_open_id}`, performance);
-      if (performance.username) performanceByCreator.set(`${performance.shop_id}:username:${String(performance.username).toLowerCase()}`, performance);
-    }
-    const candidates = [];
-    const collaborationCreatorKeys = new Set();
-    for (const instance of collaborations) {
-      const collaboration = instance.toJSON();
-      const raw = collaboration.raw_data || {};
-      for (const creator of raw.creators || []) {
-        const profile = normalizeCreatorProfile(creator);
-        const identityKeys = creatorIdentityKeys(collaboration.shop_id, profile);
-        if (!identityKeys.length) continue;
-        identityKeys.forEach((key) => collaborationCreatorKeys.add(key));
-        const searchable = `${profile.nickname || ''} ${profile.username || ''} ${collaboration.name || ''}`.toLowerCase();
-        if (normalizedKeyword && !searchable.includes(normalizedKeyword)) continue;
-        const performance = identityKeys.map((key) => performanceByCreator.get(key)).find(Boolean) || null;
-        candidates.push({
-          source: 'TARGET_COLLABORATION',
-          shop_id: collaboration.shop_id,
-          collaboration_id: collaboration.collaboration_id,
-          collaboration_name: collaboration.name,
-          collaboration_status: collaboration.status,
-          collaboration_start_at: collaboration.start_at,
-          collaboration_end_at: collaboration.end_at,
-          products: Array.isArray(raw.products) ? raw.products : [],
-          creator_open_id: profile.creator_open_id,
-          username: profile.username,
-          nickname: profile.nickname,
-          avatar_url: profile.avatar_url,
-          performance,
-          collaboration_synced_at: collaboration.synced_at,
-        });
-      }
-    }
-    for (const performance of performanceRows) {
-      const identityKeys = creatorIdentityKeys(performance.shop_id, performance);
-      if (!identityKeys.length || identityKeys.some((key) => collaborationCreatorKeys.has(key))) continue;
-      const searchable = `${performance.nickname || ''} ${performance.username || ''}`.toLowerCase();
-      if (normalizedKeyword && !searchable.includes(normalizedKeyword)) continue;
-      candidates.push({
-        source: 'CREATOR_PERFORMANCE',
-        shop_id: performance.shop_id,
-        collaboration_id: null,
-        collaboration_name: null,
-        collaboration_status: null,
-        collaboration_start_at: null,
-        collaboration_end_at: null,
-        products: [],
-        creator_open_id: performance.creator_open_id || null,
-        username: performance.username,
-        nickname: performance.nickname,
-        avatar_url: performance.avatar_url,
-        performance,
-        performance_synced_at: performance.synced_at,
-      });
-    }
-    const mergedCandidates = mergeCreatorCandidates(candidates);
-    mergedCandidates.sort((left, right) => {
-      const active = (value) => ['ONGOING', 'VALID', 'EXPIRING'].includes(value) ? 1 : 0;
-      return active(right.collaboration_status) - active(left.collaboration_status)
-        || new Date(right.collaboration_end_at || 0) - new Date(left.collaboration_end_at || 0)
-        || String(left.nickname || left.username).localeCompare(String(right.nickname || right.username));
+      SELECT
+        shop_id,
+        creator_open_id,
+        username,
+        nickname,
+        avatar_url,
+        collaboration_count,
+        COUNT(*) OVER()::integer AS total_count
+      FROM filtered
+      ORDER BY collaboration_count DESC, COALESCE(nickname, username) ASC, shop_id ASC
+      LIMIT :limit OFFSET :offset
+    `, {
+      replacements: {
+        keyword,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+      },
+      type: QueryTypes.SELECT,
     });
-    res.json(mergedCandidates);
+    const total = Number(rows[0]?.total_count || 0);
+    res.json({
+      items: rows.map((row) => ({
+        shop_id: Number(row.shop_id),
+        creator_open_id: row.creator_open_id || null,
+        username: row.username || null,
+        nickname: row.nickname || null,
+        avatar_url: row.avatar_url || null,
+        collaboration_count: Number(row.collaboration_count || 0),
+      })),
+      pagination: {
+        page,
+        page_size: pageSize,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -485,10 +499,19 @@ const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValu
   const creatorUsername = String(creatorUsernameValue || '').trim();
   if (!Number.isInteger(normalizedShopId) || (!creatorOpenId && !creatorUsername)) return null;
 
-  if (collaborationId) {
-    const snapshot = await TikTokTargetCollaborationSnapshot.findOne({
+  const collaborationSnapshots = collaborationId
+    ? [await TikTokTargetCollaborationSnapshot.findOne({
       where: { shop_id: normalizedShopId, collaboration_id: collaborationId },
-    });
+    })].filter(Boolean)
+    : await (TikTokTargetCollaborationSnapshot.findAll?.({
+      where: {
+        shop_id: normalizedShopId,
+        status: { [Op.in]: ['ONGOING', 'VALID', 'EXPIRING'] },
+      },
+      order: [['end_at', 'DESC'], ['synced_at', 'DESC']],
+    }) || []);
+
+  for (const snapshot of collaborationSnapshots) {
     if (snapshot) {
       const collaboration = snapshot.toJSON();
       const raw = collaboration.raw_data || {};
@@ -544,6 +567,37 @@ const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValu
     },
     performance: await enrichPerformanceViews(performanceData),
   };
+};
+
+const getTargetKocDetail = async (req, res) => {
+  try {
+    const targetCreator = await findTargetCreator(
+      req.query.shop_id,
+      req.query.collaboration_id,
+      req.query.creator_open_id,
+      req.query.username,
+    );
+    if (!targetCreator) {
+      return res.status(404).json({ message: 'Target KOC not found.' });
+    }
+    const { collaboration, raw, profile, performance } = targetCreator;
+    res.json({
+      shop_id: Number(collaboration?.shop_id || performance?.shop_id),
+      creator_open_id: profile.creator_open_id || null,
+      username: profile.username || null,
+      nickname: profile.nickname || null,
+      avatar_url: profile.avatar_url || null,
+      collaboration_id: collaboration?.collaboration_id || null,
+      collaboration_name: collaboration?.name || null,
+      collaboration_status: collaboration?.status || null,
+      collaboration_start_at: collaboration?.start_at || null,
+      collaboration_end_at: collaboration?.end_at || null,
+      products: Array.isArray(raw?.products) ? raw.products : [],
+      performance,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 const getBookings = async (req, res) => {
@@ -1005,6 +1059,7 @@ module.exports = {
   matchBookingVideo,
   deleteBooking,
   getTargetKocs,
+  getTargetKocDetail,
   getTikTokPartnerCollaborations,
   getTikTokPartnerStatuses,
   startTikTokPartnerOauth,

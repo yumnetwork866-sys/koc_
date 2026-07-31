@@ -8,6 +8,7 @@ const {
   matchBookingVideo,
   deleteBooking,
   getTargetKocs,
+  getTargetKocDetail,
   getTikTokPartnerCollaborations,
   getTikTokPartnerStatuses,
   startTikTokPartnerOauth,
@@ -17,6 +18,7 @@ const {
 
 router.get('/', getBookings);
 router.get('/target-kocs', getTargetKocs);
+router.get('/target-kocs/detail', getTargetKocDetail);
 router.get('/tiktok-partner/collaborations', getTikTokPartnerCollaborations);
 router.get('/tiktok-partner/status', getTikTokPartnerStatuses);
 router.get('/tiktok-partner/oauth/start', startTikTokPartnerOauth);

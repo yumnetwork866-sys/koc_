@@ -1,13 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  fetchAllVideos,
-  fetchChannels,
-  fetchContentTeams,
-  fetchTikTokShopVideoAnalytics,
-  fetchTikTokShops,
-  fetchUsers,
-} from '../lib/api';
+import { fetchChannelReport } from '../lib/api';
 import { useI18n } from '../lib/language';
 
 const currentMonthValue = () => {
@@ -25,37 +18,9 @@ const formatMonth = (value) => {
   return year && month ? `${month}/${year}` : '';
 };
 
-const videoRevenue = (video, analyticsByVideoId) => {
-  const analytics = analyticsByVideoId.get(String(video?.platform_video_id || ''));
-  const raw = analytics?.amount
-    ?? video?.gmv?.amount
-    ?? video?.gross_gmv
-    ?? video?.sales
-    ?? video?.revenue;
-  const value = Number(raw);
-  return raw === null || raw === undefined || !Number.isFinite(value)
-    ? null
-    : { amount: value, currency: analytics?.currency || video?.sales_currency || 'MYR' };
-};
-
-const matchingEmployeeRule = (video, rules) => {
-  const hashtags = new Set(
-    (String(video?.title || '').match(/#[\p{L}\p{N}_]+/gu) || [])
-      .map((tag) => tag.toLocaleLowerCase('en')),
-  );
-  return rules.find((rule) => (
-    rule.hashtags.some((tag) => hashtags.has(tag.toLocaleLowerCase('en')))
-  )) || null;
-};
-
 const ChannelReport = () => {
   const { language } = useI18n();
-  const [videos, setVideos] = useState([]);
-  const [channels, setChannels] = useState([]);
-  const [shops, setShops] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [teams, setTeams] = useState([]);
-  const [videoAnalyticsById, setVideoAnalyticsById] = useState(() => new Map());
+  const [report, setReport] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthValue);
   const [selectedTeamId, setSelectedTeamId] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -70,28 +35,20 @@ const ChannelReport = () => {
       maximumFractionDigits: 2,
     }).format(Number(value || 0));
   };
-
   useEffect(() => {
     const controller = new AbortController();
     const load = async () => {
       try {
         setLoading(true);
         setError('');
-        const [year, month] = selectedMonth.split('-').map(Number);
-        const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-        const endDate = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-        const [loadedVideos, loadedChannels, loadedShops, loadedUsers, loadedTeams] = await Promise.all([
-          fetchAllVideos({ signal: controller.signal, startDate, endDate }),
-          fetchChannels(controller.signal),
-          fetchTikTokShops(controller.signal).catch(() => []),
-          fetchUsers(controller.signal),
-          fetchContentTeams(controller.signal),
-        ]);
-        setVideos(loadedVideos);
-        setChannels(loadedChannels);
-        setShops(Array.isArray(loadedShops) ? loadedShops : []);
-        setUsers(loadedUsers);
-        setTeams(loadedTeams);
+        const payload = await fetchChannelReport({
+          month: selectedMonth,
+          teamId: selectedTeamId,
+          page: 1,
+          pageSize: 20,
+          signal: controller.signal,
+        });
+        setReport(payload);
       } catch (loadError) {
         if (loadError.name !== 'AbortError') setError(loadError.message || 'Không tải được báo cáo.');
       } finally {
@@ -100,75 +57,15 @@ const ChannelReport = () => {
     };
     load();
     return () => controller.abort();
-  }, [selectedMonth]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const loadVideoAnalytics = async () => {
-      const [year, month] = selectedMonth.split('-').map(Number);
-      if (!year || !month || !shops.length) {
-        setVideoAnalyticsById(new Map());
-        return;
-      }
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const nextMonth = new Date(Date.UTC(year, month, 1));
-      const endDate = nextMonth.toISOString().slice(0, 10);
-      try {
-        const payloads = await Promise.all(shops.map((shop) => (
-          fetchTikTokShopVideoAnalytics(shop.id, {
-            signal: controller.signal,
-            startDate,
-            endDate,
-            currency: 'LOCAL',
-            accountType: 'LINKED_ACCOUNTS',
-            sortField: 'gmv',
-            sortOrder: 'DESC',
-            pageSize: 100,
-          })
-        )));
-        if (controller.signal.aborted) return;
-        const mapped = new Map();
-        payloads.flatMap((payload) => payload?.videos || []).forEach((video) => {
-          const videoId = String(video?.id || video?.video_id || '').trim();
-          const raw = video?.gmv?.amount ?? video?.gmv;
-          const amount = Number(raw);
-          if (!videoId || !Number.isFinite(amount)) return;
-          const currency = video?.gmv?.currency || 'MYR';
-          const existing = mapped.get(videoId);
-          mapped.set(videoId, {
-            amount: (existing?.amount || 0) + amount,
-            currency: existing?.currency || currency,
-          });
-        });
-        setVideoAnalyticsById(mapped);
-      } catch (analyticsError) {
-        if (analyticsError.name !== 'AbortError') setVideoAnalyticsById(new Map());
-      }
-    };
-    loadVideoAnalytics();
-    return () => controller.abort();
-  }, [selectedMonth, shops]);
+  }, [selectedMonth, selectedTeamId]);
 
   useEffect(() => {
     if (selectedTeamId !== 'all'
-      && !teams.some((team) => String(team.id) === selectedTeamId)) {
+      && report
+      && !report.filters?.teams?.some((team) => String(team.id) === selectedTeamId)) {
       setSelectedTeamId('all');
     }
-  }, [selectedTeamId, teams]);
-
-  const monthlyVideos = useMemo(() => {
-    const [year, month] = selectedMonth.split('-').map(Number);
-    if (!year || !month) return [];
-    const monthStart = new Date(year, month - 1, 1);
-    const nextMonthStart = new Date(year, month, 1);
-    return videos.filter((video) => {
-      if (!video.published_at) return false;
-      const publishedAt = new Date(video.published_at);
-      return Number.isFinite(publishedAt.getTime())
-        && publishedAt >= monthStart
-        && publishedAt < nextMonthStart;
-    });
-  }, [selectedMonth, videos]);
+  }, [report, selectedTeamId]);
 
   const monthOptions = useMemo(() => {
     const selectedIndex = monthIndex(selectedMonth);
@@ -185,87 +82,16 @@ const ChannelReport = () => {
     });
   }, [selectedMonth]);
 
-  const employeeRules = useMemo(() => users
-    .filter((user) => user.content_attribution?.team_id)
-    .map((user) => ({
-      user_id: user.id,
-      member: user.name || user.email,
-      team_id: String(user.content_attribution.team_id),
-      hashtags: Array.isArray(user.content_attribution.hashtags)
-        ? user.content_attribution.hashtags
-        : [],
-    })), [users]);
-
-  const report = useMemo(() => {
-    const groups = new Map(teams.map((team) => [String(team.id), {
-      key: String(team.id),
-      label: team.name,
-      videos: 0,
-      views: 0,
-      revenue: 0,
-      revenueAvailable: false,
-      currency: null,
-      members: new Map(),
-    }]));
-
-    employeeRules.forEach((rule) => {
-      const group = groups.get(rule.team_id);
-      if (!group) return;
-      group.members.set(String(rule.user_id), {
-        key: String(rule.user_id),
-        name: rule.member,
-        videos: 0,
-        views: 0,
-        revenue: 0,
-        revenueAvailable: false,
-        currency: null,
-      });
-    });
-
-    let unclassified = 0;
-    monthlyVideos.forEach((video) => {
-      const rule = matchingEmployeeRule(video, employeeRules);
-      const group = rule ? groups.get(rule.team_id) : null;
-      if (!rule || !group) {
-        unclassified += 1;
-        return;
-      }
-
-      const revenue = videoRevenue(video, videoAnalyticsById);
-      group.videos += 1;
-      group.views += Number(video.views || 0);
-      if (revenue !== null) {
-        group.revenue += revenue.amount;
-        group.revenueAvailable = true;
-        group.currency ||= revenue.currency;
-      }
-
-      const member = group.members.get(String(rule.user_id));
-      member.videos += 1;
-      member.views += Number(video.views || 0);
-      if (revenue !== null) {
-        member.revenue += revenue.amount;
-        member.revenueAvailable = true;
-        member.currency ||= revenue.currency;
-      }
-    });
-
-    return {
-      groups: [...groups.values()].map((group) => ({
-        ...group,
-        members: [...group.members.values()].sort((a, b) => b.views - a.views),
-      })),
-      unclassified,
-    };
-  }, [employeeRules, monthlyVideos, teams, videoAnalyticsById]);
-
-  const visibleGroups = useMemo(() => (
+  const teams = report?.filters?.teams || [];
+  const groups = report?.revenue?.teams || [];
+  const visibleGroups = (
     selectedTeamId === 'all'
-      ? report.groups
-      : report.groups.filter((group) => group.key === selectedTeamId)
-  ), [report.groups, selectedTeamId]);
+      ? groups
+      : groups.filter((group) => group.key === selectedTeamId)
+  );
   const selectedTeam = teams.find((team) => String(team.id) === selectedTeamId);
   const topGroup = [...visibleGroups].sort((a, b) => b.views - a.views)[0];
+  const kpis = report?.kpis || {};
 
   return (
     <div className="page channel-report-page">
@@ -285,9 +111,8 @@ const ChannelReport = () => {
             <p className="section-card__meta">
               {selectedTeam
                 ? `${formatNumber(topGroup?.videos || 0)} video đã nhận diện của ${selectedTeam.name} trong ${formatMonth(selectedMonth)}.`
-                : `${formatNumber(monthlyVideos.length)} video trong ${formatMonth(selectedMonth)} từ ${formatNumber(channels.length)} kênh.`}
+                : `${formatNumber(kpis.videos)} video trong ${formatMonth(selectedMonth)} từ ${formatNumber(kpis.channels)} kênh.`}
             </p>
-
           </div>
           <div className="channel-report-filters">
             <div className="field channel-report-team">
@@ -376,6 +201,7 @@ const ChannelReport = () => {
           </>
         )}
       </section>
+
     </div>
   );
 };

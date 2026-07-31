@@ -75,8 +75,23 @@ export function fetchBookings(signal) {
   return apiRequest('/bookings', { signal });
 }
 
-export function fetchBookingTargetKocs(signal) {
-  return apiRequest('/bookings/target-kocs', { signal });
+export function fetchBookingTargetKocs({ keyword, page = 1, pageSize = 20, signal } = {}) {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  if (keyword) params.set('keyword', keyword);
+  return apiRequest(`/bookings/target-kocs?${params.toString()}`, { signal });
+}
+
+export function fetchBookingTargetKocDetail({
+  shopId, creatorOpenId, username, collaborationId, signal,
+} = {}) {
+  const params = new URLSearchParams({ shop_id: String(shopId) });
+  if (creatorOpenId) params.set('creator_open_id', creatorOpenId);
+  if (username) params.set('username', username);
+  if (collaborationId) params.set('collaboration_id', collaborationId);
+  return apiRequest(`/bookings/target-kocs/detail?${params.toString()}`, { signal });
 }
 
 export function fetchTikTokPartnerCollaborations({ creatorId, signal, pageToken, keyword } = {}) {
@@ -282,22 +297,16 @@ export async function fetchVideos(signalOrFilters) {
   return Array.isArray(payload) ? payload : payload.items || [];
 }
 
-export async function fetchAllVideos(filters = {}) {
-  const pageSize = filters.pageSize || 100;
-  const items = [];
-  let page = 1;
-  let totalPages = 1;
-  do {
-    const payload = await fetchVideoPage({
-      ...filters,
-      page,
-      pageSize,
-    });
-    items.push(...(payload.items || []));
-    totalPages = Number(payload.pagination?.total_pages || 1);
-    page += 1;
-  } while (page <= totalPages);
-  return items;
+export function fetchChannelReport({
+  month, teamId, page = 1, pageSize = 20, signal,
+} = {}) {
+  const params = new URLSearchParams({
+    month,
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  if (teamId && teamId !== 'all') params.set('team_id', teamId);
+  return apiRequest(`/reports/channel?${params.toString()}`, { signal });
 }
 
 export function fetchVideoOptions(signal) {

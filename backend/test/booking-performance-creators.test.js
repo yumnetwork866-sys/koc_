@@ -96,54 +96,63 @@ test('booking list uses the latest creator profile avatar instead of an expired 
   assert.equal(response[1].creator_avatar_url, 'https://example.test/snapshot-avatar.webp');
 });
 
-test('KOC search includes Creator Performance-only creators and avoids duplicates', async (t) => {
-  const performanceRows = [
-    { shop_id: 1, creator_open_id: 'in-collab', username: 'shared', nickname: 'Shared creator' },
-    { shop_id: 1, creator_open_id: null, username: 'performance_only', nickname: 'Performance only' },
-  ];
+test('KOC search delegates filtering and pagination to the database and returns compact rows', async (t) => {
+  let queryOptions;
   const { getTargetKocs } = loadController(t, {
-    TikTokTargetCollaborationSnapshot: {
-      findAll: async () => [
-        {
-          toJSON: () => ({
-            shop_id: 1,
-            collaboration_id: 'collab-2',
-            name: 'Second active campaign',
-            status: 'ONGOING',
-            raw_data: {
-              creators: [{ creator_open_id: 'different-open-id', username: 'shared', nickname: 'Shared creator' }],
-            },
-          }),
-        },
-        {
-          toJSON: () => ({
-          shop_id: 1,
-          collaboration_id: 'collab-1',
-          name: 'Active campaign',
-          status: 'ONGOING',
-          raw_data: {
-            creators: [{ creator_open_id: 'in-collab', username: 'shared', nickname: 'Shared creator' }],
+    sequelize: {
+      query: async (_sql, options) => {
+        queryOptions = options;
+        return [
+          {
+            shop_id: '1',
+            creator_open_id: 'in-collab',
+            username: 'shared',
+            nickname: 'Shared creator',
+            avatar_url: 'https://example.test/avatar.webp',
+            collaboration_count: '2',
+            total_count: '21',
           },
-          }),
-        },
-      ],
+          {
+            shop_id: '1',
+            creator_open_id: null,
+            username: 'performance_only',
+            nickname: 'Performance only',
+            avatar_url: null,
+            collaboration_count: '0',
+            total_count: '21',
+          },
+        ];
+      },
     },
-    TikTokCreatorPerformanceSnapshot: {},
-    sequelize: { query: async () => performanceRows },
   });
   let response;
 
   await getTargetKocs(
-    { query: {} },
+    { query: { keyword: 'creator', page: '2', page_size: '2' } },
     { json: (value) => { response = value; }, status: () => ({ json: () => {} }) },
   );
 
-  assert.equal(response.length, 2);
-  assert.equal(response[0].source, 'TARGET_COLLABORATION');
-  assert.equal(response[0].collaborations.length, 2);
-  assert.equal(response[1].source, 'CREATOR_PERFORMANCE');
-  assert.equal(response[1].username, 'performance_only');
-  assert.equal(response[1].collaboration_id, null);
+  assert.deepEqual(queryOptions.replacements, {
+    keyword: 'creator',
+    limit: 2,
+    offset: 2,
+  });
+  assert.deepEqual(response.pagination, {
+    page: 2,
+    page_size: 2,
+    total: 21,
+    total_pages: 11,
+  });
+  assert.deepEqual(response.items[0], {
+    shop_id: 1,
+    creator_open_id: 'in-collab',
+    username: 'shared',
+    nickname: 'Shared creator',
+    avatar_url: 'https://example.test/avatar.webp',
+    collaboration_count: 2,
+  });
+  assert.equal('performance' in response.items[0], false);
+  assert.equal('products' in response.items[0], false);
 });
 
 test('booking video matcher auto-links a single exact creator video', async (t) => {

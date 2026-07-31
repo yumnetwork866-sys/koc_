@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   createBooking,
   deleteBooking,
+  fetchBookingTargetKocDetail,
   fetchBookingTargetKocs,
   fetchBookings,
   matchBookingVideo,
@@ -46,7 +47,8 @@ const TargetKocAvatar = ({ src, name }) => {
 };
 
 const TargetKocCombobox = ({
-  creators, value, onChange, placeholder, noResults, performanceSourceLabel, collaborationLabel,
+  creators, value, onChange, onSearch, onLoadMore, hasMore, loading,
+  placeholder, noResults, performanceSourceLabel, collaborationLabel, loadMoreLabel, loadingLabel,
 }) => {
   const rootRef = useRef(null);
   const selectedCreator = useMemo(
@@ -73,12 +75,6 @@ const TargetKocCombobox = ({
     };
   }, [open, selectedCreator]);
 
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filteredCreators = useMemo(() => creators.filter((creator) => {
-    if (!normalizedQuery || targetKocKey(creator) === value) return true;
-    return targetKocLabel(creator).toLocaleLowerCase().includes(normalizedQuery);
-  }).slice(0, 50), [creators, normalizedQuery, value]);
-
   return (
     <div className="booking-koc-combobox" ref={rootRef}>
       <div className="booking-koc-combobox__control">
@@ -92,7 +88,12 @@ const TargetKocCombobox = ({
           placeholder={placeholder}
           required
           onFocus={() => setOpen(true)}
-          onChange={(event) => { setQuery(event.target.value); onChange(''); setOpen(true); }}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            onSearch(event.target.value);
+            onChange('');
+            setOpen(true);
+          }}
         />
         <button type="button" aria-label={placeholder} aria-expanded={open} onClick={() => setOpen((current) => !current)}>
           <span className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" />
@@ -100,7 +101,7 @@ const TargetKocCombobox = ({
       </div>
       {open ? (
         <div className="booking-koc-combobox__menu" id="booking-koc-options" role="listbox">
-          {filteredCreators.length ? filteredCreators.map((creator) => (
+          {creators.length ? creators.map((creator) => (
             <button
               className={`booking-koc-combobox__option${targetKocKey(creator) === value ? ' booking-koc-combobox__option--active' : ''}`}
               type="button"
@@ -112,10 +113,12 @@ const TargetKocCombobox = ({
               <TargetKocAvatar src={creator.avatar_url} name={creator.nickname || creator.username} />
               <span>
                 <strong>{creator.nickname || creator.username}</strong>
-                <small>@{creator.username} · {(creator.collaborations || []).length ? `${creator.collaborations.length} ${collaborationLabel}` : performanceSourceLabel}</small>
+                <small>@{creator.username} · {creator.collaboration_count ? `${creator.collaboration_count} ${collaborationLabel}` : performanceSourceLabel}</small>
               </span>
             </button>
-          )) : <div className="booking-koc-combobox__empty">{noResults}</div>}
+          )) : loading ? null : <div className="booking-koc-combobox__empty">{noResults}</div>}
+          {loading ? <div className="booking-koc-combobox__empty"><span className="loading-dot" />{loadingLabel}</div> : null}
+          {!loading && hasMore ? <button className="booking-koc-combobox__load-more" type="button" onClick={onLoadMore}>{loadMoreLabel}</button> : null}
         </div>
       ) : null}
     </div>
@@ -126,6 +129,11 @@ const BookingManagement = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const [bookings, setBookings] = useState([]);
   const [targetKocs, setTargetKocs] = useState([]);
+  const [targetKocQuery, setTargetKocQuery] = useState('');
+  const [targetKocPage, setTargetKocPage] = useState(1);
+  const [targetKocPagination, setTargetKocPagination] = useState({ page: 1, total_pages: 1 });
+  const [targetKocsLoading, setTargetKocsLoading] = useState(false);
+  const [selectedKocDetail, setSelectedKocDetail] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -206,12 +214,8 @@ const BookingManagement = ({ heroTitle }) => {
   };
 
   const loadData = async (signal) => {
-    const [loadedBookings, loadedTargetKocs] = await Promise.all([
-      fetchBookings(signal),
-      fetchBookingTargetKocs(signal),
-    ]);
+    const loadedBookings = await fetchBookings(signal);
     setBookings(loadedBookings);
-    setTargetKocs(loadedTargetKocs);
   };
 
   useEffect(() => {
@@ -224,10 +228,57 @@ const BookingManagement = ({ heroTitle }) => {
     return () => controller.abort();
   }, [t]);
 
-  const selectedKoc = useMemo(
+  useEffect(() => {
+    const controller = new AbortController();
+    setTargetKocsLoading(true);
+    const timeout = window.setTimeout(() => {
+      fetchBookingTargetKocs({
+        keyword: targetKocQuery.trim(),
+        page: targetKocPage,
+        pageSize: 20,
+        signal: controller.signal,
+      })
+        .then((payload) => {
+          const items = payload.items || [];
+          setTargetKocs((current) => targetKocPage === 1
+            ? items
+            : [...current, ...items.filter((item) => (
+              !current.some((existing) => targetKocKey(existing) === targetKocKey(item))
+            ))]);
+          setTargetKocPagination(payload.pagination || { page: targetKocPage, total_pages: targetKocPage });
+        })
+        .catch((err) => { if (err.name !== 'AbortError') setError(err.message || t('booking.errorLoad')); })
+        .finally(() => { if (!controller.signal.aborted) setTargetKocsLoading(false); });
+    }, 250);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [targetKocPage, targetKocQuery, t]);
+
+  const selectedKocSummary = useMemo(
     () => targetKocs.find((creator) => targetKocKey(creator) === form.creator_key) || null,
     [form.creator_key, targetKocs],
   );
+  const selectedKoc = selectedKocDetail?.key === form.creator_key ? selectedKocDetail.creator : null;
+
+  useEffect(() => {
+    if (!selectedKocSummary || !form.creator_key) {
+      setSelectedKocDetail(null);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setSelectedKocDetail(null);
+    fetchBookingTargetKocDetail({
+      shopId: selectedKocSummary.shop_id,
+      creatorOpenId: selectedKocSummary.creator_open_id,
+      username: selectedKocSummary.username,
+      signal: controller.signal,
+    })
+      .then((creator) => setSelectedKocDetail({ key: form.creator_key, creator }))
+      .catch((err) => { if (err.name !== 'AbortError') setError(err.message || t('booking.errorLoad')); });
+    return () => controller.abort();
+  }, [form.creator_key, selectedKocSummary, t]);
   const stats = useMemo(() => bookings.reduce((result, booking) => {
     const collaboration = collaborationOf(booking);
     result.total += 1;
@@ -382,7 +433,7 @@ const BookingManagement = ({ heroTitle }) => {
       <section className="section-card">
         <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.createEvaluation')}</h2></div></div>
         <form className="filter-panel booking-evaluation-form" onSubmit={handleSubmit}>
-          <div className="field"><label>{t('booking.targetCreator')}</label><TargetKocCombobox creators={targetKocs} value={form.creator_key} onChange={(value) => setForm((current) => ({ ...current, creator_key: value }))} placeholder={t('booking.searchKoc')} noResults={t('booking.noSyncedCollaboration')} performanceSourceLabel={t('booking.creatorPerformance')} collaborationLabel={t('booking.collaboration')} /></div>
+          <div className="field"><label>{t('booking.targetCreator')}</label><TargetKocCombobox creators={targetKocs} value={form.creator_key} onChange={(value) => setForm((current) => ({ ...current, creator_key: value }))} onSearch={(keyword) => { setTargetKocQuery(keyword); setTargetKocPage(1); }} onLoadMore={() => setTargetKocPage((current) => current + 1)} hasMore={targetKocPagination.page < targetKocPagination.total_pages} loading={targetKocsLoading} placeholder={t('booking.searchKoc')} noResults={t('booking.noSyncedCollaboration')} performanceSourceLabel={t('booking.creatorPerformance')} collaborationLabel={t('booking.collaboration')} loadMoreLabel={t('booking.loadMoreKocs')} loadingLabel={t('booking.loadingKocs')} /></div>
           <div className="field"><label htmlFor="total_cost">{t('booking.totalCost')}</label><input id="total_cost" type="number" min="0" step="0.01" inputMode="decimal" value={form.total_cost} onChange={(event) => setForm((current) => ({ ...current, total_cost: event.target.value }))} required /></div>
           <div className="actions"><button className="button" type="submit" disabled={saving || !selectedKoc}>{saving ? t('booking.submitting') : t('booking.evaluate')}</button></div>
         </form>

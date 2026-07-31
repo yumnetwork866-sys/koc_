@@ -745,7 +745,6 @@ const Video = sequelize.define('Video', {
   platform_video_id: {
     type: DataTypes.STRING,
     allowNull: false,
-    unique: true,
   },
   channel_id: {
     type: DataTypes.INTEGER,
@@ -803,8 +802,9 @@ const Video = sequelize.define('Video', {
   tableName: 'videos',
   timestamps: false,
   indexes: [
-    { fields: ['published_at'] },
-    { fields: ['channel_id'] },
+    { name: 'videos_platform_video_id_key', unique: true, fields: ['platform_video_id'] },
+    { name: 'videos_published_at_idx', fields: ['published_at'] },
+    { name: 'videos_channel_id_idx', fields: ['channel_id'] },
   ],
 });
 

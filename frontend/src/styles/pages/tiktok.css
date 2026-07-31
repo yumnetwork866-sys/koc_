@@ -1604,6 +1604,22 @@
   text-align: center;
 }
 
+.booking-koc-combobox__load-more {
+  padding: 10px 12px;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-accent);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.booking-koc-combobox__load-more:hover,
+.booking-koc-combobox__load-more:focus-visible {
+  background: var(--color-accent-soft);
+  outline: none;
+}
+
 .booking-koc-identity {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);

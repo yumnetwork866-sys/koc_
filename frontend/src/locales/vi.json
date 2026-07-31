@@ -592,6 +592,8 @@
     "enterStaff": "Nhập tên nhân sự",
     "selectKoc": "Chọn KOC",
     "searchKoc": "Chọn hoặc tìm kiếm KOC",
+    "loadMoreKocs": "Xem thêm KOC",
+    "loadingKocs": "Đang tải KOC...",
     "noKocMatch": "Không có Target KOC phù hợp.",
     "bookingCost": "Chi phí book",
     "deadline": "Deadline",

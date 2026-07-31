@@ -592,6 +592,8 @@
     "enterStaff": "Enter staff name",
     "selectKoc": "Select KOC",
     "searchKoc": "Select or search KOC",
+    "loadMoreKocs": "Load more KOCs",
+    "loadingKocs": "Loading KOCs...",
     "noKocMatch": "No Target KOC matches your search.",
     "bookingCost": "Booking cost",
     "deadline": "Deadline",

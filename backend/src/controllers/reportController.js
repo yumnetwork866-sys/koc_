@@ -36,6 +36,378 @@ const normalizeAiContent = (value) => String(value || '')
   .replace(/\*\*([^*]+)\*\*/g, '$1')
   .trim();
 
+const positiveInteger = (value, fallback, maximum = Number.MAX_SAFE_INTEGER) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
+};
+
+const channelReportOptions = (query = {}) => {
+  const match = String(query.month || '').match(/^(\d{4})-(\d{2})$/);
+  const year = Number(match?.[1]);
+  const month = Number(match?.[2]);
+  if (!match || year < 2000 || year > 2100 || month < 1 || month > 12) {
+    const error = new Error('Tháng báo cáo không hợp lệ.');
+    error.status = 400;
+    throw error;
+  }
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+  const rawTeamId = String(query.team_id || '').trim();
+  const teamId = rawTeamId && rawTeamId !== 'all' ? Number(rawTeamId) : null;
+  if (teamId !== null && (!Number.isInteger(teamId) || teamId <= 0)) {
+    const error = new Error('Team báo cáo không hợp lệ.');
+    error.status = 400;
+    throw error;
+  }
+  return {
+    month: `${year}-${String(month).padStart(2, '0')}`,
+    startDate,
+    nextMonth,
+    teamId,
+    page: positiveInteger(query.page, 1),
+    pageSize: positiveInteger(query.page_size, 20, 100),
+  };
+};
+
+const channelReportBaseSql = `
+  WITH latest_shop_revenue AS (
+    SELECT DISTINCT ON (shop_video.id)
+      shop_video.id AS shop_video_id,
+      shop_video.platform_video_id,
+      performance.gross_gmv,
+      performance.currency
+    FROM shop_videos shop_video
+    JOIN shop_video_performance_snapshots performance
+      ON performance.shop_video_id = shop_video.id
+    WHERE performance.window_start <= CAST(:nextMonth AS date)
+      AND performance.window_end >= CAST(:startDate AS date)
+    ORDER BY
+      shop_video.id,
+      performance.synced_at DESC NULLS LAST,
+      performance.snapshot_date DESC,
+      performance.id DESC
+  ),
+  platform_revenue AS (
+    SELECT
+      platform_video_id,
+      SUM(gross_gmv) AS revenue,
+      MIN(currency) AS currency
+    FROM latest_shop_revenue
+    GROUP BY platform_video_id
+  ),
+  attribution_rules AS (
+    SELECT
+      attribution.user_id,
+      attribution.team_id,
+      app_user.name AS member_name,
+      LOWER(hashtag.value) AS hashtag
+    FROM user_content_attributions attribution
+    JOIN users app_user ON app_user.id = attribution.user_id
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(attribution.hashtags) = 'array' THEN attribution.hashtags
+        ELSE '[]'::jsonb
+      END
+    ) hashtag(value)
+    WHERE attribution.team_id IS NOT NULL
+      AND NULLIF(BTRIM(hashtag.value), '') IS NOT NULL
+  ),
+  report_videos AS MATERIALIZED (
+    SELECT
+      video.id,
+      video.platform,
+      video.platform_video_id,
+      video.channel_id,
+      video.title,
+      video.video_url,
+      video.thumbnail_url,
+      video.published_at,
+      video.views,
+      video.likes,
+      video.comments,
+      video.shares,
+      channel.username AS channel_username,
+      channel.display_name AS channel_name,
+      matched.user_id,
+      matched.team_id,
+      matched.member_name,
+      revenue.revenue,
+      revenue.currency
+    FROM videos video
+    LEFT JOIN tiktok_channels channel ON channel.id = video.channel_id
+    LEFT JOIN platform_revenue revenue
+      ON revenue.platform_video_id = video.platform_video_id
+    LEFT JOIN LATERAL (
+      SELECT rule.user_id, rule.team_id, rule.member_name
+      FROM attribution_rules rule
+      WHERE rule.hashtag = ANY(
+        regexp_split_to_array(LOWER(COALESCE(video.title, '')), '[^[:alnum:]_#]+')
+      )
+      ORDER BY rule.user_id ASC
+      LIMIT 1
+    ) matched ON TRUE
+    WHERE video.published_at >= (
+      CAST(:startDate AS date)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    )
+      AND video.published_at < (
+        CAST(:nextMonth AS date)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+      )
+  ),
+  filtered_videos AS MATERIALIZED (
+    SELECT *
+    FROM report_videos
+    WHERE CAST(:teamId AS integer) IS NULL OR team_id = CAST(:teamId AS integer)
+  )
+`;
+
+const getChannelReport = async (req, res) => {
+  try {
+    const {
+      month,
+      startDate,
+      nextMonth,
+      teamId,
+      page,
+      pageSize,
+    } = channelReportOptions(req.query);
+    const replacements = { startDate, nextMonth, teamId };
+    const [aggregateRows, teamRows, videoRows] = await Promise.all([
+      sequelize.query(`${channelReportBaseSql}
+        /* channel-report-summary */
+        SELECT
+          'summary' AS row_type,
+          NULL::text AS bucket,
+          NULL::text AS label,
+          COUNT(*)::bigint AS videos,
+          COALESCE(SUM(views), 0)::bigint AS views,
+          COALESCE(SUM(likes), 0)::bigint AS likes,
+          COALESCE(SUM(comments), 0)::bigint AS comments,
+          COALESCE(SUM(shares), 0)::bigint AS shares,
+          COUNT(DISTINCT channel_id)::bigint AS channels,
+          COUNT(user_id)::bigint AS attributed_videos,
+          COUNT(*) FILTER (WHERE user_id IS NULL)::bigint AS unclassified_videos,
+          COALESCE(SUM(revenue), 0) AS revenue,
+          COUNT(revenue) > 0 AS revenue_available,
+          MIN(currency) AS currency
+        FROM filtered_videos
+        UNION ALL
+        SELECT
+          'chart' AS row_type,
+          TO_CHAR((published_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, 'YYYY-MM-DD') AS bucket,
+          NULL::text AS label,
+          COUNT(*)::bigint AS videos,
+          COALESCE(SUM(views), 0)::bigint AS views,
+          COALESCE(SUM(likes), 0)::bigint AS likes,
+          COALESCE(SUM(comments), 0)::bigint AS comments,
+          COALESCE(SUM(shares), 0)::bigint AS shares,
+          COUNT(DISTINCT channel_id)::bigint AS channels,
+          COUNT(user_id)::bigint AS attributed_videos,
+          COUNT(*) FILTER (WHERE user_id IS NULL)::bigint AS unclassified_videos,
+          COALESCE(SUM(revenue), 0) AS revenue,
+          COUNT(revenue) > 0 AS revenue_available,
+          MIN(currency) AS currency
+        FROM filtered_videos
+        GROUP BY (published_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+        UNION ALL
+        SELECT
+          'channel' AS row_type,
+          channel_id::text AS bucket,
+          MIN(COALESCE(channel_name, channel_username)) AS label,
+          COUNT(*)::bigint AS videos,
+          COALESCE(SUM(views), 0)::bigint AS views,
+          COALESCE(SUM(likes), 0)::bigint AS likes,
+          COALESCE(SUM(comments), 0)::bigint AS comments,
+          COALESCE(SUM(shares), 0)::bigint AS shares,
+          1::bigint AS channels,
+          COUNT(user_id)::bigint AS attributed_videos,
+          COUNT(*) FILTER (WHERE user_id IS NULL)::bigint AS unclassified_videos,
+          COALESCE(SUM(revenue), 0) AS revenue,
+          COUNT(revenue) > 0 AS revenue_available,
+          MIN(currency) AS currency
+        FROM filtered_videos
+        GROUP BY channel_id
+        ORDER BY row_type, bucket
+      `, { replacements, type: QueryTypes.SELECT }),
+      sequelize.query(`${channelReportBaseSql}
+        /* channel-report-teams */
+        , member_metrics AS (
+          SELECT
+            team.id AS team_id,
+            team.name AS team_name,
+            app_user.id AS user_id,
+            app_user.name AS member_name,
+            COUNT(video.id)::bigint AS videos,
+            COALESCE(SUM(video.views), 0)::bigint AS views,
+            COALESCE(SUM(video.revenue), 0) AS revenue,
+            COUNT(video.revenue) > 0 AS revenue_available,
+            MIN(video.currency) AS currency
+          FROM content_teams team
+          LEFT JOIN user_content_attributions attribution ON attribution.team_id = team.id
+          LEFT JOIN users app_user ON app_user.id = attribution.user_id
+          LEFT JOIN filtered_videos video ON video.user_id = app_user.id
+          GROUP BY team.id, team.name, app_user.id, app_user.name
+        )
+        SELECT
+          team_id,
+          team_name,
+          user_id,
+          member_name,
+          videos,
+          views,
+          revenue,
+          revenue_available,
+          currency,
+          SUM(videos) OVER (PARTITION BY team_id)::bigint AS team_videos,
+          SUM(views) OVER (PARTITION BY team_id)::bigint AS team_views,
+          SUM(revenue) OVER (PARTITION BY team_id) AS team_revenue,
+          BOOL_OR(revenue_available) OVER (PARTITION BY team_id) AS team_revenue_available,
+          MIN(currency) OVER (PARTITION BY team_id) AS team_currency
+        FROM member_metrics
+        ORDER BY team_name ASC, views DESC, member_name ASC
+      `, { replacements, type: QueryTypes.SELECT }),
+      sequelize.query(`${channelReportBaseSql}
+        /* channel-report-videos */
+        SELECT
+          id,
+          platform,
+          platform_video_id,
+          title,
+          video_url,
+          thumbnail_url,
+          published_at,
+          views,
+          likes,
+          comments,
+          shares,
+          channel_id,
+          channel_username,
+          channel_name,
+          user_id,
+          member_name,
+          team_id,
+          revenue,
+          currency
+        FROM filtered_videos
+        ORDER BY published_at DESC, id DESC
+        LIMIT :limit OFFSET :offset
+      `, {
+        replacements: {
+          ...replacements,
+          limit: pageSize,
+          offset: (page - 1) * pageSize,
+        },
+        type: QueryTypes.SELECT,
+      }),
+    ]);
+
+    const summary = aggregateRows.find((row) => row.row_type === 'summary') || {};
+    const aggregateMetrics = (row) => ({
+      videos: number(row.videos),
+      views: number(row.views),
+      likes: number(row.likes),
+      comments: number(row.comments),
+      shares: number(row.shares),
+      channels: number(row.channels),
+      attributed_videos: number(row.attributed_videos),
+      unclassified_videos: number(row.unclassified_videos),
+      revenue: number(row.revenue),
+      revenue_available: Boolean(row.revenue_available),
+      currency: row.currency || null,
+    });
+    const teams = [];
+    for (const row of teamRows) {
+      let team = teams.find((item) => item.key === String(row.team_id));
+      if (!team) {
+        team = {
+          key: String(row.team_id),
+          label: row.team_name,
+          videos: number(row.team_videos),
+          views: number(row.team_views),
+          revenue: number(row.team_revenue),
+          revenueAvailable: Boolean(row.team_revenue_available),
+          currency: row.team_currency || null,
+          members: [],
+        };
+        teams.push(team);
+      }
+      if (row.user_id) {
+        team.members.push({
+          key: String(row.user_id),
+          name: row.member_name,
+          videos: number(row.videos),
+          views: number(row.views),
+          revenue: number(row.revenue),
+          revenueAvailable: Boolean(row.revenue_available),
+          currency: row.currency || null,
+        });
+      }
+    }
+    const total = number(summary.videos);
+    res.json({
+      period: { month, start: startDate, end: nextMonth },
+      kpis: aggregateMetrics(summary),
+      chart: aggregateRows
+        .filter((row) => row.row_type === 'chart')
+        .map((row) => ({ date: row.bucket, ...aggregateMetrics(row) })),
+      videos: {
+        items: videoRows.map((row) => ({
+          id: Number(row.id),
+          platform: row.platform,
+          platform_video_id: row.platform_video_id,
+          title: row.title,
+          video_url: row.video_url,
+          thumbnail_url: row.thumbnail_url,
+          published_at: row.published_at,
+          views: number(row.views),
+          likes: number(row.likes),
+          comments: number(row.comments),
+          shares: number(row.shares),
+          channel: {
+            id: Number(row.channel_id),
+            username: row.channel_username,
+            display_name: row.channel_name,
+          },
+          attribution: row.user_id ? {
+            user_id: Number(row.user_id),
+            member_name: row.member_name,
+            team_id: Number(row.team_id),
+          } : null,
+          revenue: row.revenue === null ? null : {
+            amount: number(row.revenue),
+            currency: row.currency || null,
+          },
+        })),
+        pagination: {
+          page,
+          page_size: pageSize,
+          total,
+          total_pages: Math.max(1, Math.ceil(total / pageSize)),
+        },
+      },
+      revenue: {
+        teams,
+        channels: aggregateRows
+          .filter((row) => row.row_type === 'channel')
+          .map((row) => ({
+            channel_id: Number(row.bucket),
+            channel_name: row.label || null,
+            ...aggregateMetrics(row),
+          })),
+      },
+      filters: {
+        team_id: teamId,
+        teams: teams.map((team) => ({
+          id: Number(team.key),
+          name: team.label,
+          member_count: team.members.length,
+        })),
+      },
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message });
+  }
+};
+
 const validateReportPeriod = (startValue, endValue) => {
   const datePattern = /^\d{4}-\d{2}-\d{2}$/;
   const startText = String(startValue || '');
@@ -779,11 +1151,13 @@ module.exports = {
   deleteReport,
   getKpis,
   getKocDetail,
+  getChannelReport,
   generateWeeklyReport,
   __test: {
     buildKocReportSnapshot,
     buildKocFactualReport,
     validateReportPeriod,
     generateOllamaAnalysis,
+    channelReportOptions,
   },
 };
