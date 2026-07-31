@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+Disallow: /api/
+Disallow: /login
+Disallow: /dashboard
+Disallow: /channel-reports
+Disallow: /manage/
+Disallow: /bookings
+Disallow: /chatbot/
+Disallow: /whatsapp/
+Disallow: /shared/reports/
