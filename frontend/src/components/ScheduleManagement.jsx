@@ -14,6 +14,7 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react';
+import '../styles/pages/admin.css';
 import {
   fetchSchedules,
   runScheduleNow,

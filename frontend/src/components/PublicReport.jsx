@@ -3,6 +3,7 @@ import { FileText } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { fetchPublicReport } from '../lib/api';
 import { useI18n } from '../lib/language';
+import '../styles/pages/reports.css';
 
 const PublicReport = () => {
   const { token } = useParams();

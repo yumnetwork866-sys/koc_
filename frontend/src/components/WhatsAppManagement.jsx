@@ -9,6 +9,7 @@ import {
   updateWhatsAppOrder,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import '../styles/pages/whatsapp.css';
 
 const formatTime = (value, locale) => value
   ? new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))

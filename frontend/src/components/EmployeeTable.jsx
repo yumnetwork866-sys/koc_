@@ -15,6 +15,7 @@ import {
   updateUser,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import '../styles/pages/admin.css';
 
 const initialForm = {
   name: '',
