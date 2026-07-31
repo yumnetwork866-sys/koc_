@@ -1,0 +1,14 @@
+# YUM Network
+
+> YUM Network provides public information about its services, policies, privacy practices, and support. Its reporting workspace requires authentication and is not public documentation.
+
+## Public Pages
+
+- [Home](https://report.yumnetwork.vn/): Overview of YUM Network services and support information.
+- [Terms of Service](https://report.yumnetwork.vn/terms): Terms governing use of YUM Network services.
+- [Privacy Policy](https://report.yumnetwork.vn/privacy): Information about data collection, use, retention, and user rights.
+- [Data Deletion](https://report.yumnetwork.vn/data-deletion): Instructions for requesting access to or deletion of personal data.
+
+## Contact
+
+- Privacy and data requests: privacy@yumnetwork.vn
