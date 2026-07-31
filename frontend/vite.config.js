@@ -28,9 +28,35 @@ const productionCacheHeaders = () => ({
   },
 })
 
+const preloadBuiltFonts = () => ({
+  name: 'preload-built-fonts',
+  transformIndexHtml: {
+    order: 'post',
+    handler(_html, context) {
+      if (!context.bundle) return
+
+      return Object.values(context.bundle)
+        .map((entry) => entry.fileName)
+        .filter((fileName) => fileName.endsWith('.woff2'))
+        .sort()
+        .map((fileName) => ({
+          tag: 'link',
+          attrs: {
+            rel: 'preload',
+            href: `/${fileName}`,
+            as: 'font',
+            type: 'font/woff2',
+            crossorigin: true,
+          },
+          injectTo: 'head',
+        }))
+    },
+  },
+})
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), productionCacheHeaders()],
+  plugins: [react(), productionCacheHeaders(), preloadBuiltFonts()],
   build: {
     minify: 'oxc',
     sourcemap: false,
