@@ -8,6 +8,23 @@ const currentMonthValue = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 
+const dateOnly = (date) => [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, '0'),
+  String(date.getDate()).padStart(2, '0'),
+].join('-');
+
+const todayValue = () => dateOnly(new Date());
+
+const monthRange = (value) => {
+  const [year, month] = String(value || '').split('-').map(Number);
+  const lastDay = dateOnly(new Date(year, month, 0));
+  return {
+    startDate: `${value}-01`,
+    endDate: value === currentMonthValue() ? todayValue() : lastDay,
+  };
+};
+
 const monthIndex = (value) => {
   const [year, month] = String(value || '').split('-').map(Number);
   return year && month ? year * 12 + month - 1 : null;
@@ -18,10 +35,19 @@ const formatMonth = (value) => {
   return year && month ? `${month}/${year}` : '';
 };
 
+const formatDate = (value) => {
+  const [year, month, day] = String(value || '').split('-');
+  return year && month && day ? `${day}/${month}/${year}` : '';
+};
+
 const ChannelReport = () => {
   const { language } = useI18n();
   const [report, setReport] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthValue);
+  const [periodMode, setPeriodMode] = useState('month');
+  const initialRange = monthRange(currentMonthValue());
+  const [startDate, setStartDate] = useState(initialRange.startDate);
+  const [endDate, setEndDate] = useState(initialRange.endDate);
   const [selectedTeamId, setSelectedTeamId] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -36,13 +62,20 @@ const ChannelReport = () => {
     }).format(Number(value || 0));
   };
   useEffect(() => {
+    if (periodMode === 'custom' && (!startDate || !endDate || startDate > endDate)) {
+      setLoading(false);
+      setError('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.');
+      return undefined;
+    }
     const controller = new AbortController();
     const load = async () => {
       try {
         setLoading(true);
         setError('');
         const payload = await fetchChannelReport({
-          month: selectedMonth,
+          ...(periodMode === 'month'
+            ? { month: selectedMonth }
+            : { startDate, endDate }),
           teamId: selectedTeamId,
           page: 1,
           pageSize: 20,
@@ -57,7 +90,7 @@ const ChannelReport = () => {
     };
     load();
     return () => controller.abort();
-  }, [selectedMonth, selectedTeamId]);
+  }, [endDate, periodMode, selectedMonth, selectedTeamId, startDate]);
 
   useEffect(() => {
     if (selectedTeamId !== 'all'
@@ -92,6 +125,19 @@ const ChannelReport = () => {
   const selectedTeam = teams.find((team) => String(team.id) === selectedTeamId);
   const topGroup = [...visibleGroups].sort((a, b) => b.views - a.views)[0];
   const kpis = report?.kpis || {};
+  const periodLabel = periodMode === 'month'
+    ? formatMonth(selectedMonth)
+    : `${formatDate(startDate)} - ${formatDate(endDate)}`;
+
+  const changePeriodMode = (event) => {
+    const nextMode = event.target.value;
+    if (nextMode === 'custom') {
+      const range = monthRange(selectedMonth);
+      setStartDate(range.startDate);
+      setEndDate(range.endDate);
+    }
+    setPeriodMode(nextMode);
+  };
 
   return (
     <div className="page channel-report-page">
@@ -110,8 +156,8 @@ const ChannelReport = () => {
             <h2 className="section-card__title">Hiệu suất theo team</h2>
             <p className="section-card__meta">
               {selectedTeam
-                ? `${formatNumber(topGroup?.videos || 0)} video đã nhận diện của ${selectedTeam.name} trong ${formatMonth(selectedMonth)}.`
-                : `${formatNumber(kpis.videos)} video trong ${formatMonth(selectedMonth)} từ ${formatNumber(kpis.channels)} kênh.`}
+                ? `${formatNumber(topGroup?.videos || 0)} video đã nhận diện của ${selectedTeam.name} trong ${periodLabel}.`
+                : `${formatNumber(kpis.videos)} video trong ${periodLabel} từ ${formatNumber(kpis.channels)} kênh.`}
             </p>
           </div>
           <div className="channel-report-filters">
@@ -129,17 +175,54 @@ const ChannelReport = () => {
               </select>
             </div>
             <div className="field channel-report-month">
-              <label htmlFor="channel-report-month">Tháng đánh giá</label>
+              <label htmlFor="channel-report-period-mode">Kỳ báo cáo</label>
               <select
-                id="channel-report-month"
-                value={selectedMonth}
-                onChange={(event) => setSelectedMonth(event.target.value)}
+                id="channel-report-period-mode"
+                value={periodMode}
+                onChange={changePeriodMode}
               >
-                {monthOptions.map((option) => (
-                  <option value={option.value} key={option.value}>{option.label}</option>
-                ))}
+                <option value="month">Theo tháng</option>
+                <option value="custom">Tùy chỉnh</option>
               </select>
             </div>
+            {periodMode === 'month' ? (
+              <div className="field channel-report-month">
+                <label htmlFor="channel-report-month">Tháng đánh giá</label>
+                <select
+                  id="channel-report-month"
+                  value={selectedMonth}
+                  onChange={(event) => setSelectedMonth(event.target.value)}
+                >
+                  {monthOptions.map((option) => (
+                    <option value={option.value} key={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <>
+                <div className="field channel-report-date">
+                  <label htmlFor="channel-report-start-date">Từ ngày</label>
+                  <input
+                    id="channel-report-start-date"
+                    type="date"
+                    value={startDate}
+                    max={endDate || todayValue()}
+                    onChange={(event) => setStartDate(event.target.value)}
+                  />
+                </div>
+                <div className="field channel-report-date">
+                  <label htmlFor="channel-report-end-date">Đến ngày</label>
+                  <input
+                    id="channel-report-end-date"
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    max={todayValue()}
+                    onChange={(event) => setEndDate(event.target.value)}
+                  />
+                </div>
+              </>
+            )}
             <Link className="button button--ghost" to="/manage/users">Quản lý nhân viên</Link>
           </div>
         </div>

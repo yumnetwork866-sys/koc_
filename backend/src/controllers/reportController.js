@@ -42,17 +42,63 @@ const positiveInteger = (value, fallback, maximum = Number.MAX_SAFE_INTEGER) => 
   return Number.isInteger(parsed) && parsed > 0 ? Math.min(parsed, maximum) : fallback;
 };
 
+const validDateOnly = (value) => {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return year >= 2000
+    && year <= 2100
+    && date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+};
+
+const addUtcDays = (value, days) => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
 const channelReportOptions = (query = {}) => {
-  const match = String(query.month || '').match(/^(\d{4})-(\d{2})$/);
-  const year = Number(match?.[1]);
-  const month = Number(match?.[2]);
-  if (!match || year < 2000 || year > 2100 || month < 1 || month > 12) {
-    const error = new Error('Tháng báo cáo không hợp lệ.');
-    error.status = 400;
-    throw error;
+  const rawStartDate = String(query.start_date || '').trim();
+  const rawEndDate = String(query.end_date || '').trim();
+  const customRange = Boolean(rawStartDate || rawEndDate);
+  let mode = 'month';
+  let reportMonth = null;
+  let startDate;
+  let endDate;
+
+  if (customRange) {
+    if (!validDateOnly(rawStartDate) || !validDateOnly(rawEndDate)) {
+      const error = new Error('Khoảng ngày báo cáo không hợp lệ.');
+      error.status = 400;
+      throw error;
+    }
+    if (rawStartDate > rawEndDate) {
+      const error = new Error('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.');
+      error.status = 400;
+      throw error;
+    }
+    mode = 'custom';
+    startDate = rawStartDate;
+    endDate = rawEndDate;
+  } else {
+    const match = String(query.month || '').match(/^(\d{4})-(\d{2})$/);
+    const year = Number(match?.[1]);
+    const month = Number(match?.[2]);
+    if (!match || year < 2000 || year > 2100 || month < 1 || month > 12) {
+      const error = new Error('Tháng báo cáo không hợp lệ.');
+      error.status = 400;
+      throw error;
+    }
+    reportMonth = `${year}-${String(month).padStart(2, '0')}`;
+    startDate = `${reportMonth}-01`;
+    endDate = addUtcDays(new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10), -1);
   }
-  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+  const endDateExclusive = addUtcDays(endDate, 1);
   const rawTeamId = String(query.team_id || '').trim();
   const teamId = rawTeamId && rawTeamId !== 'all' ? Number(rawTeamId) : null;
   if (teamId !== null && (!Number.isInteger(teamId) || teamId <= 0)) {
@@ -61,9 +107,11 @@ const channelReportOptions = (query = {}) => {
     throw error;
   }
   return {
-    month: `${year}-${String(month).padStart(2, '0')}`,
+    mode,
+    month: reportMonth,
     startDate,
-    nextMonth,
+    endDate,
+    endDateExclusive,
     teamId,
     page: positiveInteger(query.page, 1),
     pageSize: positiveInteger(query.page_size, 20, 100),
@@ -138,7 +186,7 @@ const channelReportBaseSql = `
       CAST(:startDate AS date)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
     )
       AND video.published_at < (
-        CAST(:nextMonth AS date)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
+        CAST(:endDateExclusive AS date)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
       )
   ),
   filtered_videos AS MATERIALIZED (
@@ -151,20 +199,22 @@ const channelReportBaseSql = `
 const getChannelReport = async (req, res) => {
   try {
     const {
+      mode,
       month,
       startDate,
-      nextMonth,
+      endDate,
+      endDateExclusive,
       teamId,
       page,
       pageSize,
     } = channelReportOptions(req.query);
     const monthlyRevenue = await loadMonthlyShopVideoRevenue({
       startDate,
-      endDate: nextMonth,
+      endDate: endDateExclusive,
     });
     const replacements = {
       startDate,
-      nextMonth,
+      endDateExclusive,
       teamId,
       revenueRows: JSON.stringify(monthlyRevenue.rows.map((row) => ({
         platform_video_id: row.platform_video_id,
@@ -345,7 +395,7 @@ const getChannelReport = async (req, res) => {
     }
     const total = number(summary.videos);
     res.json({
-      period: { month, start: startDate, end: nextMonth },
+      period: { mode, month, start: startDate, end: endDate },
       kpis: aggregateMetrics(summary),
       chart: aggregateRows
         .filter((row) => row.row_type === 'chart')

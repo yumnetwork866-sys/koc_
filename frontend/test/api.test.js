@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  fetchTikTokSellerMarketplaceCreator, fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchTikTokShopVideoAnalytics, fetchTikTokShopVideoThumbnail, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
+  fetchChannelReport, fetchTikTokSellerMarketplaceCreator, fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchTikTokShopVideoAnalytics, fetchTikTokShopVideoThumbnail, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
 } from '../src/lib/api.js';
 import { getStoredSession, saveStoredSession } from '../src/lib/session.js';
 
@@ -111,6 +111,25 @@ test('TikTok Shop API helpers preserve analytics filters, sync payload and abort
     assert.deepEqual(JSON.parse(calls[3].options.body), {
       start_date: '2026-06-01', end_date: '2026-07-01', currency: 'LOCAL',
     });
+  });
+});
+
+test('Channel report helper supports month presets and custom date ranges', async () => {
+  await withBrowser(async () => {
+    const calls = [];
+    globalThis.fetch = async (url) => {
+      calls.push(url);
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    await fetchChannelReport({ month: '2026-07', teamId: '4' });
+    await fetchChannelReport({ startDate: '2026-07-05', endDate: '2026-07-12' });
+
+    assert.equal(calls[0], '/api/reports/channel?page=1&page_size=20&month=2026-07&team_id=4');
+    assert.equal(calls[1], '/api/reports/channel?page=1&page_size=20&start_date=2026-07-05&end_date=2026-07-12');
   });
 });
 

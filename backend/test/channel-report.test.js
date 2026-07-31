@@ -129,7 +129,7 @@ test('channel report aggregates server-side and returns only one video page', as
   assert.equal(calls.length, 3);
   calls.forEach((call) => {
     assert.equal(call.replacements.startDate, '2026-07-01');
-    assert.equal(call.replacements.nextMonth, '2026-08-01');
+    assert.equal(call.replacements.endDateExclusive, '2026-08-01');
     assert.equal(call.replacements.teamId, 4);
     assert.deepEqual(JSON.parse(call.replacements.revenueRows), [{
       platform_video_id: 'video-88',
@@ -145,6 +145,9 @@ test('channel report aggregates server-side and returns only one video page', as
   assert.equal(response.body.revenue.teams[0].members[0].name, 'An');
   assert.equal(response.body.videos.items.length, 1);
   assert.equal(response.body.videos.items[0].revenue.amount, 12.5);
+  assert.deepEqual(response.body.period, {
+    mode: 'month', month: '2026-07', start: '2026-07-01', end: '2026-07-31',
+  });
   assert.deepEqual(response.body.videos.pagination, {
     page: 2,
     page_size: 20,
@@ -166,4 +169,46 @@ test('channel report rejects an invalid month before querying', async (t) => {
   assert.equal(response.statusCode, 400);
   assert.equal(queried, false);
   assert.match(response.body.message, /không hợp lệ/);
+});
+
+test('channel report accepts an inclusive custom date range', async (t) => {
+  const calls = [];
+  const { getChannelReport } = loadController(t, async (sql, options) => {
+    calls.push({ sql, replacements: options.replacements });
+    return [];
+  });
+  const response = makeResponse();
+
+  await getChannelReport({
+    query: { start_date: '2026-07-05', end_date: '2026-07-12' },
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls.length, 3);
+  calls.forEach((call) => {
+    assert.equal(call.replacements.startDate, '2026-07-05');
+    assert.equal(call.replacements.endDateExclusive, '2026-07-13');
+  });
+  assert.deepEqual(response.body.period, {
+    mode: 'custom', month: null, start: '2026-07-05', end: '2026-07-12',
+  });
+});
+
+test('channel report rejects incomplete and reversed custom ranges', async (t) => {
+  let queried = false;
+  const { getChannelReport } = loadController(t, async () => {
+    queried = true;
+    return [];
+  });
+
+  const incompleteResponse = makeResponse();
+  await getChannelReport({ query: { start_date: '2026-07-05' } }, incompleteResponse);
+  assert.equal(incompleteResponse.statusCode, 400);
+
+  const reversedResponse = makeResponse();
+  await getChannelReport({
+    query: { start_date: '2026-07-12', end_date: '2026-07-05' },
+  }, reversedResponse);
+  assert.equal(reversedResponse.statusCode, 400);
+  assert.equal(queried, false);
 });

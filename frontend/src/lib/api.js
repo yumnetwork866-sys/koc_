@@ -298,13 +298,18 @@ export async function fetchVideos(signalOrFilters) {
 }
 
 export function fetchChannelReport({
-  month, teamId, page = 1, pageSize = 20, signal,
+  month, startDate, endDate, teamId, page = 1, pageSize = 20, signal,
 } = {}) {
   const params = new URLSearchParams({
-    month,
     page: String(page),
     page_size: String(pageSize),
   });
+  if (startDate || endDate) {
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+  } else if (month) {
+    params.set('month', month);
+  }
   if (teamId && teamId !== 'all') params.set('team_id', teamId);
   return apiRequest(`/reports/channel?${params.toString()}`, { signal });
 }
