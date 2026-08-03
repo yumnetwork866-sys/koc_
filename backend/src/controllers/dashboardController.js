@@ -95,7 +95,8 @@ const getDashboard = async (req, res) => {
         SELECT
           app_user.id,
           app_user.name,
-          app_user.email
+          app_user.email,
+          app_user.avatar_url
         FROM user_content_attributions attribution
         JOIN users app_user ON app_user.id = attribution.user_id
         WHERE jsonb_typeof(attribution.hashtags) = 'array'
@@ -124,8 +125,7 @@ const getDashboard = async (req, res) => {
           ${filterSql}
           AND v.published_at IS NOT NULL
           GROUP BY v.published_at::date
-          ORDER BY date DESC
-          LIMIT 10
+          ORDER BY date ASC
         `, { type: QueryTypes.SELECT, replacements })
         : sequelize.query(`
           SELECT
@@ -156,8 +156,23 @@ const getDashboard = async (req, res) => {
           v.shares,
           v.duration,
           v.campaign,
-          v.content_type
+          v.content_type,
+          sales.gross_gmv,
+          sales.currency AS sales_currency,
+          sales.synced_at AS sales_synced_at
         FROM videos v
+        LEFT JOIN LATERAL (
+          SELECT
+            snapshot.gross_gmv,
+            snapshot.currency,
+            snapshot.synced_at
+          FROM shop_videos shop_video
+          JOIN shop_video_performance_snapshots snapshot
+            ON snapshot.shop_video_id = shop_video.id
+          WHERE shop_video.platform_video_id = v.platform_video_id
+          ORDER BY snapshot.synced_at DESC NULLS LAST, snapshot.id DESC
+          LIMIT 1
+        ) sales ON TRUE
         ${filterSql}
         ORDER BY v.published_at DESC NULLS LAST, v.id DESC
         LIMIT :pageSize

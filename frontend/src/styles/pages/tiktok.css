@@ -521,15 +521,41 @@
 
 .dashboard-chart-filters {
   display: grid;
-  grid-template-columns: minmax(180px, 260px) repeat(2, minmax(135px, 180px));
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  width: min(100%, 720px);
   gap: 10px;
   margin-left: auto;
 }
 
+.dashboard-chart-filters--date {
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  width: min(100%, 820px);
+}
+
+.dashboard-chart-filters--custom {
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  width: min(100%, 720px);
+}
+
 .dashboard-channel-filter,
 .dashboard-user-filter,
+.dashboard-period-filter,
+.dashboard-date-filter,
 .dashboard-metric-filter {
   width: 100%;
+}
+
+.dashboard-chart-filters .channel-picker {
+  width: 100%;
+  max-width: none;
+}
+
+.dashboard-chart-filters .channel-picker__trigger,
+.dashboard-chart-filters .field > select,
+.dashboard-chart-filters .field > input {
+  width: 100%;
+  min-height: 52px;
+  height: 52px;
 }
 
 .dashboard-chart {
@@ -4417,5 +4443,31 @@
 
   .dashboard-hero__ring-value {
     font-size: clamp(1.6rem, 8vw, 2.15rem);
+  }
+}
+
+
+/* Keep all four dashboard summary cards the same size. */
+.dashboard-hero__summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-hero__summary .stat-card {
+  width: 100%;
+  min-width: 0;
+  min-height: 112px;
+  height: 100%;
+}
+
+@media (max-width: 900px) {
+  .dashboard-hero__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-hero__summary {
+    grid-template-columns: 1fr;
   }
 }

@@ -172,6 +172,17 @@ const VideoTable = ({
 }) => {
   const { t, language } = useI18n();
   const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
+  const formatGmv = (video) => {
+    if (video.gross_gmv === null || video.gross_gmv === undefined) return '—';
+    const currency = /^[A-Z]{3}$/.test(String(video.sales_currency || '').toUpperCase())
+      ? String(video.sales_currency).toUpperCase()
+      : 'MYR';
+    return new Intl.NumberFormat(language === 'vi' ? 'vi-VN' : 'en-US', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: currency === 'VND' ? 0 : 2,
+    }).format(Number(video.gross_gmv || 0));
+  };
   const [localVideos, setLocalVideos] = useState([]);
   const [localChannels, setLocalChannels] = useState([]);
   const [localLoading, setLocalLoading] = useState(true);
@@ -334,13 +345,14 @@ const VideoTable = ({
                 <th>{t('videoLibrary.videos')}</th>
                 <th>{t('videoLibrary.hashtags')}</th>
                 <th className="cell-number">{t('videoLibrary.views')}</th>
+                <th className="cell-number">{t('videoLibrary.gmv')}</th>
                 <th className="cell-number">{t('videoLibrary.engagement')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={4}>
+                  <td className="table-state-cell" colSpan={5}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('videoLibrary.loading')}</div>
@@ -400,6 +412,7 @@ const VideoTable = ({
                       ) : '—'}
                     </td>
                     <td className="cell-number">{formatNumber(video.views)}</td>
+                    <td className="cell-number"><strong>{formatGmv(video)}</strong></td>
                     <td className="cell-number">
                       <div className="video-engagement">
                         <span title={t('videoLibrary.likes')} aria-label={`${t('videoLibrary.likes')}: ${formatNumber(video.likes)}`}>
@@ -420,7 +433,7 @@ const VideoTable = ({
                 })
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={4}>
+                  <td className="table-state-cell" colSpan={5}>
                     <div className="empty-state empty-state--compact table-empty-state">
                       <div>{t('videoLibrary.noMatch')}</div>
                     </div>
