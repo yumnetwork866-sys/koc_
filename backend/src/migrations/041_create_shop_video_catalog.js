@@ -50,7 +50,7 @@ const up = async ({ sequelize, transaction }) => {
     VALUES (
       'tiktok_shop_video_catalog',
       'TikTok Shop Video Catalog',
-      'Synchronize every page of affiliate video analytics into the local video catalog and daily snapshots.',
+      'Synchronize official, marketing and affiliate video analytics into the local video catalog and daily snapshots.',
       TRUE,
       'Asia/Ho_Chi_Minh',
       '["05:30"]'::jsonb

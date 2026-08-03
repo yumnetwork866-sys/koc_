@@ -226,7 +226,7 @@
     "users": "Users",
     "manageShops": "Manage Shop",
     "schedule": "Schedule",
-    "chatSettings": "Chat settings",
+    "chatSettings": "LLM Model",
     "workspace": "Workspace",
     "expand": "Expand navigation",
     "collapse": "Collapse navigation"
@@ -364,7 +364,7 @@
     "pageConnected": "Receiving messages",
     "pageNotConnected": "Not connected to bot",
     "chatTitle": "Chat",
-    "settingsTitle": "Chat settings",
+    "settingsTitle": "LLM Model",
     "ordersTitle": "Orders",
     "inbox": "Conversation inbox",
     "page": "Page",

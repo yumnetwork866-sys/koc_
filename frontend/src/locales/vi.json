@@ -221,7 +221,7 @@
     "users": "Người dùng",
     "manageShops": "Quản lý Shop",
     "schedule": "Lịch đồng bộ",
-    "chatSettings": "Cài đặt hội thoại",
+    "chatSettings": "Model LLM",
     "workspace": "Không gian làm việc",
     "expand": "Mở rộng thanh điều hướng",
     "collapse": "Thu gọn thanh điều hướng"
@@ -359,7 +359,7 @@
     "pageConnected": "Đang nhận tin nhắn",
     "pageNotConnected": "Chưa kết nối với bot",
     "chatTitle": "Hội thoại",
-    "settingsTitle": "Cài đặt hội thoại",
+    "settingsTitle": "Model LLM",
     "ordersTitle": "Đơn hàng",
     "inbox": "Hộp thư hội thoại",
     "page": "Trang",

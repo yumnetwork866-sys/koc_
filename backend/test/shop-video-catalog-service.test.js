@@ -11,10 +11,15 @@ test('shop video catalog follows every TikTok page and stores daily snapshots', 
   let apiCalls = 0;
   let catalogRows = 0;
   let snapshotRows = 0;
+  const requestedAccountTypes = [];
+  const storedAccountTypes = [];
   const restores = [
     mockModule(modelsPath, {
       ShopVideo: {
-        bulkCreate: async (rows) => { catalogRows += rows.length; },
+        bulkCreate: async (rows) => {
+          catalogRows += rows.length;
+          storedAccountTypes.push(...rows.map((row) => row.account_type));
+        },
         findAll: async ({ where }) => where.platform_video_id[Object.getOwnPropertySymbols(where.platform_video_id)[0]]
           .map((platformVideoId, index) => ({ id: index + 1, platform_video_id: platformVideoId })),
       },
@@ -23,13 +28,14 @@ test('shop video catalog follows every TikTok page and stores daily snapshots', 
       },
     }),
     mockModule(shopServicePath, {
-      getShopVideoPerformance: async ({ pageToken }) => {
+      getShopVideoPerformance: async ({ accountType, pageToken }) => {
         apiCalls += 1;
+        requestedAccountTypes.push(accountType);
         const page = Number(pageToken || 0);
         return {
           data: {
             videos: [0, 1].map(() => ({
-              id: `video-${page}`,
+              id: `${accountType}-video-${page}`,
               creator: { user_name: 'creator' },
               video_post_time: '2026-07-23 10:00:00',
               gmv: { amount: String(100 + page), currency: 'MYR' },
@@ -58,10 +64,25 @@ test('shop video catalog follows every TikTok page and stores daily snapshots', 
     authorization: { id: 2 },
   }, { now: new Date('2026-07-24T06:00:00.000Z') });
 
-  assert.equal(apiCalls, 3);
-  assert.equal(catalogRows, 3);
-  assert.equal(snapshotRows, 3);
-  assert.equal(result.pages, 3);
-  assert.equal(result.total, 3);
+  assert.equal(apiCalls, 9);
+  assert.equal(catalogRows, 9);
+  assert.equal(snapshotRows, 9);
+  assert.equal(result.pages, 9);
+  assert.equal(result.total, 9);
+  assert.deepEqual([...new Set(requestedAccountTypes)], [
+    'OFFICIAL_ACCOUNTS',
+    'MARKETING_ACCOUNTS',
+    'AFFILIATE_ACCOUNTS',
+  ]);
+  assert.deepEqual([...new Set(storedAccountTypes)], [
+    'OFFICIAL_ACCOUNTS',
+    'MARKETING_ACCOUNTS',
+    'AFFILIATE_ACCOUNTS',
+  ]);
+  assert.deepEqual(result.account_types, {
+    OFFICIAL_ACCOUNTS: { total: 3, pages: 3 },
+    MARKETING_ACCOUNTS: { total: 3, pages: 3 },
+    AFFILIATE_ACCOUNTS: { total: 3, pages: 3 },
+  });
   assert.equal(result.snapshot_date, '2026-07-24');
 });

@@ -6,6 +6,11 @@ const {
 const { getShopVideoPerformance } = require('./tiktokShopService');
 const { isDemoAuthorization, sellerAffiliateFixture } = require('../lib/tiktokDemoFixtures');
 
+const SHOP_VIDEO_ACCOUNT_TYPES = [
+  'OFFICIAL_ACCOUNTS',
+  'MARKETING_ACCOUNTS',
+  'AFFILIATE_ACCOUNTS',
+];
 const dateOnly = (value = new Date()) => new Date(value).toISOString().slice(0, 10);
 const shiftDate = (value, days) => {
   const date = new Date(`${dateOnly(value)}T00:00:00.000Z`);
@@ -24,7 +29,7 @@ const videoPostedAt = (video) => {
   const parsed = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 };
-const normalizedVideo = (shopId, video, now) => {
+const normalizedVideo = (shopId, video, now, accountType = 'AFFILIATE_ACCOUNTS') => {
   const platformVideoId = String(video?.id || video?.video_id || '').trim();
   const creatorUsername = videoUsername(video);
   const gmv = video?.gmv && typeof video.gmv === 'object'
@@ -34,7 +39,7 @@ const normalizedVideo = (shopId, video, now) => {
     catalog: {
       shop_id: shopId,
       platform_video_id: platformVideoId,
-      account_type: 'AFFILIATE_ACCOUNTS',
+      account_type: accountType,
       creator_username: creatorUsername || null,
       title: String(video?.title || platformVideoId || 'TikTok video'),
       video_url: platformVideoId && creatorUsername
@@ -71,6 +76,9 @@ const wait = (milliseconds, signal) => new Promise((resolve, reject) => {
 });
 
 const requestPage = async (shop, options, signal) => {
+  const accountType = SHOP_VIDEO_ACCOUNT_TYPES.includes(options.accountType)
+    ? options.accountType
+    : 'AFFILIATE_ACCOUNTS';
   for (let attempt = 0; attempt < 4; attempt += 1) {
     if (signal?.aborted) {
       const error = new Error('Job was stopped by the user.');
@@ -80,14 +88,15 @@ const requestPage = async (shop, options, signal) => {
     try {
       return isDemoAuthorization(shop.authorization)
         ? sellerAffiliateFixture('shop-video-performance', shop, {
-          account_type: 'AFFILIATE_ACCOUNTS',
+          account_type: accountType,
           currency: 'LOCAL',
+          ...options,
         })
         : await getShopVideoPerformance({
           authorization: shop.authorization,
           shopCipher: shop.cipher,
           currency: 'LOCAL',
-          accountType: 'AFFILIATE_ACCOUNTS',
+          accountType,
           sortField: 'gmv',
           sortOrder: 'DESC',
           pageSize: 100,
@@ -103,9 +112,11 @@ const requestPage = async (shop, options, signal) => {
   return null;
 };
 
-const persistPage = async (shopId, videos, { now, startDate, endDate }) => {
+const persistPage = async (shopId, videos, {
+  now, startDate, endDate, accountType,
+}) => {
   const rowsByVideoId = new Map();
-  videos.map((video) => normalizedVideo(shopId, video, now))
+  videos.map((video) => normalizedVideo(shopId, video, now, accountType))
     .filter((row) => row.catalog.platform_video_id)
     .forEach((row) => rowsByVideoId.set(row.catalog.platform_video_id, row));
   const rows = [...rowsByVideoId.values()];
@@ -149,34 +160,55 @@ const syncShopVideoCatalog = async (shop, { now = new Date(), signal } = {}) => 
     : 200;
   const startDate = shiftDate(now, -lookbackDays);
   const endDate = shiftDate(now, 1);
-  let pageToken = null;
   let total = 0;
   let pages = 0;
   const seenVideoIds = new Set();
-  do {
-    const payload = await requestPage(shop, {
-      startDate,
-      endDate,
-      pageToken,
-    }, signal);
-    const videos = (payload?.data?.videos || []).filter((video) => {
-      const id = String(video?.id || video?.video_id || '').trim();
-      if (!id || seenVideoIds.has(id)) return false;
-      seenVideoIds.add(id);
-      return true;
-    });
-    total += await persistPage(shop.id, videos, { now, startDate, endDate });
-    pages += 1;
-    pageToken = payload?.data?.next_page_token || null;
-    if (pageToken && pages >= maxPages) {
-      const error = new Error(`Video catalog sync stopped at the safety limit of ${maxPages} pages before TikTok pagination ended.`);
-      error.summary = { shop_id: shop.id, total, pages, start_date: startDate, end_date: endDate };
-      throw error;
-    }
-  } while (pageToken);
+  const accountTypes = {};
+  for (const accountType of SHOP_VIDEO_ACCOUNT_TYPES) {
+    let pageToken = null;
+    let accountTotal = 0;
+    let accountPages = 0;
+    do {
+      const payload = await requestPage(shop, {
+        startDate,
+        endDate,
+        pageToken,
+        accountType,
+      }, signal);
+      const videos = (payload?.data?.videos || []).filter((video) => {
+        const id = String(video?.id || video?.video_id || '').trim();
+        if (!id || seenVideoIds.has(id)) return false;
+        seenVideoIds.add(id);
+        return true;
+      });
+      const stored = await persistPage(shop.id, videos, {
+        now, startDate, endDate, accountType,
+      });
+      accountTotal += stored;
+      total += stored;
+      accountPages += 1;
+      pages += 1;
+      pageToken = payload?.data?.next_page_token || null;
+      if (pageToken && accountPages >= maxPages) {
+        const error = new Error(`${accountType} video catalog sync stopped at the safety limit of ${maxPages} pages before TikTok pagination ended.`);
+        error.summary = {
+          shop_id: shop.id,
+          total,
+          pages,
+          account_type: accountType,
+          account_pages: accountPages,
+          start_date: startDate,
+          end_date: endDate,
+        };
+        throw error;
+      }
+    } while (pageToken);
+    accountTypes[accountType] = { total: accountTotal, pages: accountPages };
+  }
   return {
     total,
     pages,
+    account_types: accountTypes,
     start_date: startDate,
     end_date: endDate,
     snapshot_date: dateOnly(now),
@@ -185,5 +217,7 @@ const syncShopVideoCatalog = async (shop, { now = new Date(), signal } = {}) => 
 
 module.exports = {
   syncShopVideoCatalog,
-  __test: { dateOnly, shiftDate, normalizedVideo },
+  __test: {
+    SHOP_VIDEO_ACCOUNT_TYPES, dateOnly, shiftDate, normalizedVideo,
+  },
 };
