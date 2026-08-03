@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchChannelReport } from '../lib/api';
 import { useI18n } from '../lib/language';
@@ -40,6 +40,101 @@ const formatDate = (value) => {
   return year && month && day ? `${day}/${month}/${year}` : '';
 };
 
+const ChannelAvatar = ({ channel }) => {
+  const [failed, setFailed] = useState(false);
+  const avatarUrl = channel?.avatar_url || '';
+  useEffect(() => setFailed(false), [avatarUrl]);
+  return (
+    <span className="channel-report-channel-picker__avatar" aria-hidden="true">
+      {avatarUrl && !failed
+        ? <img src={avatarUrl} alt="" onError={() => setFailed(true)} />
+        : String(channel?.name || 'TK').trim().charAt(0).toUpperCase()}
+    </span>
+  );
+};
+
+const ChannelSelectDropdown = ({ channels, value, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const selectedChannel = channels.find((channel) => String(channel.id) === String(value)) || null;
+  const label = selectedChannel?.name || 'Tất cả kênh';
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (event.key === 'Escape'
+        || (event.type === 'pointerdown' && !rootRef.current?.contains(event.target))) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, [open]);
+
+  const selectChannel = (channelId) => {
+    onChange(String(channelId));
+    setOpen(false);
+  };
+
+  return (
+    <div className="channel-report-channel-picker" ref={rootRef}>
+      <button
+        id="channel-report-channel"
+        className="channel-report-channel-picker__trigger"
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={!channels.length}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="channel-report-channel-picker__current">
+          <ChannelAvatar channel={selectedChannel || { name: 'Tất cả' }} />
+          <span title={label}>{channels.length ? label : 'Chưa có kênh'}</span>
+        </span>
+        <span className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="channel-report-channel-picker__menu" role="listbox">
+          <button
+            type="button"
+            className={`channel-report-channel-picker__option${value === 'all' ? ' channel-report-channel-picker__option--active' : ''}`}
+            role="option"
+            aria-selected={value === 'all'}
+            onClick={() => selectChannel('all')}
+          >
+            <span className="channel-report-channel-picker__copy">
+              <ChannelAvatar channel={{ name: 'Tất cả' }} />
+              <span><strong>Tất cả kênh</strong><small>{channels.length} kênh</small></span>
+            </span>
+          </button>
+          {channels.map((channel) => {
+            const selected = String(channel.id) === String(value);
+            return (
+              <button
+                type="button"
+                className={`channel-report-channel-picker__option${selected ? ' channel-report-channel-picker__option--active' : ''}`}
+                role="option"
+                aria-selected={selected}
+                key={channel.id}
+                onClick={() => selectChannel(channel.id)}
+              >
+                <span className="channel-report-channel-picker__copy">
+                  <ChannelAvatar channel={channel} />
+                  <span><strong>{channel.name || `Kênh #${channel.id}`}</strong></span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 const ChannelReport = () => {
   const { language } = useI18n();
   const [report, setReport] = useState(null);
@@ -49,6 +144,7 @@ const ChannelReport = () => {
   const [startDate, setStartDate] = useState(initialRange.startDate);
   const [endDate, setEndDate] = useState(initialRange.endDate);
   const [selectedTeamId, setSelectedTeamId] = useState('all');
+  const [selectedChannelId, setSelectedChannelId] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -77,6 +173,7 @@ const ChannelReport = () => {
             ? { month: selectedMonth }
             : { startDate, endDate }),
           teamId: selectedTeamId,
+          channelId: selectedChannelId,
           page: 1,
           pageSize: 20,
           signal: controller.signal,
@@ -90,7 +187,7 @@ const ChannelReport = () => {
     };
     load();
     return () => controller.abort();
-  }, [endDate, periodMode, selectedMonth, selectedTeamId, startDate]);
+  }, [endDate, periodMode, selectedChannelId, selectedMonth, selectedTeamId, startDate]);
 
   useEffect(() => {
     if (selectedTeamId !== 'all'
@@ -99,6 +196,14 @@ const ChannelReport = () => {
       setSelectedTeamId('all');
     }
   }, [report, selectedTeamId]);
+
+  useEffect(() => {
+    if (selectedChannelId !== 'all'
+      && report
+      && !report.filters?.channels?.some((channel) => String(channel.id) === selectedChannelId)) {
+      setSelectedChannelId('all');
+    }
+  }, [report, selectedChannelId]);
 
   const monthOptions = useMemo(() => {
     const selectedIndex = monthIndex(selectedMonth);
@@ -116,6 +221,7 @@ const ChannelReport = () => {
   }, [selectedMonth]);
 
   const teams = report?.filters?.teams || [];
+  const channels = report?.filters?.channels || [];
   const groups = report?.revenue?.teams || [];
   const visibleGroups = (
     selectedTeamId === 'all'
@@ -173,6 +279,14 @@ const ChannelReport = () => {
                   <option value={String(team.id)} key={team.id}>{team.name}</option>
                 ))}
               </select>
+            </div>
+            <div className="field channel-report-channel">
+              <label htmlFor="channel-report-channel">Kênh</label>
+              <ChannelSelectDropdown
+                channels={channels}
+                value={selectedChannelId}
+                onChange={setSelectedChannelId}
+              />
             </div>
             <div className="field channel-report-month">
               <label htmlFor="channel-report-period-mode">Kỳ báo cáo</label>

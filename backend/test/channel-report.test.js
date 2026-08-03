@@ -3,7 +3,10 @@ const test = require('node:test');
 
 const { mockModule } = require('./helpers/mockModule');
 
-const loadController = (t, query) => {
+const loadController = (t, query, revenueLoader = async () => ({
+  rows: [{ platform_video_id: 'video-88', revenue: 12.5, currency: 'MYR' }],
+  errors: [],
+})) => {
   const modelsPath = require.resolve('../src/models');
   const controllerPath = require.resolve('../src/controllers/reportController');
   const revenueServicePath = require.resolve('../src/services/channelReportRevenueService');
@@ -16,10 +19,7 @@ const loadController = (t, query) => {
     sequelize: { query },
   });
   const restoreRevenueService = mockModule(revenueServicePath, {
-    loadMonthlyShopVideoRevenue: async () => ({
-      rows: [{ platform_video_id: 'video-88', revenue: 12.5, currency: 'MYR' }],
-      errors: [],
-    }),
+    loadMonthlyShopVideoRevenue: revenueLoader,
   });
   delete require.cache[controllerPath];
   t.after(() => {
@@ -45,6 +45,7 @@ const makeResponse = () => ({
 
 test('channel report aggregates server-side and returns only one video page', async (t) => {
   const calls = [];
+  let revenueOptions;
   const { getChannelReport } = loadController(t, async (sql, options) => {
     calls.push({ sql, replacements: options.replacements });
     if (sql.includes('channel-report-summary')) {
@@ -75,6 +76,23 @@ test('channel report aggregates server-side and returns only one video page', as
           attributed_videos: '2',
           unclassified_videos: '0',
           revenue: '25',
+          revenue_available: true,
+          currency: 'MYR',
+        },
+        {
+          row_type: 'channel-option',
+          bucket: '3',
+          label: 'YUM',
+          avatar_url: '/avatars/yum.jpg',
+          videos: '45',
+          views: '12000',
+          likes: '300',
+          comments: '20',
+          shares: '10',
+          channels: '1',
+          attributed_videos: '40',
+          unclassified_videos: '5',
+          revenue: '250.5',
           revenue_available: true,
           currency: 'MYR',
         },
@@ -118,19 +136,32 @@ test('channel report aggregates server-side and returns only one video page', as
       currency: 'MYR',
       total_count: '45',
     }];
+  }, async (options) => {
+    revenueOptions = options;
+    return {
+      rows: [{ platform_video_id: 'video-88', revenue: 12.5, currency: 'MYR' }],
+      errors: [],
+    };
   });
   const response = makeResponse();
 
   await getChannelReport({
-    query: { month: '2026-07', team_id: '4', page: '2', page_size: '20' },
+    query: { month: '2026-07', team_id: '4', user_id: '9', channel_ids: '3', page: '2', page_size: '20' },
   }, response);
 
   assert.equal(response.statusCode, 200);
+  assert.deepEqual(revenueOptions, {
+    startDate: '2026-07-01',
+    endDate: '2026-08-01',
+  });
   assert.equal(calls.length, 3);
   calls.forEach((call) => {
     assert.equal(call.replacements.startDate, '2026-07-01');
     assert.equal(call.replacements.endDateExclusive, '2026-08-01');
     assert.equal(call.replacements.teamId, 4);
+    assert.equal(call.replacements.userId, 9);
+    assert.equal(call.replacements.filterChannels, true);
+    assert.deepEqual(JSON.parse(call.replacements.channelIds), [3]);
     assert.deepEqual(JSON.parse(call.replacements.revenueRows), [{
       platform_video_id: 'video-88',
       gross_gmv: 12.5,
@@ -143,6 +174,19 @@ test('channel report aggregates server-side and returns only one video page', as
   assert.equal(response.body.kpis.videos, 45);
   assert.equal(response.body.chart[0].views, 500);
   assert.equal(response.body.revenue.teams[0].members[0].name, 'An');
+  assert.equal(response.body.filters.user_id, 9);
+  assert.deepEqual(response.body.filters.channel_ids, [3]);
+  assert.deepEqual(response.body.filters.channels, [{
+    id: 3,
+    name: 'YUM',
+    avatar_url: '/avatars/yum.jpg',
+  }]);
+  assert.deepEqual(response.body.filters.users, [{
+    id: 9,
+    name: 'An',
+    team_id: 4,
+    team_name: 'Content',
+  }]);
   assert.equal(response.body.videos.items.length, 1);
   assert.equal(response.body.videos.items[0].revenue.amount, 12.5);
   assert.deepEqual(response.body.period, {

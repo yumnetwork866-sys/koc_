@@ -106,6 +106,26 @@ const channelReportOptions = (query = {}) => {
     error.status = 400;
     throw error;
   }
+  const rawUserId = String(query.user_id || '').trim();
+  const userId = rawUserId && rawUserId !== 'all' ? Number(rawUserId) : null;
+  if (userId !== null && (!Number.isInteger(userId) || userId <= 0)) {
+    const error = new Error('User báo cáo không hợp lệ.');
+    error.status = 400;
+    throw error;
+  }
+  const rawChannelIds = String(query.channel_ids || '').trim();
+  let channelIds = null;
+  if (rawChannelIds && rawChannelIds !== 'all') {
+    const parts = rawChannelIds.split(',').map((value) => value.trim());
+    const parsed = parts.map(Number);
+    if (parts.some((value) => !value)
+      || parsed.some((value) => !Number.isInteger(value) || value <= 0)) {
+      const error = new Error('Danh sách kênh báo cáo không hợp lệ.');
+      error.status = 400;
+      throw error;
+    }
+    channelIds = [...new Set(parsed)];
+  }
   return {
     mode,
     month: reportMonth,
@@ -113,6 +133,8 @@ const channelReportOptions = (query = {}) => {
     endDate,
     endDateExclusive,
     teamId,
+    userId,
+    channelIds,
     page: positiveInteger(query.page, 1),
     pageSize: positiveInteger(query.page_size, 20, 100),
   };
@@ -164,6 +186,7 @@ const channelReportBaseSql = `
       video.shares,
       channel.username AS channel_username,
       channel.display_name AS channel_name,
+      channel.avatar_url AS channel_avatar_url,
       matched.user_id,
       matched.team_id,
       matched.member_name,
@@ -189,10 +212,20 @@ const channelReportBaseSql = `
         CAST(:endDateExclusive AS date)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
       )
   ),
-  filtered_videos AS MATERIALIZED (
+  audience_videos AS MATERIALIZED (
     SELECT *
     FROM report_videos
-    WHERE CAST(:teamId AS integer) IS NULL OR team_id = CAST(:teamId AS integer)
+    WHERE (CAST(:teamId AS integer) IS NULL OR team_id = CAST(:teamId AS integer))
+      AND (CAST(:userId AS integer) IS NULL OR user_id = CAST(:userId AS integer))
+  ),
+  filtered_videos AS MATERIALIZED (
+    SELECT *
+    FROM audience_videos
+    WHERE CAST(:filterChannels AS boolean) = false
+      OR channel_id IN (
+        SELECT value::integer
+        FROM jsonb_array_elements_text(CAST(:channelIds AS jsonb)) selected(value)
+      )
   )
 `;
 
@@ -205,6 +238,8 @@ const getChannelReport = async (req, res) => {
       endDate,
       endDateExclusive,
       teamId,
+      userId,
+      channelIds,
       page,
       pageSize,
     } = channelReportOptions(req.query);
@@ -216,6 +251,9 @@ const getChannelReport = async (req, res) => {
       startDate,
       endDateExclusive,
       teamId,
+      userId,
+      filterChannels: channelIds !== null,
+      channelIds: JSON.stringify(channelIds || []),
       revenueRows: JSON.stringify(monthlyRevenue.rows.map((row) => ({
         platform_video_id: row.platform_video_id,
         gross_gmv: row.revenue,
@@ -229,6 +267,7 @@ const getChannelReport = async (req, res) => {
           'summary' AS row_type,
           NULL::text AS bucket,
           NULL::text AS label,
+          NULL::text AS avatar_url,
           COUNT(*)::bigint AS videos,
           COALESCE(SUM(views), 0)::bigint AS views,
           COALESCE(SUM(likes), 0)::bigint AS likes,
@@ -246,6 +285,7 @@ const getChannelReport = async (req, res) => {
           'chart' AS row_type,
           TO_CHAR((published_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, 'YYYY-MM-DD') AS bucket,
           NULL::text AS label,
+          NULL::text AS avatar_url,
           COUNT(*)::bigint AS videos,
           COALESCE(SUM(views), 0)::bigint AS views,
           COALESCE(SUM(likes), 0)::bigint AS likes,
@@ -264,6 +304,7 @@ const getChannelReport = async (req, res) => {
           'channel' AS row_type,
           channel_id::text AS bucket,
           MIN(COALESCE(channel_name, channel_username)) AS label,
+          MIN(channel_avatar_url) AS avatar_url,
           COUNT(*)::bigint AS videos,
           COALESCE(SUM(views), 0)::bigint AS views,
           COALESCE(SUM(likes), 0)::bigint AS likes,
@@ -277,6 +318,24 @@ const getChannelReport = async (req, res) => {
           MIN(currency) AS currency
         FROM filtered_videos
         GROUP BY channel_id
+        UNION ALL
+        SELECT
+          'channel-option' AS row_type,
+          channel.id::text AS bucket,
+          COALESCE(channel.display_name, channel.username) AS label,
+          channel.avatar_url AS avatar_url,
+          0::bigint AS videos,
+          0::bigint AS views,
+          0::bigint AS likes,
+          0::bigint AS comments,
+          0::bigint AS shares,
+          1::bigint AS channels,
+          0::bigint AS attributed_videos,
+          0::bigint AS unclassified_videos,
+          0::numeric AS revenue,
+          false AS revenue_available,
+          NULL::text AS currency
+        FROM tiktok_channels channel
         ORDER BY row_type, bucket
       `, { replacements, type: QueryTypes.SELECT }),
       sequelize.query(`${channelReportBaseSql}
@@ -365,8 +424,30 @@ const getChannelReport = async (req, res) => {
       revenue_available: Boolean(row.revenue_available),
       currency: row.currency || null,
     });
+    const availableTeamsById = new Map();
+    const availableUsersById = new Map();
+    for (const row of teamRows) {
+      const teamKey = String(row.team_id);
+      if (!availableTeamsById.has(teamKey)) {
+        availableTeamsById.set(teamKey, {
+          id: Number(row.team_id),
+          name: row.team_name,
+          member_count: 0,
+        });
+      }
+      if (row.user_id) {
+        availableTeamsById.get(teamKey).member_count += 1;
+        availableUsersById.set(String(row.user_id), {
+          id: Number(row.user_id),
+          name: row.member_name,
+          team_id: Number(row.team_id),
+          team_name: row.team_name,
+        });
+      }
+    }
     const teams = [];
     for (const row of teamRows) {
+      if (userId !== null && Number(row.user_id) !== userId) continue;
       let team = teams.find((item) => item.key === String(row.team_id));
       if (!team) {
         team = {
@@ -447,11 +528,17 @@ const getChannelReport = async (req, res) => {
       },
       filters: {
         team_id: teamId,
-        teams: teams.map((team) => ({
-          id: Number(team.key),
-          name: team.label,
-          member_count: team.members.length,
-        })),
+        user_id: userId,
+        channel_ids: channelIds,
+        teams: [...availableTeamsById.values()],
+        users: [...availableUsersById.values()],
+        channels: aggregateRows
+          .filter((row) => row.row_type === 'channel-option')
+          .map((row) => ({
+            id: Number(row.bucket),
+            name: row.label || null,
+            avatar_url: row.avatar_url || null,
+          })),
       },
       revenue_sync: {
         source: 'tiktok_shop_monthly',
