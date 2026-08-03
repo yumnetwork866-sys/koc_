@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -56,20 +56,21 @@ const UserAvatar = ({ user, className, fallbackClassName }) => {
 
 const UserPicker = ({ id, users, value, onChange, allLabel, disabled }) => {
   const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
   const selectedUser = users.find((user) => String(user.id) === String(value)) || null;
   const isAll = value === 'all';
 
   useEffect(() => {
     if (!open) return undefined;
     const close = (event) => {
-      if (!event.target.closest('.dashboard-user-picker')) setOpen(false);
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
     };
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
   }, [open]);
 
   return (
-    <div className="channel-picker dashboard-user-picker">
+    <div className="channel-picker dashboard-user-picker" ref={rootRef}>
       <button
         id={id}
         className="channel-picker__trigger"

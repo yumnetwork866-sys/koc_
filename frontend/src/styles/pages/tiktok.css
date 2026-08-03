@@ -548,6 +548,50 @@
 .dashboard-chart-filters .channel-picker {
   width: 100%;
   max-width: none;
+  min-width: 0;
+}
+
+.dashboard-chart-filters,
+.dashboard-chart-filters .field {
+  min-width: 0;
+}
+
+.dashboard-chart-filters .channel-picker__trigger {
+  overflow: hidden;
+}
+
+.dashboard-chart-filters .channel-picker__current {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.dashboard-chart-filters .channel-picker__label {
+  display: block;
+  max-width: 100%;
+}
+
+.dashboard-chart-filters .channel-picker__menu {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.dashboard-chart-filters .channel-picker__option {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dashboard-chart-filters .channel-picker__option-meta {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.dashboard-chart-filters .channel-picker__option-title,
+.dashboard-chart-filters .channel-picker__option-subtitle {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-chart-filters .channel-picker__trigger,

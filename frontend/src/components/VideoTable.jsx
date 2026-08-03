@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Heart, MessageCircle, Share2 } from 'lucide-react';
 import { fetchChannels, fetchVideoPage } from '../lib/api';
 import { useI18n } from '../lib/language';
@@ -59,6 +59,7 @@ export const ChannelPicker = ({
 }) => {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
   const selectedChannel = channels.find((channel) => String(channel.id) === String(value)) || null;
   const isAll = includeAll && value === 'all';
   const selectedLabel = isAll
@@ -68,7 +69,7 @@ export const ChannelPicker = ({
   useEffect(() => {
     if (!open) return undefined;
     const close = (event) => {
-      if (!event.target.closest('.channel-picker')) setOpen(false);
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
     };
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
@@ -79,7 +80,7 @@ export const ChannelPicker = ({
     : channels;
 
   return (
-    <div className="channel-picker">
+    <div className="channel-picker" ref={rootRef}>
       <button
         id={id}
         className="channel-picker__trigger"
