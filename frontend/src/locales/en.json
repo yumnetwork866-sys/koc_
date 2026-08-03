@@ -465,6 +465,8 @@
     "totalShares": "Total shares",
     "channel": "Channel",
     "allChannels": "All channels",
+    "user": "User",
+    "allUsers": "All users",
     "video": "Video",
     "views": "Views",
     "videoPerformance": "Video performance",
@@ -477,7 +479,7 @@
     "videosPerDay": "videos/day",
     "averageMetric": "Average {{metric}}",
     "loading": "Loading data...",
-    "noVideoData": "This channel has no video data yet."
+    "noVideoData": "No videos match the selected filters."
   },
   "booking": {
     "heroTitle": "Booking management",

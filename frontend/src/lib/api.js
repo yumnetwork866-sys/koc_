@@ -340,6 +340,7 @@ export function fetchDashboard({
   channelId,
   startDate,
   endDate,
+  userId,
   metric,
   page,
   pageSize,
@@ -348,6 +349,7 @@ export function fetchDashboard({
   if (channelId) params.set('channel_id', channelId);
   if (startDate) params.set('start_date', startDate);
   if (endDate) params.set('end_date', endDate);
+  if (userId) params.set('user_id', userId);
   if (metric) params.set('metric', metric);
   if (page) params.set('page', page);
   if (pageSize) params.set('page_size', pageSize);

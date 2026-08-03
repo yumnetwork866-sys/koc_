@@ -26,11 +26,13 @@ test('dashboard query only accepts safe channel, date, and metric values', () =>
     channel_id: '9',
     start_date: '2026-07-01',
     end_date: '2026-07-31',
+    user_id: '12',
     metric: 'shares',
   }), {
     channelId: 9,
     startDate: '2026-07-01',
     endDate: '2026-07-31',
+    userId: 12,
     metric: 'shares',
     page: 1,
     pageSize: 20,
@@ -39,11 +41,13 @@ test('dashboard query only accepts safe channel, date, and metric values', () =>
   assert.deepEqual(dashboardFilters({
     channel_id: 'invalid',
     start_date: 'yesterday',
+    user_id: '-4',
     metric: 'DROP TABLE videos',
   }), {
     channelId: null,
     startDate: null,
     endDate: null,
+    userId: null,
     metric: 'views',
     page: 1,
     pageSize: 20,

@@ -27,10 +27,15 @@ const dashboardFilters = (query = {}) => {
   const pageSize = Number.isInteger(pageSizeValue) && pageSizeValue > 0
     ? Math.min(pageSizeValue, 100)
     : 20;
+  const userIdValue = Number(query.user_id);
+  const userId = Number.isInteger(userIdValue) && userIdValue > 0
+    ? userIdValue
+    : null;
   return {
     channelId,
     startDate,
     endDate,
+    userId,
     metric,
     page,
     pageSize,
@@ -43,6 +48,7 @@ const getDashboard = async (req, res) => {
       channelId,
       startDate,
       endDate,
+      userId,
       metric,
       page,
       pageSize,
@@ -51,10 +57,27 @@ const getDashboard = async (req, res) => {
       WHERE (:channelId::int IS NULL OR v.channel_id = :channelId)
         AND (:startDate::date IS NULL OR v.published_at::date >= :startDate)
         AND (:endDate::date IS NULL OR v.published_at::date <= :endDate)
+        AND (
+          :userId::int IS NULL
+          OR EXISTS (
+            SELECT 1
+            FROM user_content_attributions attribution
+            CROSS JOIN LATERAL jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(attribution.hashtags) = 'array' THEN attribution.hashtags
+                ELSE '[]'::jsonb
+              END
+            ) configured_hashtag(value)
+            WHERE attribution.user_id = :userId
+              AND LOWER(configured_hashtag.value) = ANY(
+                regexp_split_to_array(LOWER(COALESCE(v.title, '')), '[^[:alnum:]_#]+')
+              )
+          )
+        )
     `;
-    const replacements = { channelId, startDate, endDate };
+    const replacements = { channelId, startDate, endDate, userId };
 
-    const [channels, totalsRows, chartRows, videos] = await Promise.all([
+    const [channels, users, totalsRows, chartRows, videos] = await Promise.all([
       sequelize.query(`
         SELECT
           channel.id,
@@ -67,6 +90,17 @@ const getDashboard = async (req, res) => {
         LEFT JOIN videos video ON video.channel_id = channel.id
         GROUP BY channel.id
         ORDER BY channel.id ASC
+      `, { type: QueryTypes.SELECT }),
+      sequelize.query(`
+        SELECT
+          app_user.id,
+          app_user.name,
+          app_user.email
+        FROM user_content_attributions attribution
+        JOIN users app_user ON app_user.id = attribution.user_id
+        WHERE jsonb_typeof(attribution.hashtags) = 'array'
+          AND jsonb_array_length(attribution.hashtags) > 0
+        ORDER BY LOWER(app_user.name), app_user.id
       `, { type: QueryTypes.SELECT }),
       sequelize.query(`
         SELECT
@@ -146,6 +180,7 @@ const getDashboard = async (req, res) => {
     const totals = withNumbers(totalsRows[0] || {});
     res.json({
       channels: channels.map(withNumbers),
+      users,
       totals,
       chart: chartRows.map(withNumbers),
       videos: videos.map(withNumbers),
@@ -159,6 +194,7 @@ const getDashboard = async (req, res) => {
         channel_id: channelId,
         start_date: startDate,
         end_date: endDate,
+        user_id: userId,
         metric,
       },
     });

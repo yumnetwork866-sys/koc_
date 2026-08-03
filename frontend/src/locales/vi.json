@@ -460,6 +460,8 @@
     "totalShares": "Tổng share",
     "channel": "Channel",
     "allChannels": "Tất cả channel",
+    "user": "User",
+    "allUsers": "Tất cả user",
     "video": "Video",
     "views": "Lượt xem",
     "videoPerformance": "Hiệu suất video",
@@ -472,7 +474,7 @@
     "videosPerDay": "video/ngày",
     "averageMetric": "Trung bình {{metric}}",
     "loading": "Đang tải dữ liệu...",
-    "noVideoData": "Channel này chưa có dữ liệu video."
+    "noVideoData": "Không có video phù hợp với bộ lọc."
   },
   "booking": {
     "heroTitle": "Quản lý booking",

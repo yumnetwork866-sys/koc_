@@ -521,12 +521,13 @@
 
 .dashboard-chart-filters {
   display: grid;
-  grid-template-columns: minmax(180px, 280px) minmax(150px, 190px);
+  grid-template-columns: minmax(180px, 260px) repeat(2, minmax(135px, 180px));
   gap: 10px;
   margin-left: auto;
 }
 
 .dashboard-channel-filter,
+.dashboard-user-filter,
 .dashboard-metric-filter {
   width: 100%;
 }
@@ -2092,6 +2093,16 @@
 
   .dashboard-hero__mini-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-chart-card__header {
+    align-items: stretch;
+  }
+
+  .dashboard-chart-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    margin-left: 0;
   }
 }
 

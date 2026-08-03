@@ -34,6 +34,7 @@ const Dashboard = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const [videos, setVideos] = useState([]);
   const [channels, setChannels] = useState([]);
+  const [users, setUsers] = useState([]);
   const [totals, setTotals] = useState({
     video_count: 0,
     views: 0,
@@ -50,6 +51,7 @@ const Dashboard = ({ heroTitle }) => {
     total_pages: 1,
   });
   const [selectedChannelId, setSelectedChannelId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('all');
   const [chartMetric, setChartMetric] = useState('views');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -66,12 +68,14 @@ const Dashboard = ({ heroTitle }) => {
         const payload = await fetchDashboard({
           signal: controller.signal,
           channelId: selectedChannelId || null,
+          userId: selectedUserId === 'all' ? null : selectedUserId,
           metric: chartMetric,
           page: videoPage,
           pageSize: 20,
         });
         setVideos(payload.videos || []);
         setChannels(payload.channels || []);
+        setUsers(payload.users || []);
         setTotals(payload.totals || {});
         setChartRows(payload.chart || []);
         setVideoPagination(payload.video_pagination || {
@@ -94,7 +98,7 @@ const Dashboard = ({ heroTitle }) => {
     load();
 
     return () => controller.abort();
-  }, [chartMetric, selectedChannelId, t, videoPage]);
+  }, [chartMetric, selectedChannelId, selectedUserId, t, videoPage]);
 
   useEffect(() => {
     setSelectedChannelId((current) => (
@@ -106,7 +110,7 @@ const Dashboard = ({ heroTitle }) => {
 
   useEffect(() => {
     setVideoPage(1);
-  }, [selectedChannelId]);
+  }, [selectedChannelId, selectedUserId]);
 
   const chartData = useMemo(() => {
     if (chartMetric === 'date') {
@@ -197,6 +201,20 @@ const Dashboard = ({ heroTitle }) => {
                 onChange={setSelectedChannelId}
                 disabled={loading}
               />
+            </div>
+            <div className="field dashboard-user-filter">
+              <label htmlFor="dashboard-user">{t('dashboard.user')}</label>
+              <select
+                id="dashboard-user"
+                value={selectedUserId}
+                onChange={(event) => setSelectedUserId(event.target.value)}
+                disabled={loading && !users.length}
+              >
+                <option value="all">{t('dashboard.allUsers')}</option>
+                {users.map((user) => (
+                  <option value={String(user.id)} key={user.id}>{user.name || user.email}</option>
+                ))}
+              </select>
             </div>
             <div className="field dashboard-metric-filter">
               <label htmlFor="dashboard-metric">{t('dashboard.metric')}</label>
