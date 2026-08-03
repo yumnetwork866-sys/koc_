@@ -551,6 +551,192 @@ const getChannelReport = async (req, res) => {
   }
 };
 
+const getChannelReportMemberDetail = async (req, res) => {
+  try {
+    const {
+      mode,
+      month,
+      startDate,
+      endDate,
+      endDateExclusive,
+      teamId,
+      userId,
+      channelIds,
+      page,
+      pageSize,
+    } = channelReportOptions({ ...req.query, user_id: req.params.userId });
+    const monthlyRevenue = await loadMonthlyShopVideoRevenue({
+      startDate,
+      endDate: endDateExclusive,
+    });
+    const replacements = {
+      startDate,
+      endDateExclusive,
+      teamId,
+      userId,
+      filterChannels: channelIds !== null,
+      channelIds: JSON.stringify(channelIds || []),
+      revenueRows: JSON.stringify(monthlyRevenue.rows.map((row) => ({
+        platform_video_id: row.platform_video_id,
+        gross_gmv: row.revenue,
+        currency: row.currency,
+      }))),
+    };
+    const [videoRows, productRows] = await Promise.all([
+      sequelize.query(`${channelReportBaseSql}
+        /* channel-report-member-videos */
+        SELECT
+          video.id,
+          video.platform_video_id,
+          video.title,
+          video.video_url,
+          video.thumbnail_url,
+          video.published_at,
+          video.views,
+          video.likes,
+          video.comments,
+          video.shares,
+          video.channel_id,
+          video.channel_username,
+          video.channel_name,
+          video.revenue,
+          video.currency,
+          COALESCE((
+            SELECT jsonb_agg(jsonb_build_object('id', mapped.product_id, 'name', mapped.name) ORDER BY mapped.name)
+            FROM (
+              SELECT product.id::text AS product_id, product.name
+              FROM video_products relation
+              JOIN products product ON product.id = relation.product_id
+              WHERE relation.video_id = video.id
+              UNION
+              SELECT
+                NULLIF(shop_product.value ->> 'id', '') AS product_id,
+                COALESCE(NULLIF(shop_product.value ->> 'name', ''), NULLIF(shop_product.value ->> 'title', ''), shop_product.value ->> 'id') AS name
+              FROM shop_videos shop_video
+              CROSS JOIN LATERAL jsonb_array_elements(
+                CASE
+                  WHEN jsonb_typeof(shop_video.raw_data -> 'products') = 'array' THEN shop_video.raw_data -> 'products'
+                  ELSE '[]'::jsonb
+                END
+              ) shop_product(value)
+              WHERE shop_video.platform_video_id = video.platform_video_id
+            ) mapped
+            WHERE mapped.product_id IS NOT NULL
+          ), '[]'::jsonb) AS products,
+          COUNT(*) OVER()::bigint AS total_count
+        FROM filtered_videos video
+        ORDER BY video.published_at DESC, video.id DESC
+        LIMIT :limit OFFSET :offset
+      `, {
+        replacements: {
+          ...replacements,
+          limit: pageSize,
+          offset: (page - 1) * pageSize,
+        },
+        type: QueryTypes.SELECT,
+      }),
+      sequelize.query(`${channelReportBaseSql}
+        /* channel-report-member-products */
+        , member_video_products AS (
+          SELECT
+            video.id AS video_id,
+            video.views,
+            video.revenue,
+            video.currency,
+            mapped.product_id,
+            mapped.name
+          FROM filtered_videos video
+          LEFT JOIN LATERAL (
+            SELECT product.id::text AS product_id, product.name
+            FROM video_products relation
+            JOIN products product ON product.id = relation.product_id
+            WHERE relation.video_id = video.id
+            UNION
+            SELECT
+              NULLIF(shop_product.value ->> 'id', '') AS product_id,
+              COALESCE(NULLIF(shop_product.value ->> 'name', ''), NULLIF(shop_product.value ->> 'title', ''), shop_product.value ->> 'id') AS name
+            FROM shop_videos shop_video
+            CROSS JOIN LATERAL jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(shop_video.raw_data -> 'products') = 'array' THEN shop_video.raw_data -> 'products'
+                ELSE '[]'::jsonb
+              END
+            ) shop_product(value)
+            WHERE shop_video.platform_video_id = video.platform_video_id
+          ) mapped ON TRUE
+        ),
+        product_videos AS (
+          SELECT
+            *,
+            GREATEST(COUNT(product_id) OVER (PARTITION BY video_id), 1) AS product_count
+          FROM member_video_products
+        )
+        SELECT
+          product_id,
+          COALESCE(name, 'Chưa xác định sản phẩm') AS name,
+          COUNT(DISTINCT video_id)::bigint AS videos,
+          COALESCE(SUM(views::numeric / product_count), 0) AS views,
+          COALESCE(SUM(revenue / product_count), 0) AS revenue,
+          COUNT(revenue) > 0 AS revenue_available,
+          MIN(currency) AS currency
+        FROM product_videos
+        GROUP BY product_id, name
+        ORDER BY revenue_available DESC, revenue DESC, videos DESC, name ASC
+      `, { replacements, type: QueryTypes.SELECT }),
+    ]);
+    const total = number(videoRows[0]?.total_count);
+    res.json({
+      period: { mode, month, start: startDate, end: endDate },
+      user_id: userId,
+      videos: {
+        items: videoRows.map((row) => ({
+          id: Number(row.id),
+          platform_video_id: row.platform_video_id,
+          title: row.title || null,
+          video_url: row.video_url || null,
+          thumbnail_url: row.thumbnail_url || null,
+          published_at: row.published_at,
+          views: number(row.views),
+          likes: number(row.likes),
+          comments: number(row.comments),
+          shares: number(row.shares),
+          channel: {
+            id: Number(row.channel_id),
+            username: row.channel_username || null,
+            display_name: row.channel_name || null,
+          },
+          products: Array.isArray(row.products) ? row.products : [],
+          revenue: row.revenue === null ? null : {
+            amount: number(row.revenue),
+            currency: row.currency || null,
+          },
+        })),
+        pagination: {
+          page,
+          page_size: pageSize,
+          total,
+          total_pages: Math.max(1, Math.ceil(total / pageSize)),
+        },
+      },
+      products: productRows.map((row) => ({
+        id: row.product_id === null ? null : String(row.product_id),
+        name: row.name,
+        videos: number(row.videos),
+        views: Math.round(number(row.views)),
+        revenue: number(row.revenue),
+        revenue_available: Boolean(row.revenue_available),
+        currency: row.currency || null,
+      })),
+      revenue_sync: {
+        partial: monthlyRevenue.errors.length > 0,
+        errors: monthlyRevenue.errors,
+      },
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message });
+  }
+};
+
 const validateReportPeriod = (startValue, endValue) => {
   const datePattern = /^\d{4}-\d{2}-\d{2}$/;
   const startText = String(startValue || '');
@@ -1295,6 +1481,7 @@ module.exports = {
   getKpis,
   getKocDetail,
   getChannelReport,
+  getChannelReportMemberDetail,
   generateWeeklyReport,
   __test: {
     buildKocReportSnapshot,

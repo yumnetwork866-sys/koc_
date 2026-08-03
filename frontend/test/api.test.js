@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  fetchChannelReport, fetchTikTokSellerMarketplaceCreator, fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchTikTokShopVideoAnalytics, fetchTikTokShopVideoThumbnail, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
+  fetchChannelReport, fetchChannelReportMemberDetail, fetchTikTokSellerMarketplaceCreator, fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchTikTokShopVideoAnalytics, fetchTikTokShopVideoThumbnail, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
 } from '../src/lib/api.js';
 import { getStoredSession, saveStoredSession } from '../src/lib/session.js';
 
@@ -127,9 +127,11 @@ test('Channel report helper supports month presets and custom date ranges', asyn
 
     await fetchChannelReport({ month: '2026-07', teamId: '4', userId: '9', channelId: '3' });
     await fetchChannelReport({ startDate: '2026-07-05', endDate: '2026-07-12' });
+    await fetchChannelReportMemberDetail(9, { month: '2026-07', teamId: '4', channelId: '3', page: 2, pageSize: 10 });
 
     assert.equal(calls[0], '/api/reports/channel?page=1&page_size=20&month=2026-07&team_id=4&user_id=9&channel_ids=3');
     assert.equal(calls[1], '/api/reports/channel?page=1&page_size=20&start_date=2026-07-05&end_date=2026-07-12');
+    assert.equal(calls[2], '/api/reports/channel/members/9?page=2&page_size=10&month=2026-07&team_id=4&channel_ids=3');
   });
 });
 

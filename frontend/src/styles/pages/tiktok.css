@@ -1114,6 +1114,218 @@
   object-fit: cover;
 }
 
+.member-row__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.member-row__trigger:hover strong {
+  color: var(--color-accent-strong);
+}
+
+.member-row--expanded > td {
+  background: var(--color-surface-subtle);
+}
+
+.member-detail-row > td {
+  padding: 0 !important;
+  border-top: 0 !important;
+  background: var(--color-surface-subtle);
+}
+
+.member-detail {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.member-detail__tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.member-detail__tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-muted-strong);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.member-detail__tabs button:hover,
+.member-detail__tabs button.is-active {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.member-detail__tabs button span {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-soft);
+  font-size: 0.72rem;
+}
+
+.member-detail__videos {
+  display: grid;
+  gap: 6px;
+}
+
+.member-detail__video {
+  display: grid;
+  grid-template-columns: 64px minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.member-detail__video > img,
+.member-detail__video-placeholder {
+  width: 64px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-default);
+  object-fit: cover;
+}
+
+.member-detail__video-placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--color-bg-soft);
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.member-detail__video-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.member-detail__video-copy > a,
+.member-detail__video-copy > strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.84rem;
+}
+
+.member-detail__video-copy > a:hover {
+  color: var(--color-accent-strong);
+}
+
+.member-detail__video-copy > small {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+}
+
+.member-detail__product-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.member-detail__product-tags span {
+  max-width: 180px;
+  padding: 2px 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-soft);
+  color: var(--color-muted-strong);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-detail__video-metrics {
+  display: grid;
+  grid-template-columns: 82px 112px;
+  gap: 8px;
+  width: 202px;
+  text-align: right;
+}
+
+.member-detail__video-metrics > span {
+  display: grid;
+  gap: 2px;
+}
+
+.member-detail__video-metrics small {
+  color: var(--color-muted);
+  font-size: 0.68rem;
+}
+
+.member-detail__video-metrics strong {
+  font-size: 0.82rem;
+}
+
+.member-detail__state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 80px;
+  color: var(--color-muted);
+}
+
+.member-detail__state--error {
+  color: var(--color-danger);
+}
+
+.member-detail__more {
+  justify-self: center;
+}
+
+.member-detail__products {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.member-detail__product-name {
+  display: block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .member-detail__video {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .member-detail__video > img,
+  .member-detail__video-placeholder {
+    width: 56px;
+  }
+
+  .member-detail__video-metrics {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}
+
 
 .content-attribution-rule {
   display: grid;

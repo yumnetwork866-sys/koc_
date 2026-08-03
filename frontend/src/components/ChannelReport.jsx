@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchChannelReport } from '../lib/api';
+import { fetchChannelReport, fetchChannelReportMemberDetail } from '../lib/api';
 import { useI18n } from '../lib/language';
 
 const currentMonthValue = () => {
@@ -38,6 +38,15 @@ const formatMonth = (value) => {
 const formatDate = (value) => {
   const [year, month, day] = String(value || '').split('-');
   return year && month && day ? `${day}/${month}/${year}` : '';
+};
+
+const compactProductName = (value) => {
+  const name = String(value || '').trim();
+  if (!name) return 'Chưa xác định sản phẩm';
+  const brandCombo = name.match(/^([A-Z0-9]+)\s+(Kombo)\b/i);
+  if (brandCombo) return `${brandCombo[1].toUpperCase()} ${brandCombo[2]}`;
+  const headline = name.split(/\s+-\s+/)[0].trim();
+  return headline.length > 42 ? `${headline.slice(0, 39).trim()}…` : headline;
 };
 
 const ChannelAvatar = ({ channel }) => {
@@ -145,6 +154,10 @@ const ChannelReport = () => {
   const [endDate, setEndDate] = useState(initialRange.endDate);
   const [selectedTeamId, setSelectedTeamId] = useState('all');
   const [selectedChannelId, setSelectedChannelId] = useState('all');
+  const [expandedMemberId, setExpandedMemberId] = useState(null);
+  const [memberDetails, setMemberDetails] = useState({});
+  const [memberTabs, setMemberTabs] = useState({});
+  const memberRequestRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -205,6 +218,13 @@ const ChannelReport = () => {
     }
   }, [report, selectedChannelId]);
 
+  useEffect(() => {
+    memberRequestRef.current?.abort();
+    setExpandedMemberId(null);
+    setMemberDetails({});
+    setMemberTabs({});
+  }, [endDate, periodMode, selectedChannelId, selectedMonth, selectedTeamId, startDate]);
+
   const monthOptions = useMemo(() => {
     const selectedIndex = monthIndex(selectedMonth);
     const currentIndex = monthIndex(currentMonthValue());
@@ -243,6 +263,145 @@ const ChannelReport = () => {
       setEndDate(range.endDate);
     }
     setPeriodMode(nextMode);
+  };
+
+  const loadMemberDetail = async (memberId, page = 1, append = false) => {
+    memberRequestRef.current?.abort();
+    const controller = new AbortController();
+    memberRequestRef.current = controller;
+    setMemberDetails((current) => ({
+      ...current,
+      [memberId]: { ...current[memberId], loading: true, error: '' },
+    }));
+    try {
+      const payload = await fetchChannelReportMemberDetail(memberId, {
+        ...(periodMode === 'month' ? { month: selectedMonth } : { startDate, endDate }),
+        teamId: selectedTeamId,
+        channelId: selectedChannelId,
+        page,
+        pageSize: 10,
+        signal: controller.signal,
+      });
+      setMemberDetails((current) => {
+        const previousItems = append ? current[memberId]?.data?.videos?.items || [] : [];
+        return {
+          ...current,
+          [memberId]: {
+            loading: false,
+            error: '',
+            data: {
+              ...payload,
+              videos: {
+                ...payload.videos,
+                items: [...previousItems, ...(payload.videos?.items || [])],
+              },
+            },
+          },
+        };
+      });
+    } catch (loadError) {
+      if (loadError.name === 'AbortError') return;
+      setMemberDetails((current) => ({
+        ...current,
+        [memberId]: {
+          ...current[memberId],
+          loading: false,
+          error: loadError.message || 'Không tải được chi tiết thành viên.',
+        },
+      }));
+    }
+  };
+
+  const toggleMember = (member) => {
+    const memberId = String(member.key);
+    if (expandedMemberId === memberId) {
+      memberRequestRef.current?.abort();
+      setExpandedMemberId(null);
+      return;
+    }
+    setExpandedMemberId(memberId);
+    setMemberTabs((current) => ({ ...current, [memberId]: current[memberId] || 'videos' }));
+    if (!memberDetails[memberId]?.data) loadMemberDetail(memberId);
+  };
+
+  const renderMemberDetail = (member) => {
+    const memberId = String(member.key);
+    const detail = memberDetails[memberId] || {};
+    const data = detail.data;
+    const activeTab = memberTabs[memberId] || 'videos';
+    const videos = data?.videos?.items || [];
+    const products = data?.products || [];
+    const pagination = data?.videos?.pagination;
+    if (detail.loading && !data) {
+      return <div className="member-detail__state"><span className="loading-dot" />Đang tải video và sản phẩm</div>;
+    }
+    if (detail.error && !data) {
+      return (
+        <div className="member-detail__state member-detail__state--error">
+          <span>{detail.error}</span>
+          <button className="button button--small button--ghost" type="button" onClick={() => loadMemberDetail(memberId)}>Thử lại</button>
+        </div>
+      );
+    }
+    return (
+      <div className="member-detail">
+        <div className="member-detail__tabs" role="tablist" aria-label={`Chi tiết ${member.name}`}>
+          <button type="button" role="tab" aria-selected={activeTab === 'videos'} className={activeTab === 'videos' ? 'is-active' : ''} onClick={() => setMemberTabs((current) => ({ ...current, [memberId]: 'videos' }))}>
+            Video <span>{formatNumber(pagination?.total)}</span>
+          </button>
+          <button type="button" role="tab" aria-selected={activeTab === 'products'} className={activeTab === 'products' ? 'is-active' : ''} onClick={() => setMemberTabs((current) => ({ ...current, [memberId]: 'products' }))}>
+            Sản phẩm <span>{formatNumber(products.length)}</span>
+          </button>
+        </div>
+        {activeTab === 'videos' ? (
+          <div className="member-detail__videos">
+            {videos.map((video) => (
+              <article className="member-detail__video" key={video.id}>
+                {video.thumbnail_url ? <img src={video.thumbnail_url} alt="" loading="lazy" /> : <div className="member-detail__video-placeholder">Video</div>}
+                <div className="member-detail__video-copy">
+                  {video.video_url
+                    ? <a href={video.video_url} target="_blank" rel="noreferrer">{video.title || `Video ${video.platform_video_id}`}</a>
+                    : <strong>{video.title || `Video ${video.platform_video_id}`}</strong>}
+                  <small>{video.channel?.display_name || video.channel?.username || 'TikTok'} · {video.published_at ? new Date(video.published_at).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US') : '—'}</small>
+                  <div className="member-detail__product-tags">
+                    {(video.products || []).slice(0, 2).map((product) => <span key={product.id} title={product.name}>{compactProductName(product.name)}</span>)}
+                    {video.products?.length > 2 ? <span>+{video.products.length - 2}</span> : null}
+                    {!video.products?.length ? <span>Chưa xác định sản phẩm</span> : null}
+                  </div>
+                </div>
+                <div className="member-detail__video-metrics">
+                  <span><small>Lượt xem</small><strong>{formatNumber(video.views)}</strong></span>
+                  <span><small>GMV</small><strong>{video.revenue ? formatRevenue(video.revenue.amount, video.revenue.currency) : '—'}</strong></span>
+                </div>
+              </article>
+            ))}
+            {!videos.length ? <div className="member-detail__state">Không có video trong kỳ đã chọn.</div> : null}
+            {pagination && pagination.page < pagination.total_pages ? (
+              <button className="button button--small button--ghost member-detail__more" type="button" disabled={detail.loading} onClick={() => loadMemberDetail(memberId, pagination.page + 1, true)}>
+                {detail.loading ? 'Đang tải...' : 'Xem thêm video'}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="table-wrap member-detail__products">
+            <table className="data-table data-table--compact">
+              <thead><tr><th>Sản phẩm</th><th className="cell-number">Video</th><th className="cell-number">Lượt xem</th><th className="cell-number">GMV</th></tr></thead>
+              <tbody>{products.map((product) => (
+                <tr key={product.id ?? 'unknown'}>
+                  <td>
+                    <strong className="member-detail__product-name" title={product.name}>{compactProductName(product.name)}</strong>
+                  </td>
+                  <td className="cell-number">{formatNumber(product.videos)}</td>
+                  <td className="cell-number">{formatNumber(product.views)}</td>
+                  <td className="cell-number">{product.revenue_available ? formatRevenue(product.revenue, product.currency) : '—'}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+            {!products.length ? <div className="member-detail__state">Không có sản phẩm trong kỳ đã chọn.</div> : null}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -373,16 +532,27 @@ const ChannelReport = () => {
                             <th className="cell-number">TB doanh số/video</th>
                           </tr>
                         </thead>
-                        <tbody>{group.members.map((member) => (
-                          <tr key={member.key}>
-                            <td>{member.name}</td>
-                            <td className="cell-number">{formatNumber(member.videos)}</td>
-                            <td className="cell-number">{formatNumber(member.views)}</td>
-                            <td className="cell-number">{formatNumber(Math.round(member.views / Math.max(member.videos, 1)))}</td>
-                            <td className="cell-number">{member.revenueAvailable ? formatRevenue(member.revenue, member.currency) : '—'}</td>
-                            <td className="cell-number">{member.revenueAvailable ? formatRevenue(member.revenue / member.videos, member.currency) : '—'}</td>
-                          </tr>
-                        ))}</tbody>
+                        <tbody>{group.members.map((member) => {
+                          const expanded = expandedMemberId === String(member.key);
+                          return (
+                            <React.Fragment key={member.key}>
+                              <tr className={expanded ? 'member-row member-row--expanded' : 'member-row'}>
+                                <td>
+                                  <button className="member-row__trigger" type="button" aria-expanded={expanded} onClick={() => toggleMember(member)}>
+                                    <span className={`sidebar__chevron${expanded ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" />
+                                    <strong>{member.name}</strong>
+                                  </button>
+                                </td>
+                                <td className="cell-number">{formatNumber(member.videos)}</td>
+                                <td className="cell-number">{formatNumber(member.views)}</td>
+                                <td className="cell-number">{formatNumber(Math.round(member.views / Math.max(member.videos, 1)))}</td>
+                                <td className="cell-number">{member.revenueAvailable ? formatRevenue(member.revenue, member.currency) : '—'}</td>
+                                <td className="cell-number">{member.revenueAvailable ? formatRevenue(member.revenue / member.videos, member.currency) : '—'}</td>
+                              </tr>
+                              {expanded ? <tr className="member-detail-row"><td colSpan="6">{renderMemberDetail(member)}</td></tr> : null}
+                            </React.Fragment>
+                          );
+                        })}</tbody>
                       </table>
                     </div>
                   ) : (

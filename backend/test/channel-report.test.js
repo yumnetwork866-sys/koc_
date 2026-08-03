@@ -215,6 +215,64 @@ test('channel report rejects an invalid month before querying', async (t) => {
   assert.match(response.body.message, /không hợp lệ/);
 });
 
+test('channel report member detail returns videos and product rollups lazily', async (t) => {
+  const calls = [];
+  const { getChannelReportMemberDetail } = loadController(t, async (sql, options) => {
+    calls.push({ sql, replacements: options.replacements });
+    if (sql.includes('channel-report-member-videos')) {
+      return [{
+        id: '88',
+        platform_video_id: 'video-88',
+        title: 'Review',
+        published_at: '2026-07-10T10:00:00.000Z',
+        views: '900',
+        likes: '20',
+        comments: '2',
+        shares: '1',
+        channel_id: '3',
+        channel_username: 'yum',
+        channel_name: 'YUM',
+        revenue: '12.5',
+        currency: 'MYR',
+        products: [{ id: 2, name: 'Actiscar' }],
+        total_count: '1',
+      }];
+    }
+    return [{
+      product_id: '2',
+      name: 'Actiscar',
+      videos: '1',
+      views: '900',
+      revenue: '12.5',
+      revenue_available: true,
+      currency: 'MYR',
+    }];
+  });
+  const response = makeResponse();
+
+  await getChannelReportMemberDetail({
+    params: { userId: '9' },
+    query: { month: '2026-07', team_id: '4', channel_ids: '3', page: '1', page_size: '10' },
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls.length, 2);
+  calls.forEach((call) => {
+    assert.equal(call.replacements.userId, 9);
+    assert.equal(call.replacements.teamId, 4);
+    assert.deepEqual(JSON.parse(call.replacements.channelIds), [3]);
+  });
+  assert.equal(response.body.videos.items[0].products[0].name, 'Actiscar');
+  assert.equal(response.body.videos.items[0].revenue.amount, 12.5);
+  assert.equal(response.body.products[0].views, 900);
+  assert.deepEqual(response.body.videos.pagination, {
+    page: 1,
+    page_size: 10,
+    total: 1,
+    total_pages: 1,
+  });
+});
+
 test('channel report accepts an inclusive custom date range', async (t) => {
   const calls = [];
   const { getChannelReport } = loadController(t, async (sql, options) => {

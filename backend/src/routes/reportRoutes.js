@@ -10,6 +10,7 @@ const {
   getKpis,
   getKocDetail,
   getChannelReport,
+  getChannelReportMemberDetail,
   generateWeeklyReport
 } = require('../controllers/reportController');
 const { getDashboard } = require('../controllers/dashboardController');
@@ -18,6 +19,7 @@ const { getDashboard } = require('../controllers/dashboardController');
 router.get('/dashboard', getDashboard);
 router.get('/kpis', getKpis);
 router.get('/channel', getChannelReport);
+router.get('/channel/members/:userId', getChannelReportMemberDetail);
 router.get('/koc/:creatorId/detail', getKocDetail);
 
 // POST /api/reports/generate
