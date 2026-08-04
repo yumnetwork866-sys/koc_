@@ -1,6 +1,5 @@
 export const topNavItems = [
   { to: '/manage/shop-analytics', label: 'TikTok' },
-  { to: '/whatsapp', label: 'WhatsApp' },
   { to: '/manage/users', label: 'Admin', adminOnly: true },
 ];
 
