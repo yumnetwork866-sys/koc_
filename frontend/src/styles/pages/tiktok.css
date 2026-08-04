@@ -2131,8 +2131,12 @@
 }
 
 .booking-evaluation-form {
-  grid-template-columns: minmax(320px, 2fr) minmax(180px, .7fr) auto;
+  grid-template-columns: minmax(280px, 2fr) minmax(180px, .7fr) auto;
   align-items: end;
+}
+
+.booking-performance-period {
+  min-width: 180px;
 }
 
 .booking-source-preview {
@@ -2476,6 +2480,19 @@
 .booking-detail-form__wide { grid-column: 1 / -1; }
 .booking-detail-form textarea { resize: vertical; }
 
+@media (max-width: 900px) {
+  .booking-evaluation-form {
+    grid-template-columns: minmax(0, 1fr) minmax(160px, .5fr);
+  }
+
+  .booking-evaluation-form > .field:first-child {
+    grid-column: 1 / -1;
+  }
+  .booking-evaluation-form > .actions .button {
+    width: 100%;
+  }
+}
+
 
 .booking-video-list {
   display: grid;
@@ -2519,6 +2536,21 @@
 .booking-source-preview,
 .booking-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+.booking-evaluation-form > .field:first-child,
+.booking-evaluation-form > .actions {
+    grid-column: auto;
+  }
+
+.booking-performance-period {
+    width: 100%;
+    min-width: 0;
+  }
+
+.booking-evaluation-list-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
 .booking-detail-grid__wide { grid-column: auto; }

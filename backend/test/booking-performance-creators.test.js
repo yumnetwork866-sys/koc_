@@ -96,6 +96,90 @@ test('booking list uses the latest creator profile avatar instead of an expired 
   assert.equal(response[1].creator_avatar_url, 'https://example.test/snapshot-avatar.webp');
 });
 
+test('booking list uses the requested Creator Performance period as its table reference', async (t) => {
+  let performanceQuery;
+  const { getBookings } = loadController(t, {
+    Booking: {
+      findAll: async () => [{
+        id: 31,
+        target_shop_id: 4,
+        creator_open_id: 'creator-open-31',
+        creator_username: 'period.creator',
+        evaluation_snapshot: { performance: { window_type: 'PAST_180_DAYS', affiliate_gmv: '900' } },
+      }],
+    },
+    TikTokCreatorPerformanceSnapshot: {
+      findAll: async (options) => {
+        performanceQuery = options;
+        return [{
+          toJSON: () => ({
+            id: 301,
+            shop_id: 4,
+            creator_open_id: 'creator-open-31',
+            username: 'period.creator',
+            window_type: 'PAST_30_DAYS',
+            affiliate_gmv: '300',
+            video_views: '12000',
+          }),
+        }];
+      },
+    },
+  });
+  let response;
+
+  await getBookings(
+    { query: { window_type: 'PAST_30_DAYS' } },
+    { json: (value) => { response = value; }, status: () => ({ json: () => {} }) },
+  );
+
+  assert.equal(performanceQuery.where.window_type, 'PAST_30_DAYS');
+  assert.equal(response[0].reference_performance.window_type, 'PAST_30_DAYS');
+  assert.equal(response[0].reference_performance.affiliate_gmv, '300');
+  assert.equal(response[0].evaluation_snapshot.performance.window_type, 'PAST_180_DAYS');
+});
+
+test('booking list aggregates intermediate periods from completed 30-day exports', async (t) => {
+  let aggregateQuery;
+  const { getBookings } = loadController(t, {
+    Booking: {
+      findAll: async () => [{
+        id: 32,
+        target_shop_id: 4,
+        creator_open_id: 'creator-open-32',
+        creator_username: 'aggregate.creator',
+        evaluation_snapshot: {},
+      }],
+    },
+    TikTokCreatorPerformanceSnapshot: {},
+    sequelize: {
+      query: async (sql, options) => {
+        aggregateQuery = { sql, options };
+        return [{
+          shop_id: 4,
+          creator_open_id: 'creator-open-32',
+          username: 'aggregate.creator',
+          window_type: 'PAST_60_DAYS',
+          affiliate_gmv: '600',
+          affiliate_orders: '24',
+          video_views: '18000',
+          currency: 'MYR',
+        }];
+      },
+    },
+  });
+  let response;
+
+  await getBookings(
+    { query: { window_type: 'PAST_60_DAYS' } },
+    { json: (value) => { response = value; }, status: () => ({ json: () => {} }) },
+  );
+
+  assert.match(aggregateQuery.sql, /period\.period_rank <= :periodCount/);
+  assert.equal(aggregateQuery.options.replacements.periodCount, 2);
+  assert.equal(aggregateQuery.options.replacements.performanceWindow, 'PAST_60_DAYS');
+  assert.equal(response[0].reference_performance.affiliate_gmv, '600');
+});
+
 test('KOC search delegates filtering and pagination to the database and returns compact rows', async (t) => {
   let queryOptions;
   const { getTargetKocs } = loadController(t, {
@@ -315,12 +399,17 @@ test('booking can be created from Creator Performance using username only', asyn
     nickname: 'Performance only',
     avatar_url: 'https://example.com/avatar.jpg',
     affiliate_gmv: '123.45',
+    window_type: 'PAST_30_DAYS',
   };
   let createdPayload;
+  const performanceQueries = [];
   const { createBooking } = loadController(t, {
     TikTokTargetCollaborationSnapshot: { findOne: async () => null },
     TikTokCreatorPerformanceSnapshot: {
-      findOne: async () => ({ toJSON: () => performanceData }),
+      findOne: async (options) => {
+        performanceQueries.push(options);
+        return { toJSON: () => performanceData };
+      },
     },
     Booking: {
       create: async (payload) => { createdPayload = payload; return { id: 12 }; },
@@ -338,6 +427,7 @@ test('booking can be created from Creator Performance using username only', asyn
         creator_open_id: null,
         creator_username: 'performance_only',
         booking_cost: 80,
+        performance_window_type: 'PAST_30_DAYS',
       },
     },
     {
@@ -354,4 +444,6 @@ test('booking can be created from Creator Performance using username only', asyn
   assert.equal(createdPayload.deadline, null);
   assert.equal(createdPayload.evaluation_snapshot.collaboration, null);
   assert.deepEqual(createdPayload.evaluation_snapshot.performance, performanceData);
+  assert.equal(performanceQueries.length, 2);
+  assert.equal(performanceQueries[1].where.window_type, 'PAST_30_DAYS');
 });

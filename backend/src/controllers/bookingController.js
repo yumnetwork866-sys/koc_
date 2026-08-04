@@ -36,6 +36,11 @@ const {
 } = require('../lib/tiktokDemoFixtures');
 
 const ALLOWED_STATUSES = new Set(['draft', 'booked', 'waiting_video', 'video_posted', 'done', 'cancelled']);
+const BOOKING_PERFORMANCE_WINDOWS = new Set([
+  'PAST_7_DAYS', 'PAST_30_DAYS', 'PAST_60_DAYS', 'PAST_90_DAYS',
+  'PAST_120_DAYS', 'PAST_150_DAYS', 'PAST_180_DAYS',
+]);
+const AGGREGATE_BOOKING_WINDOW_DAYS = new Set([60, 90, 120, 150]);
 
 const compactPayload = (payload) => Object.fromEntries(
   Object.entries(payload).filter(([, value]) => value !== undefined),
@@ -359,6 +364,104 @@ const enrichPerformanceViews = async (performance) => {
     : { ...performance, video_views: catalogViews, video_views_source: 'SHOP_VIDEO_CATALOG' };
 };
 
+const addReferencePerformance = async (bookings, performanceWindow) => {
+  if (!BOOKING_PERFORMANCE_WINDOWS.has(performanceWindow) || !bookings.length) return bookings;
+  const creatorConditions = bookings.map((booking) => ({
+    shop_id: Number(booking.target_shop_id),
+    [Op.or]: [
+      ...(booking.creator_open_id ? [{ creator_open_id: booking.creator_open_id }] : []),
+      ...(booking.creator_username ? [{ username: { [Op.iLike]: normalizedUsername(booking.creator_username) } }] : []),
+    ],
+  })).filter((condition) => Number.isInteger(condition.shop_id) && condition[Op.or].length);
+  const aggregateDays = Number(performanceWindow.match(/^PAST_(\d+)_DAYS$/)?.[1]);
+  const snapshots = !creatorConditions.length
+    ? []
+    : AGGREGATE_BOOKING_WINDOW_DAYS.has(aggregateDays)
+      ? await sequelize.query(`
+        WITH export_versions AS (
+          SELECT export_record.*,
+            ROW_NUMBER() OVER (
+              PARTITION BY shop_id, start_date, end_date
+              ORDER BY created_at DESC, id DESC
+            ) AS version_rank
+          FROM tiktok_creator_performance_exports export_record
+          WHERE shop_id IN (:shopIds)
+            AND window_type = 'PAST_30_DAYS'
+            AND plan_type = 'ALL'
+            AND status = 'SUCCEEDED'
+        ), ranked_periods AS (
+          SELECT export_versions.*,
+            DENSE_RANK() OVER (
+              PARTITION BY shop_id
+              ORDER BY end_date DESC, start_date DESC
+            ) AS period_rank
+          FROM export_versions
+          WHERE version_rank = 1
+        ), source AS (
+          SELECT snapshot.*
+          FROM tiktok_creator_performance_snapshots snapshot
+          JOIN ranked_periods period ON period.id = snapshot.export_id
+          WHERE period.period_rank <= :periodCount
+        )
+        SELECT
+          source.shop_id,
+          MAX(source.creator_open_id) AS creator_open_id,
+          LOWER(source.username) AS username,
+          MAX(source.nickname) AS nickname,
+          MAX(source.avatar_url) AS avatar_url,
+          MIN(source.start_date) AS start_date,
+          MAX(source.end_date) AS end_date,
+          :performanceWindow AS window_type,
+          source.currency,
+          SUM(source.affiliate_gmv) AS affiliate_gmv,
+          SUM(source.affiliate_orders) AS affiliate_orders,
+          CASE WHEN COUNT(source.video_views) = COUNT(*) THEN SUM(source.video_views) ELSE NULL END AS video_views,
+          NOW() AS synced_at
+        FROM source
+        GROUP BY source.shop_id, LOWER(source.username), source.currency
+      `, {
+        replacements: {
+          shopIds: [...new Set(bookings.map((booking) => Number(booking.target_shop_id)).filter(Number.isInteger))],
+          periodCount: aggregateDays / 30,
+          performanceWindow,
+        },
+        type: QueryTypes.SELECT,
+      })
+      : await TikTokCreatorPerformanceSnapshot.findAll({
+      where: {
+        window_type: performanceWindow,
+        [Op.or]: creatorConditions,
+      },
+      order: [['end_date', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
+    });
+  const performanceByCreator = new Map();
+  for (const snapshot of snapshots) {
+    const performance = snapshot.toJSON ? snapshot.toJSON() : snapshot;
+    const shopId = Number(performance.shop_id);
+    const keys = [
+      performance.creator_open_id ? `${shopId}:open:${performance.creator_open_id}` : null,
+      performance.username ? `${shopId}:username:${normalizedUsername(performance.username)}` : null,
+    ].filter(Boolean);
+    for (const key of keys) {
+      if (!performanceByCreator.has(key)) performanceByCreator.set(key, performance);
+    }
+  }
+  const enrichedByCreator = new Map();
+  return Promise.all(bookings.map(async (booking) => {
+    const shopId = Number(booking.target_shop_id);
+    const keys = [
+      booking.creator_open_id ? `${shopId}:open:${booking.creator_open_id}` : null,
+      booking.creator_username ? `${shopId}:username:${normalizedUsername(booking.creator_username)}` : null,
+    ].filter(Boolean);
+    const key = keys.find((candidate) => performanceByCreator.has(candidate));
+    if (!key) return { ...booking, reference_performance: null };
+    if (!enrichedByCreator.has(key)) {
+      enrichedByCreator.set(key, enrichPerformanceViews(performanceByCreator.get(key)));
+    }
+    return { ...booking, reference_performance: await enrichedByCreator.get(key) };
+  }));
+};
+
 const targetKocPageParams = (query = {}) => {
   const requestedPage = Number.parseInt(query.page, 10);
   const requestedPageSize = Number.parseInt(query.page_size, 10);
@@ -492,11 +595,21 @@ const getTargetKocs = async (req, res) => {
   }
 };
 
-const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValue, creatorUsernameValue) => {
+const findTargetCreator = async (
+  shopId,
+  collaborationIdValue,
+  creatorOpenIdValue,
+  creatorUsernameValue,
+  performanceWindowValue,
+) => {
   const normalizedShopId = Number(shopId);
   const collaborationId = String(collaborationIdValue || '').trim();
   const creatorOpenId = String(creatorOpenIdValue || '').trim();
   const creatorUsername = String(creatorUsernameValue || '').trim();
+  const requestedPerformanceWindow = String(performanceWindowValue || '').trim().toUpperCase();
+  const performanceWindow = BOOKING_PERFORMANCE_WINDOWS.has(requestedPerformanceWindow)
+    ? requestedPerformanceWindow
+    : null;
   if (!Number.isInteger(normalizedShopId) || (!creatorOpenId && !creatorUsername)) return null;
 
   const collaborationSnapshots = collaborationId
@@ -525,6 +638,7 @@ const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValu
         const performance = await TikTokCreatorPerformanceSnapshot.findOne({
           where: {
             shop_id: normalizedShopId,
+            ...(performanceWindow ? { window_type: performanceWindow } : {}),
             [Op.or]: [
               ...(profile.creator_open_id ? [{ creator_open_id: profile.creator_open_id }] : []),
               ...(profile.username ? [{ username: { [Op.iLike]: profile.username } }] : []),
@@ -534,6 +648,7 @@ const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValu
         });
         const performanceData = performance?.toJSON() || null;
         return {
+          shopId: normalizedShopId,
           collaboration,
           raw,
           profile,
@@ -547,23 +662,35 @@ const findTargetCreator = async (shopId, collaborationIdValue, creatorOpenIdValu
     ...(creatorOpenId ? [{ creator_open_id: creatorOpenId }] : []),
     ...(creatorUsername ? [{ username: { [Op.iLike]: creatorUsername } }] : []),
   ];
-  const performance = await TikTokCreatorPerformanceSnapshot.findOne({
+  const profilePerformance = await TikTokCreatorPerformanceSnapshot.findOne({
     where: {
       shop_id: normalizedShopId,
       [Op.or]: creatorConditions,
     },
     order: benchmarkPerformanceOrder,
   });
-  if (!performance) return null;
-  const performanceData = performance.toJSON();
+  if (!profilePerformance) return null;
+  const profilePerformanceData = profilePerformance.toJSON();
+  const selectedPerformance = performanceWindow
+    ? await TikTokCreatorPerformanceSnapshot.findOne({
+      where: {
+        shop_id: normalizedShopId,
+        window_type: performanceWindow,
+        [Op.or]: creatorConditions,
+      },
+      order: [['end_date', 'DESC'], ['synced_at', 'DESC'], ['id', 'DESC']],
+    })
+    : profilePerformance;
+  const performanceData = selectedPerformance?.toJSON() || null;
   return {
+    shopId: normalizedShopId,
     collaboration: null,
     raw: null,
     profile: {
-      creator_open_id: performanceData.creator_open_id || null,
-      username: performanceData.username,
-      nickname: performanceData.nickname || performanceData.username,
-      avatar_url: performanceData.avatar_url || null,
+      creator_open_id: profilePerformanceData.creator_open_id || null,
+      username: profilePerformanceData.username,
+      nickname: profilePerformanceData.nickname || profilePerformanceData.username,
+      avatar_url: profilePerformanceData.avatar_url || null,
     },
     performance: await enrichPerformanceViews(performanceData),
   };
@@ -576,13 +703,14 @@ const getTargetKocDetail = async (req, res) => {
       req.query.collaboration_id,
       req.query.creator_open_id,
       req.query.username,
+      req.query.window_type,
     );
     if (!targetCreator) {
       return res.status(404).json({ message: 'Target KOC not found.' });
     }
-    const { collaboration, raw, profile, performance } = targetCreator;
+    const { shopId, collaboration, raw, profile, performance } = targetCreator;
     res.json({
-      shop_id: Number(collaboration?.shop_id || performance?.shop_id),
+      shop_id: Number(shopId),
       creator_open_id: profile.creator_open_id || null,
       username: profile.username || null,
       nickname: profile.nickname || null,
@@ -607,7 +735,9 @@ const getBookings = async (req, res) => {
       include: bookingInclude,
       order: [['deadline', 'ASC'], ['id', 'DESC']],
     });
-    res.json(await serializeBookingsWithFreshCreatorAvatars(bookings));
+    const serialized = await serializeBookingsWithFreshCreatorAvatars(bookings);
+    const requestedWindow = String(req.query?.window_type || '').trim().toUpperCase();
+    res.json(await addReferencePerformance(serialized, requestedWindow));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -635,9 +765,10 @@ const createBooking = async (req, res) => {
       req.body.target_collaboration_id,
       req.body.creator_open_id,
       req.body.creator_username,
+      req.body.performance_window_type,
     );
     if (!targetCreator) return res.status(400).json({ message: 'Select a KOC from synced Target Collaboration or Creator Performance data.' });
-    const { collaboration, raw, profile, performance } = targetCreator;
+    const { shopId, collaboration, raw, profile, performance } = targetCreator;
     const evaluationSnapshot = {
       recorded_at: new Date().toISOString(),
       collaboration: collaboration ? {
@@ -659,7 +790,7 @@ const createBooking = async (req, res) => {
       creator_username: profile.username,
       creator_name: profile.nickname,
       creator_avatar_url: profile.avatar_url,
-      target_shop_id: collaboration?.shop_id || performance.shop_id,
+      target_shop_id: shopId,
       target_collaboration_id: collaboration?.collaboration_id || null,
       evaluation_snapshot: evaluationSnapshot,
       booking_cost: cost,

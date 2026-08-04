@@ -71,8 +71,11 @@ export function fetchContentTeams(signal) {
   return apiRequest('/content-teams', { signal });
 }
 
-export function fetchBookings(signal) {
-  return apiRequest('/bookings', { signal });
+export function fetchBookings(signal, { windowType } = {}) {
+  const params = new URLSearchParams();
+  if (windowType) params.set('window_type', windowType);
+  const query = params.toString();
+  return apiRequest(`/bookings${query ? `?${query}` : ''}`, { signal });
 }
 
 export function fetchBookingTargetKocs({ keyword, page = 1, pageSize = 20, signal } = {}) {
@@ -85,12 +88,13 @@ export function fetchBookingTargetKocs({ keyword, page = 1, pageSize = 20, signa
 }
 
 export function fetchBookingTargetKocDetail({
-  shopId, creatorOpenId, username, collaborationId, signal,
+  shopId, creatorOpenId, username, collaborationId, windowType, signal,
 } = {}) {
   const params = new URLSearchParams({ shop_id: String(shopId) });
   if (creatorOpenId) params.set('creator_open_id', creatorOpenId);
   if (username) params.set('username', username);
   if (collaborationId) params.set('collaboration_id', collaborationId);
+  if (windowType) params.set('window_type', windowType);
   return apiRequest(`/bookings/target-kocs/detail?${params.toString()}`, { signal });
 }
 

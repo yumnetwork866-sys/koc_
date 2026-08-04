@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  fetchChannelReport, fetchChannelReportMemberDetail, fetchTikTokSellerMarketplaceCreator, fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchTikTokShopVideoAnalytics, fetchTikTokShopVideoThumbnail, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
+  fetchBookingTargetKocDetail, fetchBookings, fetchChannelReport, fetchChannelReportMemberDetail, fetchTikTokSellerMarketplaceCreator, fetchTikTokSellerMarketplaceCreators, fetchTikTokShopAnalytics, fetchTikTokShopVideoAnalytics, fetchTikTokShopVideoThumbnail, fetchUsers, startTikTokPartnerOauth, startTikTokShopOauth, syncChannelVideos, syncTikTokShopAnalytics,
 } from '../src/lib/api.js';
 import { getStoredSession, saveStoredSession } from '../src/lib/session.js';
 
@@ -132,6 +132,45 @@ test('Channel report helper supports month presets and custom date ranges', asyn
     assert.equal(calls[0], '/api/reports/channel?page=1&page_size=20&month=2026-07&team_id=4&user_id=9&channel_ids=3');
     assert.equal(calls[1], '/api/reports/channel?page=1&page_size=20&start_date=2026-07-05&end_date=2026-07-12');
     assert.equal(calls[2], '/api/reports/channel/members/9?page=2&page_size=10&month=2026-07&team_id=4&channel_ids=3');
+  });
+});
+
+test('Booking KOC detail helper sends the selected performance period', async () => {
+  await withBrowser(async () => {
+    let requestUrl;
+    globalThis.fetch = async (url) => {
+      requestUrl = url;
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    await fetchBookingTargetKocDetail({
+      shopId: 3,
+      creatorOpenId: 'creator-open-id',
+      username: 'demo.creator',
+      windowType: 'PAST_30_DAYS',
+    });
+
+    assert.equal(requestUrl, '/api/bookings/target-kocs/detail?shop_id=3&creator_open_id=creator-open-id&username=demo.creator&window_type=PAST_30_DAYS');
+  });
+});
+
+test('Booking list helper sends the table reference period', async () => {
+  await withBrowser(async () => {
+    let requestUrl;
+    globalThis.fetch = async (url) => {
+      requestUrl = url;
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    await fetchBookings(undefined, { windowType: 'PAST_7_DAYS' });
+
+    assert.equal(requestUrl, '/api/bookings?window_type=PAST_7_DAYS');
   });
 });
 
