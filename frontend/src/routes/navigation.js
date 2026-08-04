@@ -13,6 +13,7 @@ export const sidebarSections = [
         icon: 'shop',
         children: [
           { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
+          { to: '/videos', labelKey: 'navigation.videos' },
            { to: '/manage/video-analytics', labelKey: 'navigation.videoAnalytics' },
            { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
            { to: '/manage/creator-chat', labelKey: 'navigation.creatorChat' },
