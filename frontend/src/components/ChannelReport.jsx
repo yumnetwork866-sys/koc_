@@ -1,7 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { fetchChannelReport, fetchChannelReportMemberDetail } from '../lib/api';
 import { useI18n } from '../lib/language';
+
+const chartTick = { fill: 'var(--color-muted)', fontSize: 12 };
 
 const currentMonthValue = () => {
   const now = new Date();
@@ -144,6 +155,20 @@ const ChannelSelectDropdown = ({ channels, value, onChange }) => {
   );
 };
 
+const TeamComparisonTooltip = ({ active, payload, formatNumber, formatRevenue }) => {
+  const team = payload?.[0]?.payload;
+  if (!active || !team) return null;
+
+  return (
+    <div className="dashboard-chart-tooltip team-comparison-tooltip">
+      <strong>{team.name}</strong>
+      <div><span>Video</span><b>{formatNumber(team.videos)}</b></div>
+      <div><span>Lượt xem</span><b>{formatNumber(team.views)}</b></div>
+      <div><span>Doanh số</span><b>{team.revenueAvailable ? formatRevenue(team.revenue, team.currency) : '—'}</b></div>
+    </div>
+  );
+};
+
 const ChannelReport = () => {
   const { language } = useI18n();
   const [report, setReport] = useState(null);
@@ -154,6 +179,7 @@ const ChannelReport = () => {
   const [endDate, setEndDate] = useState(initialRange.endDate);
   const [selectedTeamId, setSelectedTeamId] = useState('all');
   const [selectedChannelId, setSelectedChannelId] = useState('all');
+  const [comparisonMetric, setComparisonMetric] = useState('views');
   const [expandedMemberId, setExpandedMemberId] = useState(null);
   const [memberDetails, setMemberDetails] = useState({});
   const [memberTabs, setMemberTabs] = useState({});
@@ -250,6 +276,23 @@ const ChannelReport = () => {
   );
   const selectedTeam = teams.find((team) => String(team.id) === selectedTeamId);
   const topGroup = [...visibleGroups].sort((a, b) => b.views - a.views)[0];
+  const comparisonData = groups.map((group) => ({
+    name: group.label,
+    videos: Number(group.videos || 0),
+    views: Number(group.views || 0),
+    revenue: Number(group.revenue || 0),
+    revenueAvailable: Boolean(group.revenueAvailable),
+    currency: group.currency,
+  }));
+  const comparisonMetricLabel = {
+    videos: 'Video',
+    views: 'Lượt xem',
+    revenue: 'Doanh số',
+  }[comparisonMetric];
+  const compactNumber = (value) => Intl.NumberFormat(language === 'vi' ? 'vi-VN' : 'en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(Number(value || 0));
   const kpis = report?.kpis || {};
   const periodLabel = periodMode === 'month'
     ? formatMonth(selectedMonth)
@@ -507,6 +550,42 @@ const ChannelReport = () => {
           </div>
         ) : (
           <>
+            {selectedTeamId === 'all' && comparisonData.length ? (
+              <section className="team-comparison" aria-labelledby="team-comparison-title">
+                <div className="team-comparison__header">
+                  <div>
+                    <h3 id="team-comparison-title">So sánh các team</h3>
+                    <p>{comparisonMetricLabel} trong {periodLabel}</p>
+                  </div>
+                  <div className="field team-comparison__metric">
+                    <label htmlFor="team-comparison-metric">Chỉ số</label>
+                    <select
+                      id="team-comparison-metric"
+                      value={comparisonMetric}
+                      onChange={(event) => setComparisonMetric(event.target.value)}
+                    >
+                      <option value="views">Lượt xem</option>
+                      <option value="videos">Video</option>
+                      <option value="revenue">Doanh số</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="team-comparison__chart" role="img" aria-label={`Biểu đồ so sánh ${comparisonMetricLabel.toLowerCase()} giữa các team`}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={comparisonData} barSize={42} margin={{ top: 20, right: 12, bottom: 4, left: 4 }}>
+                      <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="var(--color-border)" />
+                      <XAxis dataKey="name" height={44} interval={0} tickLine={false} axisLine={false} tick={chartTick} />
+                      <YAxis width={62} tickLine={false} axisLine={false} allowDecimals={false} tick={chartTick} tickFormatter={compactNumber} />
+                      <Tooltip
+                        cursor={{ fill: 'var(--color-accent-soft)' }}
+                        content={<TeamComparisonTooltip formatNumber={formatNumber} formatRevenue={formatRevenue} />}
+                      />
+                      <Bar dataKey={comparisonMetric} fill="var(--color-primary)" radius={[7, 7, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+            ) : null}
             <div className={`content-performance__groups${selectedTeamId !== 'all' ? ' content-performance__groups--filtered' : ''}`}>
               {visibleGroups.map((group) => (
                 <article className="content-performance__group" key={group.key}>
