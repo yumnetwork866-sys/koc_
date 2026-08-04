@@ -10,6 +10,7 @@ import {
   updateBooking,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import { useMoneyFormatter } from '../lib/currency';
 
 const initialForm = { creator_key: '', total_cost: '' };
 const ACTIVE_COLLABORATION_STATUSES = new Set(['ONGOING', 'VALID', 'EXPIRING']);
@@ -155,20 +156,7 @@ const BookingManagement = ({ heroTitle }) => {
 
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
   const formatNumber = (value, options) => finiteNumber(value).toLocaleString(locale, options);
-  const formatMoney = (value, currency = 'MYR') => {
-    const currencyCode = currency === 'LOCAL' ? 'MYR' : currency || 'MYR';
-    const formatter = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currencyCode,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
-    return currencyCode === 'MYR'
-      ? formatter.formatToParts(finiteNumber(value))
-        .map((part) => part.type === 'currency' ? 'RM' : part.value)
-        .join('')
-      : formatter.format(finiteNumber(value));
-  };
+  const { formatMoney } = useMoneyFormatter(locale);
   const formatDate = (value) => value
     ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(value))
     : '—';

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Heart, MessageCircle, Share2 } from 'lucide-react';
 import { fetchChannels, fetchVideoPage } from '../lib/api';
 import { useI18n } from '../lib/language';
+import { useMoneyFormatter } from '../lib/currency';
 import Pagination from './Pagination';
 
 const PAGE_SIZE = 20;
@@ -172,17 +173,15 @@ const VideoTable = ({
   onPageChange,
 }) => {
   const { t, language } = useI18n();
-  const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
+  const locale = language === 'vi' ? 'vi-VN' : 'en-US';
+  const { formatMoney } = useMoneyFormatter(locale);
+  const formatNumber = (value) => Number(value || 0).toLocaleString(locale);
   const formatGmv = (video) => {
     if (video.gross_gmv === null || video.gross_gmv === undefined) return '—';
     const currency = /^[A-Z]{3}$/.test(String(video.sales_currency || '').toUpperCase())
       ? String(video.sales_currency).toUpperCase()
       : 'MYR';
-    return new Intl.NumberFormat(language === 'vi' ? 'vi-VN' : 'en-US', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: currency === 'VND' ? 0 : 2,
-    }).format(Number(video.gross_gmv || 0));
+    return formatMoney(video.gross_gmv, currency);
   };
   const [localVideos, setLocalVideos] = useState([]);
   const [localChannels, setLocalChannels] = useState([]);

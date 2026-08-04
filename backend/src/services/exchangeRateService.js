@@ -1,10 +1,10 @@
 const BNM_EXCHANGE_RATE_URL = 'https://api.bnm.gov.my/public/exchange-rate?session=0900&quote=rm';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
-let usdMyrCache = null;
+let myrRatesCache = null;
 
-const getUsdMyrRate = async (fetchImpl = fetch) => {
-  if (usdMyrCache && usdMyrCache.expiresAt > Date.now()) return usdMyrCache.value;
+const getMyrExchangeRates = async (fetchImpl = fetch) => {
+  if (myrRatesCache && myrRatesCache.expiresAt > Date.now()) return myrRatesCache.value;
 
   const response = await fetchImpl(process.env.BNM_EXCHANGE_RATE_URL || BNM_EXCHANGE_RATE_URL, {
     headers: {
@@ -16,24 +16,37 @@ const getUsdMyrRate = async (fetchImpl = fetch) => {
   if (!response.ok) throw new Error(`BNM exchange-rate request failed with status ${response.status}.`);
 
   const payload = await response.json();
-  const usd = Array.isArray(payload.data)
-    ? payload.data.find((item) => item.currency_code === 'USD')
-    : null;
-  const unit = Number(usd?.unit || 1);
-  const middleRate = Number(usd?.rate?.middle_rate);
-  if (!Number.isFinite(middleRate) || middleRate <= 0 || !Number.isFinite(unit) || unit <= 0) {
-    throw new Error('BNM exchange-rate response does not contain a valid USD/MYR middle rate.');
-  }
-
   const value = {
-    base: 'USD',
-    quote: 'MYR',
-    rate: middleRate / unit,
-    date: usd.rate.date || null,
+    base: 'MYR',
+    rates: { MYR: 1 },
+    dates: { MYR: null },
     source: 'Bank Negara Malaysia',
   };
-  usdMyrCache = { value, expiresAt: Date.now() + CACHE_TTL_MS };
+  for (const item of Array.isArray(payload.data) ? payload.data : []) {
+    const currency = String(item?.currency_code || '').toUpperCase();
+    if (!['USD', 'VND'].includes(currency)) continue;
+    const unit = Number(item?.unit || 1);
+    const middleRate = Number(item?.rate?.middle_rate);
+    if (!Number.isFinite(middleRate) || middleRate <= 0 || !Number.isFinite(unit) || unit <= 0) continue;
+    value.rates[currency] = middleRate / unit;
+    value.dates[currency] = item.rate.date || null;
+  }
+  if (!value.rates.USD) {
+    throw new Error('BNM exchange-rate response does not contain a valid USD/MYR middle rate.');
+  }
+  myrRatesCache = { value, expiresAt: Date.now() + CACHE_TTL_MS };
   return value;
+};
+
+const getUsdMyrRate = async (fetchImpl = fetch) => {
+  const exchangeRates = await getMyrExchangeRates(fetchImpl);
+  return {
+    base: 'USD',
+    quote: 'MYR',
+    rate: exchangeRates.rates.USD,
+    date: exchangeRates.dates.USD,
+    source: exchangeRates.source,
+  };
 };
 
 const convertUsdMoneyToMyr = (money, exchangeRate) => {
@@ -129,10 +142,11 @@ const addMarketplaceLocalCurrency = async (payload, region, fetchImpl = fetch) =
   };
 };
 
-const clearExchangeRateCache = () => { usdMyrCache = null; };
+const clearExchangeRateCache = () => { myrRatesCache = null; };
 
 module.exports = {
   BNM_EXCHANGE_RATE_URL,
+  getMyrExchangeRates,
   getUsdMyrRate,
   convertUsdMoneyToMyr,
   convertUsdRangeToMyr,

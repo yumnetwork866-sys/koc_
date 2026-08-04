@@ -12,6 +12,7 @@ import {
   startTikTokPartnerOauth,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import { useMoneyFormatter } from '../lib/currency';
 import Pagination from './Pagination';
 
 const REQUIRED_CREATOR_SCOPES = ['creator.affiliate.info', 'creator.affiliate_collaboration.read', 'creator.showcase.read'];
@@ -30,6 +31,7 @@ const dateOnly = (date) => [date.getFullYear(), String(date.getMonth() + 1).padS
 const KOCPerformance = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
+  const { formatMoney } = useMoneyFormatter(locale);
   const [activeTab, setActiveTab] = useState('performance');
   const [kpis, setKpis] = useState(null);
   const [partnerStatuses, setPartnerStatuses] = useState([]);
@@ -464,12 +466,12 @@ const KOCPerformance = ({ heroTitle }) => {
         </div>
       )}
 
-      {selectedKoc ? <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDrawer(); }}><aside className="koc-drawer" role="dialog" aria-modal="true" aria-labelledby="koc-detail-title"><div className="koc-drawer__header"><div><h2 id="koc-detail-title">{displayKocName(selectedKoc.name)}</h2><p>{selectedKoc.email}</p></div><button ref={closeDrawerRef} className="button button--ghost" type="button" onClick={closeDrawer} aria-label={t('common.close')}>×</button></div>{drawerLoading ? <div className="empty-state"><div className="loading-dot" />{t('koc.detailLoading')}</div> : <div className="koc-drawer__body">{drawerError ? <div className="empty-state">{drawerError}</div> : null}<CreatorDetail partner={statusById.get(String(selectedKoc.id))} overview={drawerOverview} detail={drawerData} collaborations={drawerCollaborations} chartPoints={chartPoints} formatNumber={formatNumber} formatDate={formatDate} t={t} requiredScopes={REQUIRED_CREATOR_SCOPES} /> </div>}</aside></div> : null}
+      {selectedKoc ? <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDrawer(); }}><aside className="koc-drawer" role="dialog" aria-modal="true" aria-labelledby="koc-detail-title"><div className="koc-drawer__header"><div><h2 id="koc-detail-title">{displayKocName(selectedKoc.name)}</h2><p>{selectedKoc.email}</p></div><button ref={closeDrawerRef} className="button button--ghost" type="button" onClick={closeDrawer} aria-label={t('common.close')}>×</button></div>{drawerLoading ? <div className="empty-state"><div className="loading-dot" />{t('koc.detailLoading')}</div> : <div className="koc-drawer__body">{drawerError ? <div className="empty-state">{drawerError}</div> : null}<CreatorDetail partner={statusById.get(String(selectedKoc.id))} overview={drawerOverview} detail={drawerData} collaborations={drawerCollaborations} chartPoints={chartPoints} formatNumber={formatNumber} formatMoney={formatMoney} formatDate={formatDate} t={t} requiredScopes={REQUIRED_CREATOR_SCOPES} /> </div>}</aside></div> : null}
     </div>
   );
 };
 
-const CreatorDetail = ({ partner, overview, detail, collaborations, chartPoints, formatNumber, formatDate, t, requiredScopes }) => {
+const CreatorDetail = ({ partner, overview, detail, collaborations, chartPoints, formatNumber, formatMoney, formatDate, t, requiredScopes }) => {
   const permissions = partner?.granted_scopes || [];
   const missingScopes = requiredScopes.filter((scope) => !permissions.includes(scope));
   const products = overview?.showcase?.products || [];
@@ -480,7 +482,7 @@ const CreatorDetail = ({ partner, overview, detail, collaborations, chartPoints,
     <section className="drawer-section"><h3>{t('koc.partnerShowcaseProducts')}</h3><div className="drawer-list">{products.slice(0, 10).map((product) => <div className="drawer-list__item" key={product.id}><strong>{product.title || product.name || product.id}</strong><span>{product.shop?.name || ''}</span></div>)}{!products.length ? <div className="empty-state empty-state--compact">{t('koc.partnerNoProducts')}</div> : null}</div></section>
     <section className="drawer-section"><h3>{t('koc.permissions')}</h3><div className="chip-row">{permissions.map((scope) => <span className="chip chip--positive" key={scope}>{scope}</span>)}{missingScopes.map((scope) => <span className="chip chip--amber" key={scope}>{t('koc.missing')}: {scope}</span>)}</div></section>
     <section className="drawer-section"><h3>{t('koc.syncHistory')}</h3><div className="drawer-list">{(detail?.syncHistory || []).map((record) => <div className={`sync-record sync-record--${record.status}`} key={record.id}><strong>{record.status === 'failed' ? t('koc.syncFailed') : t('koc.syncSuccess')}</strong><span>{formatDate(record.syncedAt)}</span>{record.error ? <p>{record.error}</p> : null}</div>)}{!detail?.syncHistory?.length ? <div className={`sync-record sync-record--${partner?.last_sync_status || 'idle'}`}><strong>{partner?.last_sync_status === 'failed' ? t('koc.syncFailed') : t('koc.syncSuccess')}</strong><span>{formatDate(partner?.last_synced_at)}</span>{partner?.last_sync_error ? <p>{partner.last_sync_error}</p> : null}</div> : null}</div></section>
-    <section className="drawer-section"><h3>{t('koc.relatedBookings')}</h3><div className="drawer-list">{(detail?.bookings || []).map((booking) => <div className="drawer-list__item" key={booking.id}><strong>#{booking.id} · {booking.status}</strong><span>{formatDate(booking.deadline)} · {formatNumber(booking.bookingCost)}</span></div>)}{!detail?.bookings?.length ? <div className="empty-state empty-state--compact">{t('koc.noBookings')}</div> : null}</div></section>
+    <section className="drawer-section"><h3>{t('koc.relatedBookings')}</h3><div className="drawer-list">{(detail?.bookings || []).map((booking) => <div className="drawer-list__item" key={booking.id}><strong>#{booking.id} · {booking.status}</strong><span>{formatDate(booking.deadline)} · {formatMoney(booking.bookingCost, booking.currency)}</span></div>)}{!detail?.bookings?.length ? <div className="empty-state empty-state--compact">{t('koc.noBookings')}</div> : null}</div></section>
     <section className="drawer-section"><h3>{t('koc.relatedCollaborations')}</h3><div className="drawer-list">{collaborations.slice(0, 10).map((item, index) => <div className="drawer-list__item" key={item.id || index}><strong>{item.name || item.title || item.id}</strong><span>{formatNumber(item.products?.length)} {t('koc.partnerProduct')}</span></div>)}{!collaborations.length ? <div className="empty-state empty-state--compact">{t('koc.noCollaborations')}</div> : null}</div></section>
   </>;
 };

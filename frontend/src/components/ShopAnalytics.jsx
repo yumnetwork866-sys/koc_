@@ -19,6 +19,7 @@ import {
   syncTikTokShopAnalytics,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import { useMoneyFormatter } from '../lib/currency';
 import ShopDropdown from './ShopDropdown';
 
 const REQUIRED_SCOPE = 'data.shop_analytics.public.read';
@@ -217,6 +218,7 @@ const boundedPercentage = (value) => Math.min(100, Math.max(0, value));
 const ShopAnalytics = ({ managementOnly = false, videoOnly = false }) => {
   const { t, language } = useI18n();
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
+  const { formatMoney: formatPreferredMoney } = useMoneyFormatter(locale);
   const initialRange = useMemo(() => rangeForDays(7), []);
   const [shops, setShops] = useState([]);
   const [connections, setConnections] = useState([]);
@@ -430,23 +432,7 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false }) => {
     || videoAnalytics?.videos?.find((video) => video?.gmv?.currency)?.gmv?.currency
     || (currency === 'USD' ? 'USD' : 'VND');
 
-  const formatMoney = (value, currencyCode = displayCurrency) => {
-    try {
-      const formatter = new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency: currencyCode,
-        maximumFractionDigits: currencyCode === 'VND' ? 0 : 2,
-      });
-      if (currencyCode === 'MYR') {
-        return formatter.formatToParts(numericValue(value))
-          .map((part) => part.type === 'currency' ? 'RM' : part.value)
-          .join('');
-      }
-      return formatter.format(numericValue(value));
-    } catch {
-      return `${formatNumber(value)} ${currencyCode}`;
-    }
-  };
+  const formatMoney = (value, currencyCode = displayCurrency) => formatPreferredMoney(value, currencyCode);
 
   const changeFrom = (current, previous) => {
     if (!hasComparison || previous === 0) return null;

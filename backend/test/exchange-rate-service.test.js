@@ -3,6 +3,7 @@ const test = require('node:test');
 
 const {
   getUsdMyrRate,
+  getMyrExchangeRates,
   convertUsdMoneyToMyr,
   convertUsdRangeToMyr,
   addMarketplaceLocalCurrency,
@@ -17,8 +18,24 @@ const bnmResponse = () => ({
       currency_code: 'USD',
       unit: 1,
       rate: { date: '2026-07-21', middle_rate: 4.0895 },
+    }, {
+      currency_code: 'VND',
+      unit: 100,
+      rate: { date: '2026-07-21', middle_rate: 0.0162 },
     }],
   }),
+});
+
+test('normalizes BNM USD and VND rates to MYR per one currency unit', async (t) => {
+  clearExchangeRateCache();
+  t.after(clearExchangeRateCache);
+  const rates = await getMyrExchangeRates(async () => bnmResponse());
+  assert.equal(rates.base, 'MYR');
+  assert.equal(rates.rates.MYR, 1);
+  assert.equal(rates.rates.USD, 4.0895);
+  assert.ok(Math.abs(rates.rates.VND - 0.000162) < 1e-12);
+  assert.deepEqual(rates.dates, { MYR: null, USD: '2026-07-21', VND: '2026-07-21' });
+  assert.equal(rates.source, 'Bank Negara Malaysia');
 });
 
 test('loads and caches the BNM USD/MYR middle rate', async (t) => {

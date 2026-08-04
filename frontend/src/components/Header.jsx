@@ -12,6 +12,7 @@ import {
 import { clearStoredSession, isAdminSession, saveStoredSession } from '../lib/session';
 import { useSession } from '../lib/useSession';
 import { useI18n } from '../lib/language';
+import { setStoredCurrency, useCurrency } from '../lib/currency';
 import { topNavItems } from '../routes/navigation';
 
 const TikTokGlyph = () => (
@@ -97,6 +98,7 @@ const Header = () => {
   const connectTriggerRef = useRef(null);
   const connectMenuRef = useRef(null);
   const { t, language, setLanguage } = useI18n();
+  const currency = useCurrency();
 
   const userName = String(session?.user?.name || session?.user?.email || 'Admin').trim();
   const userEmail = String(session?.user?.email || '').trim();
@@ -480,6 +482,19 @@ const Header = () => {
                     >
                       <span className="topbar__language-switch-label topbar__language-switch-label--vi">VI</span>
                       <span className="topbar__language-switch-label topbar__language-switch-label--en">EN</span>
+                    </button>
+                  </div>
+                  <div className="topbar__account-section" aria-label={t('header.currency')}>
+                    <span className="topbar__account-section-label">{t('header.currency')}</span>
+                    <button
+                      type="button"
+                      className={`topbar__currency-switch${currency === 'VND' ? ' topbar__currency-switch--vnd' : ' topbar__currency-switch--myr'}`}
+                      onClick={() => setStoredCurrency(currency === 'MYR' ? 'VND' : 'MYR')}
+                      role="menuitemcheckbox"
+                      aria-checked={currency === 'VND'}
+                    >
+                      <span className="topbar__currency-switch-label topbar__currency-switch-label--myr">RM</span>
+                      <span className="topbar__currency-switch-label topbar__currency-switch-label--vnd">VNĐ</span>
                     </button>
                   </div>
                   <button

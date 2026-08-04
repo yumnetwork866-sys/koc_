@@ -34,7 +34,7 @@ const {
   getShopVideoPerformance,
 } = require('../services/tiktokShopService');
 const { loadShopAnalyticsPerformance } = require('../services/tiktokShopAnalyticsSyncService');
-const { addMarketplaceLocalCurrency } = require('../services/exchangeRateService');
+const { addMarketplaceLocalCurrency, getMyrExchangeRates } = require('../services/exchangeRateService');
 const { marketplaceSearchQueueService } = require('../services/tiktokMarketplaceSearchQueueService');
 const {
   createCreatorPerformanceExportWithFallback,
@@ -1536,6 +1536,14 @@ const syncCreatorPerformance = async (req, res) => {
   } catch (error) { res.status(424).json({ message: error.message }); }
 };
 
+const getExchangeRates = async (_req, res) => {
+  try {
+    res.json(await getMyrExchangeRates());
+  } catch (error) {
+    res.status(502).json({ message: error.message });
+  }
+};
+
 module.exports = {
   startShopOauth, handleShopOauthCallback, listShopConnections, listShops,
   getShopAnalytics, syncShopAnalytics, disconnectShopAuthorization, disconnectShop,
@@ -1547,4 +1555,5 @@ module.exports = {
   listCreatorContentDetails,
   listCreatorPerformance,
   syncCreatorPerformance,
+  getExchangeRates,
 };

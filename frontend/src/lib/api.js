@@ -129,6 +129,10 @@ export function fetchTikTokShops(signal) {
   return apiRequest('/tiktok-shop/shops', { signal });
 }
 
+export function fetchExchangeRates(signal) {
+  return apiRequest('/tiktok-shop/exchange-rates', { signal });
+}
+
 export function fetchTikTokShopAnalytics(shopId, { signal, startDate, endDate, currency } = {}) {
   const params = new URLSearchParams();
   if (startDate) params.set('start_date', startDate);

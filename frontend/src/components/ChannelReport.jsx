@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { fetchChannelReport, fetchChannelReportMemberDetail } from '../lib/api';
 import { useI18n } from '../lib/language';
+import { useMoneyFormatter } from '../lib/currency';
 
 const chartTick = { fill: 'var(--color-muted)', fontSize: 12 };
 
@@ -187,15 +188,9 @@ const ChannelReport = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const formatNumber = (value) => Number(value || 0).toLocaleString(language === 'vi' ? 'vi-VN' : 'en-US');
-  const formatRevenue = (value, currency = 'MYR') => {
-    const normalizedCurrency = /^[A-Z]{3}$/.test(String(currency || '')) ? currency : 'MYR';
-    return new Intl.NumberFormat(language === 'vi' ? 'vi-VN' : 'en-US', {
-      style: 'currency',
-      currency: normalizedCurrency,
-      maximumFractionDigits: 2,
-    }).format(Number(value || 0));
-  };
+  const locale = language === 'vi' ? 'vi-VN' : 'en-US';
+  const formatNumber = (value) => Number(value || 0).toLocaleString(locale);
+  const { formatMoney: formatRevenue } = useMoneyFormatter(locale);
   useEffect(() => {
     if (periodMode === 'custom' && (!startDate || !endDate || startDate > endDate)) {
       setLoading(false);

@@ -386,7 +386,8 @@
 }
 
 
-.topbar__language-switch {
+.topbar__language-switch,
+.topbar__currency-switch {
   display: grid;
   grid-template-columns: repeat(2, 34px);
   align-items: center;
@@ -407,19 +408,22 @@
 }
 
 
-.topbar__language-switch:hover {
+.topbar__language-switch:hover,
+.topbar__currency-switch:hover {
   border-color: rgba(37, 99, 235, 0.28);
   box-shadow: var(--shadow-xs);
 }
 
 
-.topbar__language-switch:focus-visible {
+.topbar__language-switch:focus-visible,
+.topbar__currency-switch:focus-visible {
   outline: 2px solid rgba(37, 99, 235, 0.3);
   outline-offset: 2px;
 }
 
 
-.topbar__language-switch-label {
+.topbar__language-switch-label,
+.topbar__currency-switch-label {
   display: grid;
   place-items: center;
   height: 26px;
@@ -433,7 +437,9 @@
 
 
 .topbar__language-switch--vi .topbar__language-switch-label--vi,
-.topbar__language-switch--en .topbar__language-switch-label--en {
+.topbar__language-switch--en .topbar__language-switch-label--en,
+.topbar__currency-switch--myr .topbar__currency-switch-label--myr,
+.topbar__currency-switch--vnd .topbar__currency-switch-label--vnd {
   background: var(--color-surface);
   color: var(--color-accent-strong);
   box-shadow: var(--shadow-xs);
@@ -1705,7 +1711,8 @@
 }
 
 
-.topbar__language-switch {
+.topbar__language-switch,
+.topbar__currency-switch {
   border-radius: var(--radius-default);
 }
 

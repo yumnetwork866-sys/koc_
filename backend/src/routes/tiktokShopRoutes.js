@@ -2,6 +2,7 @@ const express = require('express');
 const controller = require('../controllers/tiktokShopController');
 
 const adminRouter = express.Router();
+adminRouter.get('/exchange-rates', controller.getExchangeRates);
 adminRouter.get('/oauth/start', controller.startShopOauth);
 adminRouter.get('/connections', controller.listShopConnections);
 adminRouter.get('/shops', controller.listShops);

@@ -16,6 +16,7 @@ import {
   fetchTikTokShops,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import { useMoneyFormatter } from '../lib/currency';
 import {
   getAffiliateOrderProductIds,
   getAffiliateOrderProgramIds,
@@ -361,6 +362,7 @@ const InviteCreatorModal = ({
 const SellerAffiliatePanel = () => {
   const { t, language } = useI18n();
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
+  const { formatMoney: formatPreferredMoney } = useMoneyFormatter(locale);
   const [shops, setShops] = useState([]);
   const [shopId, setShopId] = useState('');
   const [section, setSection] = useState('open');
@@ -709,26 +711,22 @@ const SellerAffiliatePanel = () => {
   const formatTime = (value) => value ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(Number(value) * 1000)) : '—';
   const formatMoney = (money) => {
     if (money?.amount === undefined || money?.amount === null || money.amount === '') return '—';
-    try {
-      const currency = money.currency || 'USD';
-      const formatter = new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 2 });
-      if (currency === 'MYR') {
-        return formatter.formatToParts(Number(money.amount))
-          .map((part) => part.type === 'currency' ? 'RM' : part.value)
-          .join('');
-      }
-      return formatter.format(Number(money.amount));
-    } catch {
-      return `${Number(money.amount).toLocaleString(locale)} ${money.currency || ''}`.trim();
-    }
+    return formatPreferredMoney(money.amount, money.currency || 'USD');
   };
   const formatCreatorGmv = (creator) => {
-    const money = creator.local_gmv || creator.gmv;
+    const money = creator.gmv || creator.local_gmv;
     if (money?.amount !== undefined && money?.amount !== null && money.amount !== '') {
-      const prefix = money.currency === 'MYR' ? 'RM' : money.currency === 'USD' ? 'US$' : `${money.currency || ''} `;
-      return `${prefix}${formatCompactNumber(money.amount)}`;
+      return formatPreferredMoney(money.amount, money.currency || 'USD', { compact: true });
     }
     const range = creator.local_gmv_range || creator.gmv_range;
+    const minimum = range?.minimum_amount ?? range?.min_amount ?? range?.minimum ?? range?.min;
+    const maximum = range?.maximum_amount ?? range?.max_amount ?? range?.maximum ?? range?.max;
+    if (minimum !== undefined || maximum !== undefined) {
+      const sourceCurrency = range?.currency || 'MYR';
+      const minimumLabel = minimum === undefined ? null : formatPreferredMoney(minimum, sourceCurrency, { compact: true });
+      const maximumLabel = maximum === undefined ? null : formatPreferredMoney(maximum, sourceCurrency, { compact: true });
+      return minimumLabel && maximumLabel ? `${minimumLabel}–${maximumLabel}` : minimumLabel || maximumLabel;
+    }
     return range?.formatted_range
       ? range.formatted_range
       : '—';
