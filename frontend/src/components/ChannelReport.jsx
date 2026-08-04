@@ -52,6 +52,33 @@ const formatDate = (value) => {
   return year && month && day ? `${day}/${month}/${year}` : '';
 };
 
+const DatePickerInput = ({ id, value, onChange, min, max }) => {
+  const inputRef = useRef(null);
+  const openPicker = () => {
+    if (typeof inputRef.current?.showPicker === 'function') inputRef.current.showPicker();
+    else inputRef.current?.click();
+  };
+
+  return (
+    <span className="channel-report-date-picker">
+      <button className="channel-report-date-picker__value" type="button" onClick={openPicker}>
+        {formatDate(value) || 'dd/mm/yyyy'}
+      </button>
+      <input
+        ref={inputRef}
+        id={id}
+        type="date"
+        lang="en-GB"
+        value={value}
+        min={min}
+        max={max}
+        aria-label="Chọn ngày"
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </span>
+  );
+};
+
 const compactProductName = (value) => {
   const name = String(value || '').trim();
   if (!name) return 'Chưa xác định sản phẩm';
@@ -180,6 +207,7 @@ const ChannelReport = () => {
   const [endDate, setEndDate] = useState(initialRange.endDate);
   const [selectedTeamId, setSelectedTeamId] = useState('all');
   const [selectedChannelId, setSelectedChannelId] = useState('all');
+  const [activeReportTab, setActiveReportTab] = useState('teams');
   const [comparisonMetric, setComparisonMetric] = useState('views');
   const [expandedMemberId, setExpandedMemberId] = useState(null);
   const [memberDetails, setMemberDetails] = useState({});
@@ -206,7 +234,7 @@ const ChannelReport = () => {
           ...(periodMode === 'month'
             ? { month: selectedMonth }
             : { startDate, endDate }),
-          teamId: selectedTeamId,
+          teamId: activeReportTab === 'comparison' ? 'all' : selectedTeamId,
           channelId: selectedChannelId,
           page: 1,
           pageSize: 20,
@@ -221,15 +249,16 @@ const ChannelReport = () => {
     };
     load();
     return () => controller.abort();
-  }, [endDate, periodMode, selectedChannelId, selectedMonth, selectedTeamId, startDate]);
+  }, [activeReportTab, endDate, periodMode, selectedChannelId, selectedMonth, selectedTeamId, startDate]);
 
   useEffect(() => {
-    if (selectedTeamId !== 'all'
-      && report
-      && !report.filters?.teams?.some((team) => String(team.id) === selectedTeamId)) {
-      setSelectedTeamId('all');
+    if (activeReportTab !== 'teams' || !report) return;
+    const availableTeams = report.filters?.teams || [];
+    if (!availableTeams.length) return;
+    if (!availableTeams.some((team) => String(team.id) === selectedTeamId)) {
+      setSelectedTeamId(String(availableTeams[0].id));
     }
-  }, [report, selectedTeamId]);
+  }, [activeReportTab, report, selectedTeamId]);
 
   useEffect(() => {
     if (selectedChannelId !== 'all'
@@ -244,7 +273,7 @@ const ChannelReport = () => {
     setExpandedMemberId(null);
     setMemberDetails({});
     setMemberTabs({});
-  }, [endDate, periodMode, selectedChannelId, selectedMonth, selectedTeamId, startDate]);
+  }, [activeReportTab, endDate, periodMode, selectedChannelId, selectedMonth, selectedTeamId, startDate]);
 
   const monthOptions = useMemo(() => {
     const selectedIndex = monthIndex(selectedMonth);
@@ -264,12 +293,11 @@ const ChannelReport = () => {
   const teams = report?.filters?.teams || [];
   const channels = report?.filters?.channels || [];
   const groups = report?.revenue?.teams || [];
-  const visibleGroups = (
-    selectedTeamId === 'all'
-      ? groups
-      : groups.filter((group) => group.key === selectedTeamId)
-  );
-  const selectedTeam = teams.find((team) => String(team.id) === selectedTeamId);
+  const resolvedSelectedTeamId = teams.some((team) => String(team.id) === selectedTeamId)
+    ? selectedTeamId
+    : teams[0] ? String(teams[0].id) : '';
+  const visibleGroups = groups.filter((group) => group.key === resolvedSelectedTeamId);
+  const selectedTeam = teams.find((team) => String(team.id) === resolvedSelectedTeamId);
   const topGroup = [...visibleGroups].sort((a, b) => b.views - a.views)[0];
   const comparisonData = groups.map((group) => ({
     name: group.label,
@@ -400,7 +428,7 @@ const ChannelReport = () => {
                   {video.video_url
                     ? <a href={video.video_url} target="_blank" rel="noreferrer">{video.title || `Video ${video.platform_video_id}`}</a>
                     : <strong>{video.title || `Video ${video.platform_video_id}`}</strong>}
-                  <small>{video.channel?.display_name || video.channel?.username || 'TikTok'} · {video.published_at ? new Date(video.published_at).toLocaleDateString(language === 'vi' ? 'vi-VN' : 'en-US') : '—'}</small>
+                  <small>{video.channel?.display_name || video.channel?.username || 'TikTok'} · {video.published_at ? formatDate(String(video.published_at).slice(0, 10)) : '—'}</small>
                   <div className="member-detail__product-tags">
                     {(video.products || []).slice(0, 2).map((product) => <span key={product.id} title={product.name}>{compactProductName(product.name)}</span>)}
                     {video.products?.length > 2 ? <span>+{video.products.length - 2}</span> : null}
@@ -447,7 +475,32 @@ const ChannelReport = () => {
       <section className="page__hero">
         <div>
           <h1 className="page__title">Báo cáo</h1>
-
+        </div>
+        <div className="koc-tabs channel-report-tabs" role="tablist" aria-label="Chế độ xem báo cáo">
+          <button
+            id="channel-report-teams-tab"
+            type="button"
+            role="tab"
+            aria-selected={activeReportTab === 'teams'}
+            aria-controls="channel-report-teams-panel"
+            tabIndex={activeReportTab === 'teams' ? 0 : -1}
+            className={activeReportTab === 'teams' ? 'is-active' : ''}
+            onClick={() => setActiveReportTab('teams')}
+          >
+            Theo team
+          </button>
+          <button
+            id="channel-report-comparison-tab"
+            type="button"
+            role="tab"
+            aria-selected={activeReportTab === 'comparison'}
+            aria-controls="channel-report-comparison-panel"
+            tabIndex={activeReportTab === 'comparison' ? 0 : -1}
+            className={activeReportTab === 'comparison' ? 'is-active' : ''}
+            onClick={() => setActiveReportTab('comparison')}
+          >
+            Thống kê
+          </button>
         </div>
       </section>
 
@@ -456,27 +509,30 @@ const ChannelReport = () => {
       <section className="section-card content-performance">
         <div className="section-card__header">
           <div>
-            <h2 className="section-card__title">Hiệu suất theo team</h2>
+            <h2 className="section-card__title">
+              {activeReportTab === 'comparison' ? 'Thống kê' : 'Hiệu suất theo team'}
+            </h2>
             <p className="section-card__meta">
-              {selectedTeam
+              {activeReportTab === 'comparison'
+                ? `${comparisonMetricLabel} giữa các team trong ${periodLabel}.`
+                : selectedTeam
                 ? `${formatNumber(topGroup?.videos || 0)} video đã nhận diện của ${selectedTeam.name} trong ${periodLabel}.`
                 : `${formatNumber(kpis.videos)} video trong ${periodLabel} từ ${formatNumber(kpis.channels)} kênh.`}
             </p>
           </div>
           <div className="channel-report-filters">
-            <div className="field channel-report-team">
+            {activeReportTab === 'teams' ? <div className="field channel-report-team">
               <label htmlFor="channel-report-team">Team</label>
               <select
                 id="channel-report-team"
-                value={selectedTeamId}
+                value={resolvedSelectedTeamId}
                 onChange={(event) => setSelectedTeamId(event.target.value)}
               >
-                <option value="all">Tất cả team</option>
                 {teams.map((team) => (
                   <option value={String(team.id)} key={team.id}>{team.name}</option>
                 ))}
               </select>
-            </div>
+            </div> : null}
             <div className="field channel-report-channel">
               <label htmlFor="channel-report-channel">Kênh</label>
               <ChannelSelectDropdown
@@ -513,24 +569,11 @@ const ChannelReport = () => {
               <>
                 <div className="field channel-report-date">
                   <label htmlFor="channel-report-start-date">Từ ngày</label>
-                  <input
-                    id="channel-report-start-date"
-                    type="date"
-                    value={startDate}
-                    max={endDate || todayValue()}
-                    onChange={(event) => setStartDate(event.target.value)}
-                  />
+                  <DatePickerInput id="channel-report-start-date" value={startDate} min="" max={endDate || todayValue()} onChange={setStartDate} />
                 </div>
                 <div className="field channel-report-date">
                   <label htmlFor="channel-report-end-date">Đến ngày</label>
-                  <input
-                    id="channel-report-end-date"
-                    type="date"
-                    value={endDate}
-                    min={startDate || undefined}
-                    max={todayValue()}
-                    onChange={(event) => setEndDate(event.target.value)}
-                  />
+                  <DatePickerInput id="channel-report-end-date" value={endDate} min={startDate || undefined} max={todayValue()} onChange={setEndDate} />
                 </div>
               </>
             )}
@@ -545,11 +588,16 @@ const ChannelReport = () => {
           </div>
         ) : (
           <>
-            {selectedTeamId === 'all' && comparisonData.length ? (
-              <section className="team-comparison" aria-labelledby="team-comparison-title">
+            {activeReportTab === 'comparison' && comparisonData.length ? (
+              <section
+                id="channel-report-comparison-panel"
+                className="team-comparison"
+                role="tabpanel"
+                aria-labelledby="channel-report-comparison-tab"
+              >
                 <div className="team-comparison__header">
                   <div>
-                    <h3 id="team-comparison-title">So sánh các team</h3>
+                    <h3 id="team-comparison-title">Thống kê các team</h3>
                     <p>{comparisonMetricLabel} trong {periodLabel}</p>
                   </div>
                   <div className="field team-comparison__metric">
@@ -581,7 +629,12 @@ const ChannelReport = () => {
                 </div>
               </section>
             ) : null}
-            <div className={`content-performance__groups${selectedTeamId !== 'all' ? ' content-performance__groups--filtered' : ''}`}>
+            {activeReportTab === 'teams' ? <div
+              id="channel-report-teams-panel"
+              className="content-performance__groups content-performance__groups--filtered"
+              role="tabpanel"
+              aria-labelledby="channel-report-teams-tab"
+            >
               {visibleGroups.map((group) => (
                 <article className="content-performance__group" key={group.key}>
                   <div className="content-performance__group-header">
@@ -638,7 +691,7 @@ const ChannelReport = () => {
                   )}
                 </article>
               ))}
-            </div>
+            </div> : null}
           </>
         )}
       </section>

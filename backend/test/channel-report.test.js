@@ -129,9 +129,10 @@ test('channel report aggregates server-side and returns only one video page', as
       channel_id: '3',
       channel_username: 'yum',
       channel_name: 'YUM',
-      user_id: '9',
-      member_name: 'An',
-      team_id: '4',
+      attributions: [
+        { user_id: 9, member_name: 'An', team_id: 4 },
+        { user_id: 10, member_name: 'Binh', team_id: 4 },
+      ],
       revenue: '12.5',
       currency: 'MYR',
       total_count: '45',
@@ -189,6 +190,13 @@ test('channel report aggregates server-side and returns only one video page', as
   }]);
   assert.equal(response.body.videos.items.length, 1);
   assert.equal(response.body.videos.items[0].revenue.amount, 12.5);
+  assert.deepEqual(response.body.videos.items[0].attribution, {
+    user_id: 9, member_name: 'An', team_id: 4,
+  });
+  assert.deepEqual(response.body.videos.items[0].attributions, [
+    { user_id: 9, member_name: 'An', team_id: 4 },
+    { user_id: 10, member_name: 'Binh', team_id: 4 },
+  ]);
   assert.deepEqual(response.body.period, {
     mode: 'month', month: '2026-07', start: '2026-07-01', end: '2026-07-31',
   });
@@ -198,6 +206,32 @@ test('channel report aggregates server-side and returns only one video page', as
     total: 45,
     total_pages: 3,
   });
+});
+
+test('channel report attributes adjacent and multiple hashtags without duplicating base videos', async (t) => {
+  const calls = [];
+  const { getChannelReport } = loadController(t, async (sql) => {
+    calls.push(sql);
+    return [];
+  }, async () => ({ rows: [], errors: [] }));
+  const response = makeResponse();
+
+  await getChannelReport({ query: { month: '2026-07' } }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls.length, 3);
+  for (const sql of calls) {
+    assert.ok(sql.includes('regexp_matches('));
+    assert.ok(sql.includes("'(#[[:alnum:]_]+)'"));
+    assert.ok(sql.includes("'gi'"));
+    assert.match(sql, /video_attributions AS MATERIALIZED/);
+    assert.doesNotMatch(sql, /ORDER BY rule\.user_id ASC\s+LIMIT 1/);
+  }
+  const summarySql = calls.find((sql) => sql.includes('channel-report-summary'));
+  assert.match(summarySql, /FROM filtered_videos/);
+  assert.match(summarySql, /jsonb_array_length\(attributions\) > 0/);
+  const teamSql = calls.find((sql) => sql.includes('channel-report-teams'));
+  assert.match(teamSql, /attribution_match\.user_id = app_user\.id/);
 });
 
 test('channel report rejects an invalid month before querying', async (t) => {

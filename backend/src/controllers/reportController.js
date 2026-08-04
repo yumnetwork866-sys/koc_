@@ -154,11 +154,11 @@ const channelReportBaseSql = `
     GROUP BY platform_video_id
   ),
   attribution_rules AS (
-    SELECT
+    SELECT DISTINCT
       attribution.user_id,
       attribution.team_id,
       app_user.name AS member_name,
-      LOWER(hashtag.value) AS hashtag
+      LOWER(BTRIM(hashtag.value)) AS hashtag
     FROM user_content_attributions attribution
     JOIN users app_user ON app_user.id = attribution.user_id
     CROSS JOIN LATERAL jsonb_array_elements_text(
@@ -187,24 +187,12 @@ const channelReportBaseSql = `
       channel.username AS channel_username,
       channel.display_name AS channel_name,
       channel.avatar_url AS channel_avatar_url,
-      matched.user_id,
-      matched.team_id,
-      matched.member_name,
       revenue.revenue,
       revenue.currency
     FROM videos video
     LEFT JOIN tiktok_channels channel ON channel.id = video.channel_id
     LEFT JOIN platform_revenue revenue
       ON revenue.platform_video_id = video.platform_video_id
-    LEFT JOIN LATERAL (
-      SELECT rule.user_id, rule.team_id, rule.member_name
-      FROM attribution_rules rule
-      WHERE rule.hashtag = ANY(
-        regexp_split_to_array(LOWER(COALESCE(video.title, '')), '[^[:alnum:]_#]+')
-      )
-      ORDER BY rule.user_id ASC
-      LIMIT 1
-    ) matched ON TRUE
     WHERE video.published_at >= (
       CAST(:startDate AS date)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
     )
@@ -212,11 +200,52 @@ const channelReportBaseSql = `
         CAST(:endDateExclusive AS date)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'
       )
   ),
+  video_hashtags AS MATERIALIZED (
+    SELECT DISTINCT
+      video.id AS video_id,
+      LOWER((matched.value)[1]) AS hashtag
+    FROM report_videos video
+    CROSS JOIN LATERAL regexp_matches(
+      COALESCE(video.title, ''),
+      '(#[[:alnum:]_]+)',
+      'gi'
+    ) matched(value)
+  ),
+  video_attributions AS MATERIALIZED (
+    SELECT DISTINCT
+      hashtag.video_id,
+      rule.user_id,
+      rule.team_id,
+      rule.member_name
+    FROM video_hashtags hashtag
+    JOIN attribution_rules rule ON rule.hashtag = hashtag.hashtag
+  ),
   audience_videos AS MATERIALIZED (
-    SELECT *
-    FROM report_videos
-    WHERE (CAST(:teamId AS integer) IS NULL OR team_id = CAST(:teamId AS integer))
-      AND (CAST(:userId AS integer) IS NULL OR user_id = CAST(:userId AS integer))
+    SELECT
+      video.*,
+      COALESCE((
+        SELECT jsonb_agg(
+          jsonb_build_object(
+            'user_id', attribution.user_id,
+            'team_id', attribution.team_id,
+            'member_name', attribution.member_name
+          )
+          ORDER BY attribution.user_id
+        )
+        FROM video_attributions attribution
+        WHERE attribution.video_id = video.id
+      ), '[]'::jsonb) AS attributions
+    FROM report_videos video
+    WHERE (
+      (CAST(:teamId AS integer) IS NULL AND CAST(:userId AS integer) IS NULL)
+      OR EXISTS (
+        SELECT 1
+        FROM video_attributions attribution
+        WHERE attribution.video_id = video.id
+          AND (CAST(:teamId AS integer) IS NULL OR attribution.team_id = CAST(:teamId AS integer))
+          AND (CAST(:userId AS integer) IS NULL OR attribution.user_id = CAST(:userId AS integer))
+      )
+    )
   ),
   filtered_videos AS MATERIALIZED (
     SELECT *
@@ -274,8 +303,8 @@ const getChannelReport = async (req, res) => {
           COALESCE(SUM(comments), 0)::bigint AS comments,
           COALESCE(SUM(shares), 0)::bigint AS shares,
           COUNT(DISTINCT channel_id)::bigint AS channels,
-          COUNT(user_id)::bigint AS attributed_videos,
-          COUNT(*) FILTER (WHERE user_id IS NULL)::bigint AS unclassified_videos,
+          COUNT(*) FILTER (WHERE jsonb_array_length(attributions) > 0)::bigint AS attributed_videos,
+          COUNT(*) FILTER (WHERE jsonb_array_length(attributions) = 0)::bigint AS unclassified_videos,
           COALESCE(SUM(revenue), 0) AS revenue,
           COUNT(revenue) > 0 AS revenue_available,
           MIN(currency) AS currency
@@ -292,8 +321,8 @@ const getChannelReport = async (req, res) => {
           COALESCE(SUM(comments), 0)::bigint AS comments,
           COALESCE(SUM(shares), 0)::bigint AS shares,
           COUNT(DISTINCT channel_id)::bigint AS channels,
-          COUNT(user_id)::bigint AS attributed_videos,
-          COUNT(*) FILTER (WHERE user_id IS NULL)::bigint AS unclassified_videos,
+          COUNT(*) FILTER (WHERE jsonb_array_length(attributions) > 0)::bigint AS attributed_videos,
+          COUNT(*) FILTER (WHERE jsonb_array_length(attributions) = 0)::bigint AS unclassified_videos,
           COALESCE(SUM(revenue), 0) AS revenue,
           COUNT(revenue) > 0 AS revenue_available,
           MIN(currency) AS currency
@@ -311,8 +340,8 @@ const getChannelReport = async (req, res) => {
           COALESCE(SUM(comments), 0)::bigint AS comments,
           COALESCE(SUM(shares), 0)::bigint AS shares,
           1::bigint AS channels,
-          COUNT(user_id)::bigint AS attributed_videos,
-          COUNT(*) FILTER (WHERE user_id IS NULL)::bigint AS unclassified_videos,
+          COUNT(*) FILTER (WHERE jsonb_array_length(attributions) > 0)::bigint AS attributed_videos,
+          COUNT(*) FILTER (WHERE jsonb_array_length(attributions) = 0)::bigint AS unclassified_videos,
           COALESCE(SUM(revenue), 0) AS revenue,
           COUNT(revenue) > 0 AS revenue_available,
           MIN(currency) AS currency
@@ -354,7 +383,14 @@ const getChannelReport = async (req, res) => {
           FROM content_teams team
           LEFT JOIN user_content_attributions attribution ON attribution.team_id = team.id
           LEFT JOIN users app_user ON app_user.id = attribution.user_id
-          LEFT JOIN filtered_videos video ON video.user_id = app_user.id
+          LEFT JOIN filtered_videos video ON EXISTS (
+            SELECT 1
+            FROM video_attributions attribution_match
+            WHERE attribution_match.video_id = video.id
+              AND attribution_match.user_id = app_user.id
+              AND (CAST(:teamId AS integer) IS NULL OR attribution_match.team_id = CAST(:teamId AS integer))
+              AND (CAST(:userId AS integer) IS NULL OR attribution_match.user_id = CAST(:userId AS integer))
+          )
           GROUP BY team.id, team.name, app_user.id, app_user.name
         )
         SELECT
@@ -392,9 +428,7 @@ const getChannelReport = async (req, res) => {
           channel_id,
           channel_username,
           channel_name,
-          user_id,
-          member_name,
-          team_id,
+          attributions,
           revenue,
           currency
         FROM filtered_videos
@@ -482,33 +516,38 @@ const getChannelReport = async (req, res) => {
         .filter((row) => row.row_type === 'chart')
         .map((row) => ({ date: row.bucket, ...aggregateMetrics(row) })),
       videos: {
-        items: videoRows.map((row) => ({
-          id: Number(row.id),
-          platform: row.platform,
-          platform_video_id: row.platform_video_id,
-          title: row.title,
-          video_url: row.video_url,
-          thumbnail_url: row.thumbnail_url,
-          published_at: row.published_at,
-          views: number(row.views),
-          likes: number(row.likes),
-          comments: number(row.comments),
-          shares: number(row.shares),
-          channel: {
-            id: Number(row.channel_id),
-            username: row.channel_username,
-            display_name: row.channel_name,
-          },
-          attribution: row.user_id ? {
-            user_id: Number(row.user_id),
-            member_name: row.member_name,
-            team_id: Number(row.team_id),
-          } : null,
-          revenue: row.revenue === null ? null : {
-            amount: number(row.revenue),
-            currency: row.currency || null,
-          },
-        })),
+        items: videoRows.map((row) => {
+          const attributions = (Array.isArray(row.attributions) ? row.attributions : []).map((attribution) => ({
+            user_id: Number(attribution.user_id),
+            member_name: attribution.member_name,
+            team_id: Number(attribution.team_id),
+          }));
+          return {
+            id: Number(row.id),
+            platform: row.platform,
+            platform_video_id: row.platform_video_id,
+            title: row.title,
+            video_url: row.video_url,
+            thumbnail_url: row.thumbnail_url,
+            published_at: row.published_at,
+            views: number(row.views),
+            likes: number(row.likes),
+            comments: number(row.comments),
+            shares: number(row.shares),
+            channel: {
+              id: Number(row.channel_id),
+              username: row.channel_username,
+              display_name: row.channel_name,
+            },
+            // Keep the legacy singular field for API consumers while exposing every match.
+            attribution: attributions[0] || null,
+            attributions,
+            revenue: row.revenue === null ? null : {
+              amount: number(row.revenue),
+              currency: row.currency || null,
+            },
+          };
+        }),
         pagination: {
           page,
           page_size: pageSize,
