@@ -26,6 +26,7 @@ import {
 } from '../lib/sellerAffiliate';
 import ShopDropdown from './ShopDropdown';
 import Pagination from './Pagination';
+import AppAvatar from './AppAvatar';
 
 const REQUIRED_SCOPE = 'seller.affiliate_collaboration.read';
 const MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
@@ -52,15 +53,7 @@ const formatStatus = (value, t) => {
   const normalized = String(value || '').toUpperCase();
   return LOCALIZED_STATUSES.has(normalized) ? t(`sellerAffiliate.status_${normalized}`) : value || '—';
 };
-const CreatorAvatar = ({ src, name }) => {
-  const [failed, setFailed] = useState(false);
-  const [retry, setRetry] = useState(0);
-  useEffect(() => { setFailed(false); setRetry(0); }, [src]);
-  if (!src || failed) {
-    return <span className="creator-identity__avatar creator-identity__avatar--fallback">{String(name || 'C').charAt(0)}</span>;
-  }
-  return <img className="creator-identity__avatar" src={retry ? `${src}#avatar-retry` : src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => { if (!retry) setRetry(1); else setFailed(true); }} />;
-};
+const CreatorAvatar = ({ src, name }) => <AppAvatar src={src} name={name || 'Creator'} />;
 const MetricTooltip = ({ text }) => {
   const id = useId();
   const triggerRef = useRef(null);

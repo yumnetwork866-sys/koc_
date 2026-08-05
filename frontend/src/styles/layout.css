@@ -1066,9 +1066,9 @@ body,
   min-width: 38px;
   place-items: center;
   padding: 0;
-  border: 1px solid #28b965;
+  border: 1px solid var(--color-action-border);
   border-radius: 12px;
-  background: #35d078;
-  color: #073d23;
-  box-shadow: 0 5px 12px rgba(45, 201, 111, 0.18);
+  background: var(--color-action);
+  color: var(--color-action-text);
+  box-shadow: 0 5px 12px var(--color-action-shadow);
 }

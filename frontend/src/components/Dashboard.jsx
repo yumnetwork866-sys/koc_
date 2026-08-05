@@ -31,7 +31,7 @@ const dashboardPeriodRange = (preset) => {
 
 const UserAvatar = ({ user, className, fallbackClassName }) => {
   const avatarSeed = String(user?.id || user?.email || user?.name || 'user');
-  const generatedAvatarUrl = `https://api.dicebear.com/10.x/fun-emoji/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=e6f7f5`;
+  const generatedAvatarUrl = `https://api.dicebear.com/10.x/pixel-art/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=e6f7f5`;
   const sources = [...new Set([user?.avatar_url, generatedAvatarUrl].filter(Boolean))];
   const sourceKey = sources.join('|');
   const [sourceIndex, setSourceIndex] = useState(0);

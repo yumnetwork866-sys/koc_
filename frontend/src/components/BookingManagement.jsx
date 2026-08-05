@@ -14,6 +14,7 @@ import {
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 import { useMoneyFormatter } from '../lib/currency';
+import AppAvatar from './AppAvatar';
 
 const initialForm = { creator_key: '', staff_id: '', total_cost: '' };
 const DEFAULT_PERFORMANCE_WINDOW = 'PAST_30_DAYS';
@@ -82,14 +83,7 @@ const editableCurrencyAmount = (value, currency) => {
   return String(currency === 'VND' ? Math.round(amount) : Math.round(amount * 100) / 100);
 };
 
-const TargetKocAvatar = ({ src, name }) => {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
-  if (!src || failed) {
-    return <span className="creator-identity__avatar creator-identity__avatar--fallback">{String(name || 'K').trim().charAt(0).toUpperCase()}</span>;
-  }
-  return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
-};
+const TargetKocAvatar = ({ src, name }) => <AppAvatar src={src} name={name || 'KOC'} />;
 
 const BookingStaffSelect = ({ users, value, onChange, placeholder, loading, loadingLabel }) => {
   const rootRef = useRef(null);

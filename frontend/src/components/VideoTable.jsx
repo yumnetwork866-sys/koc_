@@ -4,49 +4,13 @@ import { fetchChannels, fetchVideoPage } from '../lib/api';
 import { useI18n } from '../lib/language';
 import { useMoneyFormatter } from '../lib/currency';
 import Pagination from './Pagination';
+import AppAvatar from './AppAvatar';
 
 const PAGE_SIZE = 20;
 
-const getChannelInitials = (channel) => {
-  const label = String(channel?.display_name || channel?.username || '').trim();
-  if (!label) return 'CH';
-  return label
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0))
-    .join('')
-    .toUpperCase();
-};
-
 const ChannelAvatar = ({ channel, className, fallbackClassName, alt }) => {
-  const sources = useMemo(
-    () => [...new Set([channel?.avatar_url, channel?.avatar_large_url].filter(Boolean))],
-    [channel?.avatar_large_url, channel?.avatar_url],
-  );
-  const sourceKey = sources.join('|');
-  const [sourceIndex, setSourceIndex] = useState(0);
-
-  useEffect(() => {
-    setSourceIndex(0);
-  }, [sourceKey]);
-
-  if (!sources[sourceIndex]) {
-    return (
-      <span className={`${className} ${fallbackClassName}`} aria-hidden="true">
-        {getChannelInitials(channel)}
-      </span>
-    );
-  }
-
-  return (
-    <img
-      className={className}
-      src={sources[sourceIndex]}
-      alt={alt}
-      loading="lazy"
-      onError={() => setSourceIndex((current) => current + 1)}
-    />
-  );
+  const name = channel?.display_name || channel?.username || 'Channel';
+  return <AppAvatar sources={[channel?.avatar_url, channel?.avatar_large_url]} name={name} seed={channel?.id || channel?.username} className={className} fallbackClassName={fallbackClassName} alt={alt} />;
 };
 
 export const ChannelPicker = ({

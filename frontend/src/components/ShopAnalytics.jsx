@@ -25,6 +25,7 @@ import { useI18n } from '../lib/language';
 import { useMoneyFormatter } from '../lib/currency';
 import ShopDropdown from './ShopDropdown';
 import Pagination from './Pagination';
+import AppAvatar from './AppAvatar';
 
 const REQUIRED_SCOPE = 'data.shop_analytics.public.read';
 const SOURCE_COLORS = [
@@ -114,14 +115,7 @@ const VideoThumbnail = ({ shopId, video, href }) => {
   return <span className="shop-video-analytics__thumbnail" ref={containerRef}>{href ? <a href={href} target="_blank" rel="noreferrer">{content}</a> : content}</span>;
 };
 
-const CreatorAvatar = ({ src, name }) => {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
-  if (!src || failed) {
-    return <span className="creator-identity__avatar creator-identity__avatar--fallback" aria-hidden="true">{String(name || 'C').trim().charAt(0).toUpperCase()}</span>;
-  }
-  return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
-};
+const CreatorAvatar = ({ src, name }) => <AppAvatar src={src} name={name || 'Creator'} />;
 
 const CreatorDropdownAvatar = ({ creator, fallbackLabel }) => {
   const [failed, setFailed] = useState(false);

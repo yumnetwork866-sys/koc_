@@ -411,19 +411,19 @@
 
 
 .button {
-  border-color: #2fc86f;
+  border-color: var(--color-action-border);
   border-radius: 9px;
-  background: #35d078;
-  color: #073d23;
-  box-shadow: 0 7px 18px rgba(45, 201, 111, 0.16);
+  background: var(--color-action);
+  color: var(--color-action-text);
+  box-shadow: 0 7px 18px var(--color-action-shadow);
 }
 
 
 .button:hover {
-  border-color: #28b963;
-  background: #42dc84;
-  color: #073d23;
-  box-shadow: 0 10px 24px rgba(45, 201, 111, 0.22);
+  border-color: var(--color-action-hover-border);
+  background: var(--color-action-hover);
+  color: var(--color-action-text);
+  box-shadow: 0 10px 24px var(--color-action-shadow-hover);
 }
 
 

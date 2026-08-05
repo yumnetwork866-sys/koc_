@@ -1263,16 +1263,16 @@
 
 .ai-chat-panel__send,
 .ai-chat-panel__send:hover {
-  border-color: #2fc86f;
-  background: #35d078;
-  color: #073d23;
+  border-color: var(--color-action-border);
+  background: var(--color-action);
+  color: var(--color-action-text);
   box-shadow: none;
 }
 
 
 .ai-chat-panel__send:hover {
-  border-color: #28b963;
-  background: #42dc84;
+  border-color: var(--color-action-hover-border);
+  background: var(--color-action-hover);
 }
 
 
@@ -1625,8 +1625,8 @@
 
 
 .ai-chat-panel__send:hover:not(:disabled) {
-  border-color: #24a958;
-  background: #42dc84;
+  border-color: var(--color-action-hover-border);
+  background: var(--color-action-hover);
   transform: translateY(-1px);
 }
 

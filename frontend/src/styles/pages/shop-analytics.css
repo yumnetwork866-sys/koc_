@@ -1922,16 +1922,16 @@
 
 
 .shop-analytics--management .shop-analytics__connections-card > .section-card__header .button {
-  border-color: #28b963;
-  background: #35d078;
-  color: #073d23;
-  box-shadow: 0 6px 14px rgba(45, 201, 111, 0.16);
+  border-color: var(--color-action-border);
+  background: var(--color-action);
+  color: var(--color-action-text);
+  box-shadow: 0 6px 14px var(--color-action-shadow);
 }
 
 
 .shop-analytics--management .shop-analytics__connections-card > .section-card__header .button:hover {
-  border-color: #24aa59;
-  background: #42dc84;
+  border-color: var(--color-action-hover-border);
+  background: var(--color-action-hover);
 }
 
 

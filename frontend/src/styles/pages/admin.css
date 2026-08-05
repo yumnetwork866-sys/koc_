@@ -1418,7 +1418,7 @@
 
 .schedule-action svg { width: 16px; height: 16px; }
 
-.schedule-action--save, .schedule-action--save:hover { border-color: #28b963; background: #35d078; color: #073d23; }
+.schedule-action--save, .schedule-action--save:hover { border-color: var(--color-action-border); background: var(--color-action); color: var(--color-action-text); }
 
 
 .schedule-logs { display: grid; gap: 0; overflow: hidden; padding: 0; border-radius: 16px; }

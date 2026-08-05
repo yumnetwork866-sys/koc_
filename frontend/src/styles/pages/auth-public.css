@@ -1275,13 +1275,13 @@
 .home-page__cta:hover { transform: translateY(-2px); }
 
 .home-page__cta--primary {
-  border: 1px solid #2fc86f;
-  background: #35d078;
-  color: #083d24;
-  box-shadow: 0 10px 24px rgba(45, 201, 111, 0.22);
+  border: 1px solid var(--color-action-border);
+  background: var(--color-action);
+  color: var(--color-action-text);
+  box-shadow: 0 10px 24px var(--color-action-shadow);
 }
 
-.home-page__cta--primary:hover { background: #42dc84; color: #083d24; box-shadow: 0 14px 30px rgba(45, 201, 111, 0.28); }
+.home-page__cta--primary:hover { background: var(--color-action-hover); color: var(--color-action-text); box-shadow: 0 14px 30px var(--color-action-shadow-hover); }
 
 .home-page__cta--secondary { border: 1px solid #8fb3f2; background: #fff; color: #2d64c8; }
 

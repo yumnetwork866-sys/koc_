@@ -2415,30 +2415,30 @@
 .topbar__connect-trigger,
 .topbar__connect-trigger:hover,
 .topbar__connect-trigger[aria-expanded='true'] {
-  border-color: #2fc86f;
-  background: #35d078;
-  color: #073d23;
-  box-shadow: 0 7px 18px rgba(45, 201, 111, 0.17);
+  border-color: var(--color-action-border);
+  background: var(--color-action);
+  color: var(--color-action-text);
+  box-shadow: 0 7px 18px var(--color-action-shadow);
 }
 
 
 .topbar__connect-trigger:hover,
 .topbar__connect-trigger[aria-expanded='true'] {
-  border-color: #28b963;
-  background: #42dc84;
-  color: #073d23;
-  box-shadow: 0 10px 24px rgba(45, 201, 111, 0.22);
+  border-color: var(--color-action-hover-border);
+  background: var(--color-action-hover);
+  color: var(--color-action-text);
+  box-shadow: 0 10px 24px var(--color-action-shadow-hover);
 }
 
 
 .topbar__connect-trigger:focus-visible {
-  outline-color: #35d078;
-  box-shadow: 0 0 0 3px rgba(53, 208, 120, 0.2);
+  outline-color: var(--color-action);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-action) 30%, transparent);
 }
 
 
 .ai-chat-panel__brand > div > span::before {
-  background: #35d078;
+  background: var(--color-action);
 }
 
 

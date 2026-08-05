@@ -12,6 +12,7 @@ import {
   isCreatorMessagingNotice,
 } from '../lib/tiktokCreatorMessaging';
 import ShopDropdown from './ShopDropdown';
+import AppAvatar from './AppAvatar';
 
 const MESSAGES_SCOPE = 'seller.affiliate_messages.write';
 const MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
@@ -31,15 +32,9 @@ const creatorIdOf = (creator) => creator?.creator_open_id || creator?.user_id ||
 const avatarOf = (creator) => creator?.avatar?.url || creator?.avatar_url || '';
 
 const CreatorAvatar = ({ creator }) => {
-  const [failed, setFailed] = useState(false);
   const source = avatarOf(creator);
-  const fallback = String(creator?.nickname || creator?.username || 'C').trim().charAt(0).toUpperCase();
-  useEffect(() => setFailed(false), [source]);
-  return (
-    <span className="creator-chat__avatar" aria-hidden="true">
-      {source && !failed ? <img src={source} alt="" onError={() => setFailed(true)} /> : fallback}
-    </span>
-  );
+  const name = creator?.nickname || creator?.username || 'Creator';
+  return <AppAvatar src={source} name={name} seed={creatorIdOf(creator) || creator?.username} className="creator-chat__avatar" fallbackClassName="creator-chat__avatar--fallback" />;
 };
 
 const CreatorChatPage = () => {

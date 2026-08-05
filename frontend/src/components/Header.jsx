@@ -111,7 +111,7 @@ const Header = () => {
     .join('')
     .toUpperCase() || 'A';
   const avatarSeed = String(session?.user?.id || session?.user?.email || userName);
-  const fallbackAvatarUrl = `https://api.dicebear.com/10.x/fun-emoji/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=e6f7f5`;
+  const fallbackAvatarUrl = `https://api.dicebear.com/10.x/pixel-art/svg?seed=${encodeURIComponent(avatarSeed)}&backgroundColor=e6f7f5`;
   const avatarUrl = session?.user?.avatar_url || fallbackAvatarUrl;
 
   useEffect(() => {

@@ -96,6 +96,13 @@
   --color-magenta-soft: #f1edff;
   --color-success: #168a4d;
   --color-success-soft: #e9f9f0;
+  --color-action: #9afa8f;
+  --color-action-border: #7ee573;
+  --color-action-hover: #83e978;
+  --color-action-hover-border: #68cf5d;
+  --color-action-text: #123a28;
+  --color-action-shadow: rgba(71, 173, 61, 0.14);
+  --color-action-shadow-hover: rgba(71, 173, 61, 0.2);
   --color-warning-soft: #fff7e8;
   --color-danger-soft: #fff0f3;
   --radius-default: 8px;
