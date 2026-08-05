@@ -375,6 +375,25 @@
   font-weight: 700;
 }
 
+.shop-video-analytics__video a.shop-video-analytics__title-link {
+  width: 100%;
+  min-width: 0;
+  font-size: inherit;
+}
+
+.video-export-table__video-id {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 160ms ease, opacity 160ms ease;
+}
+
+.shop-video-analytics__video:hover .video-export-table__video-id,
+.shop-video-analytics__video:focus-within .video-export-table__video-id {
+  max-height: 1.5em;
+  opacity: 1;
+}
+
 .shop-video-analytics__thumbnail {
   position: relative;
   flex: 0 0 88px;
@@ -407,6 +426,63 @@
   place-items: center;
   color: var(--color-text-soft);
   font-size: 1.1rem;
+}
+
+.video-export-table-wrap {
+  max-height: 680px;
+  scrollbar-gutter: stable;
+}
+
+.shop-analytics__table.video-export-table {
+  min-width: 1960px;
+  table-layout: auto;
+}
+
+.video-export-table th,
+.video-export-table td {
+  padding: 12px 14px;
+}
+
+.video-export-table th:first-child,
+.video-export-table td:first-child {
+  width: 440px;
+  min-width: 440px;
+  max-width: 520px;
+  white-space: normal;
+}
+
+.video-export-table th:nth-child(2),
+.video-export-table td:nth-child(2),
+.video-export-table th:nth-child(3),
+.video-export-table td:nth-child(3) {
+  min-width: 160px;
+}
+
+.video-export-table th:nth-child(4),
+.video-export-table td:nth-child(4) {
+  min-width: 190px;
+}
+
+.video-export-table td:first-child strong {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.video-export-table a {
+  color: var(--color-accent-strong);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.video-export-table a:hover {
+  text-decoration: underline;
+}
+
+.video-export-pagination {
+  padding: 16px 0 0;
 }
 
 @media (max-width: 900px) {

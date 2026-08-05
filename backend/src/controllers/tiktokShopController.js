@@ -3,6 +3,7 @@ const { Op, QueryTypes } = require('sequelize');
 const {
   sequelize, TikTokChannel, TikTokShopAuthorization, TikTokShop, TikTokShopAnalyticsSnapshot,
   TikTokCreatorPerformanceExport, TikTokCreatorPerformanceSnapshot,
+  TikTokVideoPerformanceSnapshot,
   TikTokBasePerformanceSnapshot, TikTokMarketplaceCreator,
   TikTokMarketplaceCreatorDetail, TikTokMarketplaceDiscoveryState,
   TikTokTargetCollaborationSnapshot,
@@ -43,6 +44,11 @@ const {
   processBasePerformanceExport,
   yesterdayEndDay,
 } = require('../services/tiktokCreatorPerformanceService');
+const {
+  VIDEO_API_MODULE_TYPE,
+  importVideoPerformanceWorkbook,
+  startVideoPerformanceApiSync,
+} = require('../services/tiktokVideoPerformanceService');
 const { createTtlPromiseCache } = require('../lib/ttlPromiseCache');
 const { isDemoAuthorization, sellerAffiliateFixture } = require('../lib/tiktokDemoFixtures');
 const {
@@ -84,7 +90,7 @@ const addMarketplaceCategoryNames = async (creators, shop) => {
 };
 const FRONTEND_URL = () => process.env.FRONTEND_URL || 'http://localhost:3005';
 const redirectUrl = (status, message, returnPath = '/manage/shop-analytics') => {
-  const safeReturnPath = ['/manage/shops', '/manage/shop-analytics', '/manage/video-analytics', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
+  const safeReturnPath = ['/manage/shops', '/manage/shop-analytics', '/manage/video-analytics', '/videos', '/manage/koc-performance', '/manage/affiliate'].includes(returnPath) ? returnPath : '/manage/shop-analytics';
   const url = new URL(safeReturnPath, FRONTEND_URL());
   url.searchParams.set('shop_oauth_status', status);
   if (message) url.searchParams.set('shop_oauth_message', message);
@@ -1536,6 +1542,147 @@ const syncCreatorPerformance = async (req, res) => {
   } catch (error) { res.status(424).json({ message: error.message }); }
 };
 
+const importVideoPerformanceExport = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const encodedFile = String(req.body?.file_base64 || '');
+    const base64 = encodedFile.includes(',') ? encodedFile.slice(encodedFile.indexOf(',') + 1) : encodedFile;
+    if (!base64 || base64.length > 14_000_000) {
+      return res.status(400).json({ message: 'A video.xlsx file up to 10 MB is required.' });
+    }
+    const buffer = Buffer.from(base64, 'base64');
+    if (buffer.length < 4 || buffer[0] !== 0x50 || buffer[1] !== 0x4b) {
+      return res.status(400).json({ message: 'The uploaded file is not a valid XLSX workbook.' });
+    }
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+    const exportRecord = await importVideoPerformanceWorkbook(shop, buffer, {
+      filename: req.body?.filename,
+      startDate: datePattern.test(String(req.body?.start_date || '')) ? req.body.start_date : undefined,
+      endDate: datePattern.test(String(req.body?.end_date || '')) ? req.body.end_date : undefined,
+    });
+    res.status(201).json({ export: exportRecord });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+const syncVideoPerformanceApi = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const startDate = dateValue(req.body?.start_date);
+    const endDate = dateValue(req.body?.end_date);
+    if (!startDate || !endDate || startDate >= endDate) {
+      return res.status(400).json({ message: 'A valid start_date and exclusive end_date are required.' });
+    }
+    const { exportRecord, started } = await startVideoPerformanceApiSync(shop, {
+      startDate,
+      endDate,
+      currency: req.body?.currency === 'USD' ? 'USD' : 'LOCAL',
+    });
+    res.status(started ? 202 : 200).json({ export: exportRecord, started });
+  } catch (error) {
+    const permissionError = /grant data\.shop_analytics\.public\.read/i.test(error.message);
+    res.status(permissionError ? 403 : 424).json({
+      message: error.message,
+      ...(error.tiktokCode !== undefined && error.tiktokCode !== null ? { tiktok_code: Number(error.tiktokCode) } : {}),
+      ...(error.requestId ? { request_id: error.requestId } : {}),
+    });
+  }
+};
+
+const listVideoPerformanceApi = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const startDate = dateValue(req.query.start_date);
+    const endDate = dateValue(req.query.end_date);
+    if (!startDate || !endDate || startDate >= endDate) {
+      return res.status(400).json({ message: 'A valid start_date and exclusive end_date are required.' });
+    }
+    const currency = req.query.currency === 'USD' ? 'USD' : 'LOCAL';
+    const requestedExportId = req.query.export_id ? idValue(req.query.export_id) : null;
+    if (req.query.export_id && !requestedExportId) {
+      return res.status(400).json({ message: 'A valid export_id is required.' });
+    }
+    const exportRecord = await TikTokCreatorPerformanceExport.findOne({
+      where: {
+        shop_id: shop.id,
+        module_type: VIDEO_API_MODULE_TYPE,
+        start_date: startDate,
+        end_date: endDate,
+        window_type: currency === 'USD' ? 'API_USD' : 'API_LOCAL',
+        ...(requestedExportId ? { id: requestedExportId } : {}),
+      },
+      order: [['created_at', 'DESC']],
+    });
+    if (!exportRecord) return res.json({ export: null, videos: [], total_count: 0, source: 'TIKTOK_SHOP_ANALYTICS_API' });
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 50));
+    const { count, rows } = exportRecord.status === 'SUCCEEDED'
+      ? await TikTokVideoPerformanceSnapshot.findAndCountAll({
+        where: { export_id: exportRecord.id },
+        order: [['creator_attributed_gmv', 'DESC'], ['video_id', 'ASC']],
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+      })
+      : { count: 0, rows: [] };
+    const videos = rows.map((row) => {
+      const value = row.toJSON();
+      delete value.refunds;
+      delete value.items_refunded;
+      return value;
+    });
+    res.json({
+      export: exportRecord,
+      videos,
+      total_count: count,
+      page,
+      page_size: pageSize,
+      source: 'TIKTOK_SHOP_ANALYTICS_API',
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const listVideoPerformanceExport = async (req, res) => {
+  try {
+    const shop = await loadAffiliateShop(req, res);
+    if (!shop) return;
+    const where = {
+      shop_id: shop.id,
+      module_type: 'VIDEO',
+      ...(req.query.export_id ? { id: Number(req.query.export_id) } : {}),
+    };
+    const exportRecord = await TikTokCreatorPerformanceExport.findOne({
+      where,
+      order: [['created_at', 'DESC']],
+    });
+    if (!exportRecord) return res.json({ export: null, videos: [], total_count: 0 });
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 50));
+    const { count, rows } = exportRecord.status === 'SUCCEEDED'
+      ? await TikTokVideoPerformanceSnapshot.findAndCountAll({
+        where: { export_id: exportRecord.id },
+        order: [['creator_attributed_gmv', 'DESC'], ['video_id', 'ASC']],
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
+      })
+      : { count: 0, rows: [] };
+    res.json({
+      export: exportRecord,
+      videos: rows.map((row) => row.toJSON()),
+      total_count: count,
+      page,
+      page_size: pageSize,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const getExchangeRates = async (_req, res) => {
   try {
     res.json(await getMyrExchangeRates());
@@ -1555,5 +1702,9 @@ module.exports = {
   listCreatorContentDetails,
   listCreatorPerformance,
   syncCreatorPerformance,
+  syncVideoPerformanceApi,
+  listVideoPerformanceApi,
+  importVideoPerformanceExport,
+  listVideoPerformanceExport,
   getExchangeRates,
 };

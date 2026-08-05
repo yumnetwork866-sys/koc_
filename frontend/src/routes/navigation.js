@@ -121,6 +121,11 @@ export const protectedRouteCards = [
     props: { heroTitle: 'Shop analytics' },
   },
   {
+    path: '/videos',
+    component: 'ShopAnalytics',
+    props: { videoOnly: true, videoExportOnly: true },
+  },
+  {
     path: '/manage/video-analytics',
     component: 'ShopAnalytics',
     props: { videoOnly: true },
@@ -193,7 +198,6 @@ export const protectedRouteCards = [
 export const redirectRoutes = [
   { path: '/manage', to: '/manage/users' },
   { path: '/manage/koc', to: '/manage/koc-performance' },
-  { path: '/videos', to: '/dashboard#videos' },
   { path: '/chatbot', to: '/chatbot/dashboard' },
   { path: '/whatsapp', to: '/whatsapp/dashboard' },
   { path: '/chatbot/rag', to: '/chatbot/chat-setting' },

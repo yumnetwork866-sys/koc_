@@ -175,6 +175,7 @@ const sellerAffiliateFixture = (namespace, shop, query = {}) => {
       items_sold: 81 + index * 6,
       views: 42000 + index * 7300,
       click_through_rate: 0.071 + index * 0.002,
+      products: [{ id: products[index % products.length].id, name: products[index % products.length].title }],
     })).filter((video) => {
       if (accountType === 'LINKED_ACCOUNTS') return ['OFFICIAL', 'MARKETING'].includes(video.creator.author_type);
       if (accountType === 'OFFICIAL_ACCOUNTS') return video.creator.author_type === 'OFFICIAL';
@@ -184,6 +185,45 @@ const sellerAffiliateFixture = (namespace, shop, query = {}) => {
     });
     return {
       data: { total_count: videos.length, next_page_token: null, videos },
+      request_id: requestId,
+    };
+  }
+  if (namespace === 'shop-video-performance-detail') {
+    const video = query.video || {};
+    const match = String(query.video_id || video.id || '').match(/(\d{1,2})$/);
+    const index = Number(match?.[1] || 0) % products.length;
+    const currency = query.currency === 'USD' ? 'USD' : 'VND';
+    const multiplier = currency === 'USD' ? 1 : 25000;
+    const views = Number(video.views || 42000 + index * 7300);
+    return {
+      data: {
+        performance: {
+          intervals: [{
+            start_date: query.start_date,
+            end_date: query.end_date,
+            sales: {
+              overall: {
+                gmv: video.gmv || { amount: String((820 - index * 37) * multiplier), currency },
+                gpm: video.gpm || { amount: String((18.5 - index * 0.55) * multiplier), currency },
+                customers: Number(video.avg_customers || 62 + index * 4),
+                items_sold: Number(video.items_sold || 81 + index * 6),
+                ctr: Number(video.click_through_rate || 0.071 + index * 0.002),
+                product_impressions: Math.round(views * 0.72),
+                product_clicks: Math.round(views * Number(video.click_through_rate || 0.071)),
+              },
+              breakdowns: [{
+                product_id: video.products?.[0]?.id || products[index].id,
+              }],
+            },
+            traffic: {
+              views,
+              likes: 860 + index * 73,
+              comments: 48 + index * 5,
+              shares: 31 + index * 4,
+            },
+          }],
+        },
+      },
       request_id: requestId,
     };
   }

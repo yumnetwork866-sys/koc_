@@ -412,6 +412,42 @@ const TikTokCreatorPerformanceSnapshot = sequelize.define('TikTokCreatorPerforma
   indexes: [{ unique: true, fields: ['shop_id', 'username', 'start_date', 'end_date', 'plan_type'] }],
 });
 
+const TikTokVideoPerformanceSnapshot = sequelize.define('TikTokVideoPerformanceSnapshot', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  export_id: { type: DataTypes.INTEGER, allowNull: false },
+  shop_id: { type: DataTypes.INTEGER, allowNull: false },
+  video_title: DataTypes.TEXT,
+  video_id: { type: DataTypes.STRING(128), allowNull: false },
+  post_date: DataTypes.STRING(64),
+  video_link: DataTypes.TEXT,
+  creator_name: DataTypes.STRING,
+  product_id: DataTypes.TEXT,
+  creator_attributed_gmv: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  attributed_orders: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  aov: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  attributed_items_sold: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  refunds: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  items_refunded: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  likes: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  comments: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  shares: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  product_impressions: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  product_clicks: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  completion_rate: DataTypes.DECIMAL(12, 6),
+  video_views: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
+  ctr: DataTypes.DECIMAL(12, 6),
+  video_gpm: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  engagement: DataTypes.DECIMAL(12, 6),
+  avg_gmv_per_customer: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  estimated_commission: { type: DataTypes.DECIMAL(20, 4), allowNull: false, defaultValue: 0 },
+  raw_metrics: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+  synced_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+}, {
+  tableName: 'tiktok_video_performance_snapshots',
+  timestamps: false,
+  indexes: [{ unique: true, fields: ['export_id', 'video_id'] }],
+});
+
 const TikTokCreatorProfile = sequelize.define('TikTokCreatorProfile', {
   id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
   shop_id: { type: DataTypes.INTEGER, allowNull: false },
@@ -1229,6 +1265,8 @@ TikTokShop.hasMany(TikTokCreatorPerformanceSnapshot, { foreignKey: 'shop_id', as
 TikTokCreatorPerformanceSnapshot.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokCreatorPerformanceExport.hasMany(TikTokCreatorPerformanceSnapshot, { foreignKey: 'export_id', as: 'creators' });
 TikTokCreatorPerformanceSnapshot.belongsTo(TikTokCreatorPerformanceExport, { foreignKey: 'export_id', as: 'export' });
+TikTokCreatorPerformanceExport.hasMany(TikTokVideoPerformanceSnapshot, { foreignKey: 'export_id', as: 'videos' });
+TikTokVideoPerformanceSnapshot.belongsTo(TikTokCreatorPerformanceExport, { foreignKey: 'export_id', as: 'export' });
 TikTokShop.hasMany(TikTokCreatorProfile, { foreignKey: 'shop_id', as: 'creator_profiles' });
 TikTokCreatorProfile.belongsTo(TikTokShop, { foreignKey: 'shop_id', as: 'shop' });
 TikTokShop.hasMany(TikTokApiCooldown, { foreignKey: 'shop_id', as: 'api_cooldowns' });
@@ -1305,6 +1343,7 @@ module.exports = {
   TikTokShopAnalyticsSnapshot,
   TikTokCreatorPerformanceExport,
   TikTokCreatorPerformanceSnapshot,
+  TikTokVideoPerformanceSnapshot,
   TikTokCreatorProfile,
   TikTokApiCooldown,
   TikTokMarketplaceCreatorDetail,

@@ -6,6 +6,7 @@ const {
   AUTHORIZED_SHOPS_PATH,
   SHOP_PERFORMANCE_PATH,
   SHOP_VIDEO_PERFORMANCE_PATH,
+  SHOP_VIDEO_PERFORMANCE_DETAIL_PATH,
   OPEN_COLLABORATIONS_PATH,
   TARGET_COLLABORATIONS_PATH,
   TARGET_COLLABORATION_DETAIL_PATH,
@@ -26,6 +27,7 @@ const {
   getAuthorizedShops,
   getShopPerformance,
   getShopVideoPerformance,
+  getShopVideoPerformanceDetails,
   normalizeShopPerformance,
   searchOpenCollaborations,
   searchTargetCollaborations,
@@ -215,6 +217,48 @@ test('shop video performance returns per-video GMV with analytics filters', asyn
     };
   });
   assert.equal(payload.data.videos[0].gmv.amount, '123');
+});
+
+test('shop video performance details returns commerce and engagement metrics for one video', async (t) => {
+  configure(t);
+  const authorization = {
+    granted_scopes: ['data.shop_analytics.public.read'],
+    access_token_encrypted: encryptPartnerToken('seller-token'),
+    access_token_expires_at: new Date(Date.now() + 60 * 60 * 1000),
+  };
+  const videoId = '7616717880972856597';
+  const payload = await getShopVideoPerformanceDetails({
+    authorization,
+    shopCipher: 'cipher-1',
+    videoId,
+    startDate: '2026-07-01',
+    endDate: '2026-07-08',
+    currency: 'LOCAL',
+  }, async (url, options) => {
+    assert.equal(url.pathname, `${SHOP_VIDEO_PERFORMANCE_DETAIL_PATH}/${videoId}/performance`);
+    assert.equal(url.searchParams.get('shop_cipher'), 'cipher-1');
+    assert.equal(url.searchParams.get('start_date_ge'), '2026-07-01');
+    assert.equal(url.searchParams.get('end_date_lt'), '2026-07-08');
+    assert.equal(url.searchParams.get('granularity'), 'ALL');
+    assert.equal(url.searchParams.get('currency'), 'LOCAL');
+    assert.equal(options.headers['x-tts-access-token'], 'seller-token');
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 0,
+        data: {
+          performance: {
+            intervals: [{
+              sales: { overall: { product_impressions: 200, product_clicks: 30 } },
+              traffic: { likes: 10, comments: 2, shares: 1 },
+            }],
+          },
+        },
+      }),
+    };
+  });
+  assert.equal(payload.data.performance.intervals[0].traffic.likes, 10);
 });
 
 test('shop performance 202509 response is normalized for the existing analytics UI', () => {

@@ -165,6 +165,45 @@ export function fetchTikTokShopVideoAnalytics(shopId, filters = {}) {
   });
 }
 
+export function syncTikTokShopVideoPerformance(shopId, payload = {}, signal) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/video-performance/sync`, {
+    method: 'POST',
+    body: payload,
+    signal,
+  });
+}
+
+export function fetchTikTokShopVideoPerformance(shopId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.startDate) params.set('start_date', filters.startDate);
+  if (filters.endDate) params.set('end_date', filters.endDate);
+  if (filters.currency) params.set('currency', filters.currency);
+  if (filters.exportId) params.set('export_id', filters.exportId);
+  if (filters.page) params.set('page', filters.page);
+  if (filters.pageSize) params.set('page_size', filters.pageSize);
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/video-performance?${params.toString()}`, {
+    signal: filters.signal,
+  });
+}
+
+export function importTikTokShopVideoExport(shopId, payload = {}) {
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/video-export/import`, {
+    method: 'POST',
+    body: payload,
+  });
+}
+
+export function fetchTikTokShopVideoExport(shopId, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.exportId) params.set('export_id', filters.exportId);
+  if (filters.page) params.set('page', filters.page);
+  if (filters.pageSize) params.set('page_size', filters.pageSize);
+  const query = params.toString();
+  return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/video-export${query ? `?${query}` : ''}`, {
+    signal: filters.signal,
+  });
+}
+
 export function fetchTikTokShopVideoThumbnail(shopId, videoId, username, signal) {
   const params = new URLSearchParams({ username });
   return apiRequest(`/tiktok-shop/shops/${encodeURIComponent(shopId)}/video-thumbnails/${encodeURIComponent(videoId)}?${params.toString()}`, {

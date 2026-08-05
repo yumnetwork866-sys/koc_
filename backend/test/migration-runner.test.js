@@ -58,6 +58,7 @@ const defaultMigrationNames = [
   '049_add_marketplace_discovery_recovery_state',
   '050_add_marketplace_discovery_segment_limits',
   '051_cleanup_duplicate_video_indexes',
+  '052_create_tiktok_video_performance_exports',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

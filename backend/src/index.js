@@ -48,7 +48,7 @@ const createApp = () => {
   }));
   app.use(morgan(httpLogFormat));
   app.use(express.json({
-    limit: '256kb',
+    limit: '16mb',
     verify: (req, _res, buffer) => {
       req.rawBody = buffer;
     },
