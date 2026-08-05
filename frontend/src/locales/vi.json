@@ -1064,7 +1064,6 @@
     "videoExportTableMeta": "{{count}} videos",
     "videoSearchPlaceholder": "Tìm tiêu đề, Video ID, creator hoặc Product ID",
     "videoSearchNoResults": "Không tìm thấy video phù hợp.",
-    "videoPeriodHint": "Khoảng thời gian áp dụng cho hiệu suất được ghi nhận, không phải ngày đăng ban đầu của video.",
     "videoExportPagination": "Phân trang báo cáo video",
     "videoTitle": "Tiêu đề video",
     "videoId": "Video ID",
@@ -1312,6 +1311,14 @@
       "manual": "Thủ công",
       "scheduled": "Theo lịch"
     },
+    "groups": {
+      "shop": {
+        "name": "TikTok Shop"
+      },
+      "channel": {
+        "name": "TikTok Channel"
+      }
+    },
     "jobs": {
       "tiktok_creator_performance": {
         "name": "Hiệu suất TikTok Creator",
@@ -1336,6 +1343,10 @@
       "tiktok_shop_video_catalog": {
         "name": "Danh mục video TikTok Shop",
         "description": ""
+      },
+      "tiktok_affiliate_video_performance": {
+        "name": "Hiệu suất video Affiliate",
+        "description": "Đồng bộ dữ liệu Affiliate Center > Analytics > Tất cả video trong 7 ngày gần nhất."
       }
     }
   }

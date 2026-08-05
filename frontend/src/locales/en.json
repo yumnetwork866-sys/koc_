@@ -1061,10 +1061,9 @@
     "videoWorkbookImportError": "Unable to import the Excel workbook.",
     "videoWorkbookNoData": "No data yet. Export video.xlsx from Affiliate → Analytics → All videos, then import it here.",
     "videoExportTableTitle": "All videos",
-    "videoExportTableMeta": "{{count}} videos from the TikTok Shop Analytics API.",
+    "videoExportTableMeta": "{{count}} videos",
     "videoSearchPlaceholder": "Search title, video ID, creator, or Product ID",
     "videoSearchNoResults": "No videos match your search.",
-    "videoPeriodHint": "The selected period applies to attributed performance, not the video's original post date.",
     "videoExportPagination": "Video report pagination",
     "videoTitle": "Video title",
     "videoId": "Video ID",
@@ -1313,6 +1312,14 @@
       "manual": "Manual",
       "scheduled": "Scheduled"
     },
+    "groups": {
+      "shop": {
+        "name": "TikTok Shop"
+      },
+      "channel": {
+        "name": "TikTok Channel"
+      }
+    },
     "jobs": {
       "tiktok_creator_performance": {
         "name": "TikTok Creator Performance",
@@ -1337,6 +1344,10 @@
       "tiktok_shop_video_catalog": {
         "name": "TikTok Shop Video Catalog",
         "description": ""
+      },
+      "tiktok_affiliate_video_performance": {
+        "name": "Affiliate Video Performance",
+        "description": "Sync the latest seven days from Affiliate Center > Analytics > All videos."
       }
     }
   }

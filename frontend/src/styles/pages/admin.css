@@ -1290,6 +1290,31 @@
 
 .schedule-grid--compact { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 16px; }
 
+.schedule-groups { display: grid; gap: 22px; }
+
+.schedule-group { display: grid; gap: 12px; }
+
+.schedule-group__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #dce6f3;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f8fbff, #fff);
+}
+
+.schedule-group__header > span { display: inline-grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: #e9f2ff; color: #3268ce; }
+
+.schedule-group--channel .schedule-group__header > span { background: #e9f9f3; color: #16805d; }
+
+.schedule-group__header svg { width: 21px; height: 21px; }
+
+.schedule-group__header h2 { margin: 0; color: #17243b; font-size: 1rem; }
+
+.schedule-group__header > strong { display: inline-grid; min-width: 30px; height: 30px; place-items: center; border-radius: 999px; background: #e8eef8; color: #405675; font-size: .78rem; }
+
 .schedule-card--compact { gap: 0; overflow: hidden; padding: 0; border-color: #dfe7f1; border-radius: 16px; background: #fff; }
 
 

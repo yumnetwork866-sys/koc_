@@ -299,6 +299,24 @@ const startVideoPerformanceApiSync = async (shop, {
   }
 };
 
+const syncVideoPerformanceApi = async (shop, options = {}) => {
+  const currency = options.currency === 'USD' ? 'USD' : 'LOCAL';
+  const key = `${shop.id}:${options.startDate}:${options.endDate}:${currency}`;
+  const { exportRecord } = await startVideoPerformanceApiSync(shop, { ...options, currency });
+  const active = activeApiSyncs.get(key);
+  if (active?.processPromise) await active.processPromise;
+  await exportRecord.reload();
+  if (exportRecord.status !== 'SUCCEEDED') {
+    throw new Error(exportRecord.error || 'TikTok video performance sync failed.');
+  }
+  return {
+    export_id: exportRecord.id,
+    row_count: exportRecord.row_count,
+    start_date: exportRecord.start_date,
+    end_date: exportRecord.end_date,
+  };
+};
+
 const parseVideoPerformanceWorkbook = (buffer, { exportId, shopId }) => {
   const workbook = XLSX.read(buffer, { type: 'buffer', raw: false });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -375,6 +393,7 @@ module.exports = {
   parseVideoPerformanceWorkbook,
   processVideoPerformanceApiSync,
   startVideoPerformanceApiSync,
+  syncVideoPerformanceApi,
   __test: {
     apiVideoRow,
     mapWithConcurrency,

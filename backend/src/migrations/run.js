@@ -60,6 +60,7 @@ const migrations = [
   require('./050_add_marketplace_discovery_segment_limits'),
   require('./051_cleanup_duplicate_video_indexes'),
   require('./052_create_tiktok_video_performance_exports'),
+  require('./053_add_video_performance_schedule'),
 ];
 
 const createMigrationRunner = ({

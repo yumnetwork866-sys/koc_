@@ -8,8 +8,10 @@ import {
   LoaderCircle,
   Plus,
   Play,
+  Radio,
   RefreshCw,
   Save,
+  ShoppingBag,
   Square,
   Trash2,
   XCircle,
@@ -24,6 +26,7 @@ import {
 import { useI18n } from '../lib/language';
 
 const DEFAULT_TIMES = ['02:00', '06:00', '10:00', '14:00', '18:00', '22:00'];
+const CHANNEL_JOB_KEYS = new Set(['tiktok_channel_metrics']);
 
 const resizeRunTimes = (current, count) => {
   const next = [...current].slice(0, count);
@@ -114,6 +117,16 @@ const ScheduleManagement = () => {
   const enabledCount = schedules.filter((schedule) => schedule.enabled).length;
   const runningCount = allRuns.filter((run) => run.status === 'PROCESSING').length;
   const failedCount = allRuns.filter((run) => run.status === 'FAILED').length;
+  const scheduleGroups = useMemo(() => ([
+    {
+      key: 'shop',
+      schedules: schedules.filter((schedule) => !CHANNEL_JOB_KEYS.has(schedule.job_key)),
+    },
+    {
+      key: 'channel',
+      schedules: schedules.filter((schedule) => CHANNEL_JOB_KEYS.has(schedule.job_key)),
+    },
+  ]), [schedules]);
 
   const patchSchedule = (jobKey, patch) => setSchedules((items) => items.map((item) => (
     item.job_key === jobKey ? { ...item, ...patch } : item
@@ -205,8 +218,18 @@ const ScheduleManagement = () => {
       {loading ? <section className="section-card empty-state"><span className="loading-dot" />{t('schedule.loading')}</section> : null}
 
       {!loading && activeTab === 'schedules' ? (
-        <div className="schedule-grid schedule-grid--compact" role="tabpanel">
-          {schedules.map((schedule) => {
+        <div className="schedule-groups" role="tabpanel">
+          {scheduleGroups.map((group) => (
+            <section className={`schedule-group schedule-group--${group.key}`} key={group.key}>
+              <header className="schedule-group__header">
+                <span aria-hidden="true">{group.key === 'shop' ? <ShoppingBag /> : <Radio />}</span>
+                <div>
+                  <h2>{t(`schedule.groups.${group.key}.name`)}</h2>
+                </div>
+                <strong>{group.schedules.length}</strong>
+              </header>
+              <div className="schedule-grid schedule-grid--compact">
+                {group.schedules.map((schedule) => {
             const latest = schedule.runs?.[0];
             const isRunning = runningKey === schedule.job_key || latest?.status === 'PROCESSING';
             const description = t(`schedule.jobs.${schedule.job_key}.description`);
@@ -292,7 +315,10 @@ const ScheduleManagement = () => {
                 </footer>
               </article>
             );
-          })}
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       ) : null}
 
@@ -301,7 +327,7 @@ const ScheduleManagement = () => {
           <header className="schedule-logs__toolbar">
             <div><h2>{t('schedule.logsTitle')}</h2><span>{t('schedule.logsCount', { count: filteredRuns.length })}</span></div>
             <div className="schedule-logs__filters">
-              <label><span className="sr-only">{t('schedule.filterJob')}</span><select value={jobFilter} onChange={(event) => setJobFilter(event.target.value)}><option value="ALL">{t('schedule.allJobs')}</option>{schedules.map((schedule) => <option value={schedule.job_key} key={schedule.job_key}>{t(`schedule.jobs.${schedule.job_key}.name`)}</option>)}</select></label>
+              <label><span className="sr-only">{t('schedule.filterJob')}</span><select value={jobFilter} onChange={(event) => setJobFilter(event.target.value)}><option value="ALL">{t('schedule.allJobs')}</option>{scheduleGroups.map((group) => <optgroup label={t(`schedule.groups.${group.key}.name`)} key={group.key}>{group.schedules.map((schedule) => <option value={schedule.job_key} key={schedule.job_key}>{t(`schedule.jobs.${schedule.job_key}.name`)}</option>)}</optgroup>)}</select></label>
               <label><span className="sr-only">{t('schedule.filterStatus')}</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">{t('schedule.allStatuses')}</option><option value="SUCCEEDED">{statusLabel('SUCCEEDED')}</option><option value="FAILED">{statusLabel('FAILED')}</option><option value="PROCESSING">{statusLabel('PROCESSING')}</option><option value="CANCELLED">{statusLabel('CANCELLED')}</option></select></label>
               <button className="button button--ghost schedule-logs__refresh" type="button" disabled={refreshing} onClick={() => load(undefined, true)}><RefreshCw className={refreshing ? 'is-spinning' : ''} aria-hidden="true" />{t('schedule.refresh')}</button>
             </div>
