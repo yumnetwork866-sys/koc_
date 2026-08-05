@@ -2263,7 +2263,12 @@
 }
 
 .booking-evaluation-table {
-  min-width: 1650px;
+  min-width: 1520px;
+}
+
+.booking-evaluation-table th,
+.booking-evaluation-table td {
+  padding-inline: 9px;
 }
 
 .booking-evaluation-table .booking-samples-column {
@@ -2272,6 +2277,13 @@
   padding-inline: 7px;
   white-space: normal;
 }
+
+.booking-product-summary { display: grid; gap: 2px; justify-items: end; white-space: nowrap; }
+
+.booking-product-summary strong { font-size: .82rem; }
+
+.booking-product-summary strong span,
+.booking-product-summary small { color: var(--color-text-soft); font-size: .7rem; font-weight: 600; }
 
 .booking-video-count {
   display: inline-flex;

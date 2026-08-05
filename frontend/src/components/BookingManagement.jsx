@@ -678,10 +678,10 @@ const BookingManagement = ({ heroTitle }) => {
         <div className="section-card__header booking-evaluation-list-header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div><div className="field booking-performance-period"><label htmlFor="booking-performance-window">{t('booking.performancePeriod')}</label><select id="booking-performance-window" value={performanceWindow} onChange={(event) => setPerformanceWindow(event.target.value)}><option value="PAST_7_DAYS">{t('booking.period7Days')}</option><option value="PAST_30_DAYS">{t('booking.period30Days')}</option><option value="PAST_60_DAYS">{t('booking.period60Days')}</option><option value="PAST_90_DAYS">{t('booking.period90Days')}</option><option value="PAST_120_DAYS">{t('booking.period120Days')}</option><option value="PAST_150_DAYS">{t('booking.period150Days')}</option><option value="PAST_180_DAYS">{t('booking.period180Days')}</option></select></div></div>
         <div className="table-wrap"><table className="data-table booking-evaluation-table">
           <thead>
-            <tr><th>{t('booking.kocColumn')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.totalCost')}</th><th>{t('booking.matchedVideo')}</th><th className="cell-number">{t('booking.refunds')}</th><th className="cell-number">{t('booking.productsSold')}</th><th className="cell-number">{t('booking.itemsRefunded')}</th><th className="cell-number booking-samples-column">{t('booking.samplesShipped')}</th><th className="cell-number">{t('booking.estimatedCommission')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr>
+            <tr><th>{t('booking.kocColumn')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.totalCost')}</th><th>{t('booking.matchedVideo')}</th><th className="cell-number">{t('booking.refunds')}</th><th className="cell-number">{t('booking.products')}</th><th className="cell-number booking-samples-column">{t('booking.samplesShipped')}</th><th className="cell-number">{t('booking.estimatedCommission')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={10}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
+            {loading ? <tr><td colSpan={9}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
               const performance = performanceOf(booking);
               const bookingVideos = bookingVideosOf(booking);
               const videoCount = bookingVideos.length || Number(booking.actual_performance?.video_count || 0);
@@ -693,8 +693,7 @@ const BookingManagement = ({ heroTitle }) => {
                 <td className="cell-number"><strong>{formatMoney(booking.total_cost ?? booking.booking_cost, booking.currency)}</strong></td>
                 <td><span className="booking-video-count"><span className={`sidebar__chevron${expanded ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" /><strong>{t('booking.videosCount', { count: videoCount })}</strong></span></td>
                 <td className="cell-number">{creatorMetric(performance, 'refunded_gmv', { money: true })}</td>
-                <td className="cell-number">{creatorMetric(performance, 'items_sold')}</td>
-                <td className="cell-number">{creatorMetric(performance, 'items_refunded')}</td>
+                <td className="cell-number"><div className="booking-product-summary"><strong>{creatorMetric(performance, 'items_sold')} <span>{t('booking.itemsSold')}</span></strong><small>{creatorMetric(performance, 'items_refunded')} {t('booking.refundedShort')}</small></div></td>
                 <td className="cell-number booking-samples-column">{creatorMetric(performance, 'samples_shipped')}</td>
                 <td className="cell-number">{creatorMetric(performance, 'estimated_commission', { money: true })}</td>
                 <td className="cell-actions">
@@ -752,7 +751,7 @@ const BookingManagement = ({ heroTitle }) => {
                   </div>
                 </td>
               </tr>
-              {expanded ? <tr className="booking-video-detail-row"><td colSpan={10}><div className="booking-video-expansion">
+              {expanded ? <tr className="booking-video-detail-row"><td colSpan={9}><div className="booking-video-expansion">
                 {bookingVideos.length ? <div className="booking-video-expansion__list">{bookingVideos.map((video, videoIndex) => {
                   const latest = latestBookingVideoSnapshot(video);
                   const social = bookingVideoSocialMetrics(latest);
@@ -783,7 +782,7 @@ const BookingManagement = ({ heroTitle }) => {
                 })}</div> : <div className="empty-state empty-state--compact">{t('booking.awaitingVideo')}</div>}
               </div></td></tr> : null}
               </React.Fragment>;
-            }) : <tr><td colSpan={10}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
+            }) : <tr><td colSpan={9}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
           </tbody>
         </table></div>
       </section>
