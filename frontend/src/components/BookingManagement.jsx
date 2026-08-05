@@ -31,6 +31,12 @@ const performanceOf = (booking) => Object.prototype.hasOwnProperty.call(booking 
   ? booking.reference_performance
   : snapshotOf(booking).performance || null;
 const videoMatchOf = (booking) => snapshotOf(booking).video_match || null;
+const bookingVideosOf = (booking) => Array.isArray(booking?.booking_videos) ? booking.booking_videos : [];
+const latestBookingVideoSnapshot = (video) => [...(video?.performance_snapshots || [])]
+  .sort((left, right) => (
+    String(right.snapshot_date || '').localeCompare(String(left.snapshot_date || ''))
+    || new Date(right.synced_at || 0) - new Date(left.synced_at || 0)
+  ))[0] || null;
 const finiteNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -152,6 +158,7 @@ const BookingManagement = ({ heroTitle }) => {
   const [updatingId, setUpdatingId] = useState(null);
   const [matchingVideoId, setMatchingVideoId] = useState(null);
   const [videoMatchDialog, setVideoMatchDialog] = useState(null);
+  const [expandedBookingId, setExpandedBookingId] = useState(null);
   const [manualVideoUrl, setManualVideoUrl] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [detailCost, setDetailCost] = useState('');
@@ -483,12 +490,15 @@ const BookingManagement = ({ heroTitle }) => {
           <tbody>
             {loading ? <tr><td colSpan={6}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
               const performance = performanceOf(booking);
-              const videoMatch = videoMatchOf(booking);
-              return <tr key={booking.id}>
+              const bookingVideos = bookingVideosOf(booking);
+              const videoCount = bookingVideos.length || Number(booking.actual_performance?.video_count || 0);
+              const expanded = String(expandedBookingId) === String(booking.id);
+              return <React.Fragment key={booking.id}>
+              <tr className={expanded ? 'booking-row booking-row--expanded' : 'booking-row'}>
                 <td><div className="booking-koc-identity"><TargetKocAvatar src={booking.creator_avatar_url} name={booking.creator_name || booking.creator_username} /><span><strong>{booking.creator_name || booking.creator_username || 'KOC'}</strong><small>@{booking.creator_username}</small></span></div></td>
                 <td>{renderPerformance(performance)}</td>
                 <td className="cell-number"><strong>{formatMoney(booking.total_cost ?? booking.booking_cost, booking.currency)}</strong></td>
-                <td>{booking.video_platform_id ? <div className="booking-performance-cell"><strong>{t('booking.videoLinked')}</strong>{booking.video_url ? <a href={booking.video_url} target="_blank" rel="noreferrer">{videoMatch?.title || booking.video_platform_id} ↗</a> : <small>{videoMatch?.title || booking.video_platform_id}</small>}<small>{formatDate(booking.posted_at)}</small><button className="booking-video-refresh" type="button" disabled={matchingVideoId === booking.id} onClick={() => findBookingVideo(booking)}>{matchingVideoId === booking.id ? t('booking.refreshingVideo') : t('booking.refreshVideo')}</button></div> : <button className="button button--small button--ghost" type="button" disabled={matchingVideoId === booking.id} onClick={() => findBookingVideo(booking)}>{matchingVideoId === booking.id ? t('booking.findingVideo') : t('booking.findVideo')}</button>}</td>
+                <td><button className="booking-video-count" type="button" aria-expanded={expanded} onClick={() => setExpandedBookingId((current) => String(current) === String(booking.id) ? null : booking.id)}><span className={`sidebar__chevron${expanded ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" /><strong>{t('booking.videosCount', { count: videoCount })}</strong></button></td>
                 <td>{renderActualPerformance(booking)}</td>
                 <td className="cell-actions">
                   <div className="action-menu booking-action-menu">
@@ -544,7 +554,18 @@ const BookingManagement = ({ heroTitle }) => {
                     ) : null}
                   </div>
                 </td>
-              </tr>;
+              </tr>
+              {expanded ? <tr className="booking-video-detail-row"><td colSpan={6}><div className="booking-video-expansion">
+                <div className="booking-video-expansion__header"><strong>{t('booking.bookingVideos')}</strong><button className="button button--small button--ghost" type="button" disabled={matchingVideoId === booking.id} onClick={() => findBookingVideo(booking)}>{matchingVideoId === booking.id ? t('booking.refreshingVideo') : videoCount ? t('booking.refreshVideo') : t('booking.findVideo')}</button></div>
+                {bookingVideos.length ? <div className="booking-video-expansion__list">{bookingVideos.map((video) => {
+                  const latest = latestBookingVideoSnapshot(video);
+                  return <article className="booking-video-expansion__item" key={video.id || video.platform_video_id}>
+                    <div>{video.video_url ? <a href={video.video_url} target="_blank" rel="noreferrer"><strong>{video.title || video.platform_video_id}</strong></a> : <strong>{video.title || video.platform_video_id}</strong>}<small>ID: {video.platform_video_id} · {formatDate(video.posted_at)}</small></div>
+                    <div><strong>{latest ? formatMoney(latest.gross_gmv, latest.currency || booking.currency) : '—'}</strong><small>{latest ? `${formatNumber(latest.items_sold)} ${t('booking.itemsSold')} · ${formatNumber(latest.views)} ${t('booking.views')}` : t('booking.awaitingFirstSync')}</small></div>
+                  </article>;
+                })}</div> : <div className="empty-state empty-state--compact">{t('booking.awaitingVideo')}</div>}
+              </div></td></tr> : null}
+              </React.Fragment>;
             }) : <tr><td colSpan={6}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
           </tbody>
         </table></div>

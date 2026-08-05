@@ -479,6 +479,41 @@
   outline: 3px solid color-mix(in srgb, var(--color-accent-strong) 16%, transparent);
 }
 
+.creator-filter-dropdown__menu {
+  padding-top: 0;
+}
+
+.creator-filter-dropdown__search {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  padding: 8px 2px 6px;
+  background: var(--color-surface);
+}
+
+.creator-filter-dropdown__search input {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.creator-filter-dropdown__search input:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.creator-filter-dropdown__empty {
+  padding: 14px 10px;
+  color: var(--color-muted);
+  font-size: 0.84rem;
+  text-align: center;
+}
+
 .shop-analytics__table.video-export-table {
   min-width: 1480px;
   table-layout: auto;

@@ -1,11 +1,12 @@
 const { Op } = require('sequelize');
 const {
+  Booking,
   BookingVideo,
   BookingVideoPerformanceSnapshot,
+  TikTokCreatorPerformanceExport,
   TikTokShop,
+  TikTokVideoPerformanceSnapshot,
 } = require('../models');
-const { getShopVideoPerformance } = require('./tiktokShopService');
-const { isDemoAuthorization, sellerAffiliateFixture } = require('../lib/tiktokDemoFixtures');
 
 const dateOnly = (value = new Date()) => new Date(value).toISOString().slice(0, 10);
 const shiftDate = (value, days) => {
@@ -24,22 +25,29 @@ const postedAtOf = (video) => {
   const parsed = new Date(/[zZ]|[+-]\d\d:\d\d$/.test(normalized) ? normalized : `${normalized}Z`);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 };
-const metricOf = (video) => {
-  const gmv = video?.gmv && typeof video.gmv === 'object'
-    ? video.gmv
-    : { amount: video?.gmv, currency: null };
-  return {
-    gross_gmv: numberOrZero(gmv?.amount),
-    refunded_gmv: null,
-    net_gmv: null,
-    orders: numberOrZero(video?.sku_orders ?? video?.orders),
-    items_sold: numberOrZero(video?.items_sold ?? video?.units_sold),
-    views: numberOrZero(video?.views ?? video?.video_views),
-    ctr: video?.click_through_rate ?? video?.ctr ?? null,
-    currency: gmv?.currency || null,
-    raw_metrics: video,
-  };
+const exportDurationDays = (exportRecord) => {
+  const start = Date.parse(`${exportRecord?.start_date}T00:00:00.000Z`);
+  const end = Date.parse(`${exportRecord?.end_date}T00:00:00.000Z`);
+  return Number.isFinite(start) && Number.isFinite(end) ? Math.round((end - start) / 86400000) : null;
 };
+
+const metricOfAffiliateSnapshot = (snapshot) => ({
+  gross_gmv: numberOrZero(snapshot.creator_attributed_gmv),
+  refunded_gmv: null,
+  net_gmv: null,
+  orders: numberOrZero(snapshot.attributed_orders),
+  items_sold: numberOrZero(snapshot.attributed_items_sold),
+  views: numberOrZero(snapshot.video_views),
+  ctr: snapshot.ctr ?? null,
+  currency: snapshot.raw_metrics?.detail?.performance?.intervals?.[0]?.sales?.overall?.gmv?.currency
+    || snapshot.raw_metrics?.list?.gmv?.currency
+    || null,
+  raw_metrics: {
+    source: 'AFFILIATE_VIDEO_PERFORMANCE',
+    export_id: snapshot.export_id,
+    video: snapshot.raw_metrics,
+  },
+});
 
 const bookingVideoInclude = [{
   model: BookingVideoPerformanceSnapshot,
@@ -84,47 +92,121 @@ const recordBookingVideoMatch = async (booking, candidate, source, now = new Dat
   return video;
 };
 
-const loadVideoPerformance = async (shop, bookingVideo) => {
-  const queryEnd = shiftDate(
-    new Date() < new Date(`${bookingVideo.attribution_end}T23:59:59.999Z`)
-      ? new Date()
-      : bookingVideo.attribution_end,
-    1,
-  );
-  let pageToken = null;
-  const configuredMaxPages = Number(process.env.BOOKING_VIDEO_SYNC_MAX_PAGES);
-  const maxPages = Number.isInteger(configuredMaxPages)
-    ? Math.min(500, Math.max(1, configuredMaxPages))
-    : 200;
-  for (let page = 0; page < maxPages; page += 1) {
-    const payload = isDemoAuthorization(shop.authorization)
-      ? sellerAffiliateFixture('shop-video-performance', shop, {
-        account_type: 'AFFILIATE_ACCOUNTS',
-        currency: 'LOCAL',
-      })
-      : await getShopVideoPerformance({
-        authorization: shop.authorization,
-        shopCipher: shop.cipher,
-        startDate: bookingVideo.attribution_start,
-        endDate: queryEnd,
-        currency: 'LOCAL',
-        accountType: 'AFFILIATE_ACCOUNTS',
-        sortField: 'gmv',
-        sortOrder: 'DESC',
-        pageSize: 100,
-        pageToken,
-      });
-    const matched = (payload.data?.videos || []).find((video) => (
-      String(video.id || video.video_id) === String(bookingVideo.platform_video_id)
-    ));
-    if (matched) return matched;
-    pageToken = payload.data?.next_page_token || null;
-    if (!pageToken) break;
-    if (page === maxPages - 1) {
-      throw new Error(`Booking video sync reached the safety limit of ${maxPages} pages before finding the end of TikTok pagination.`);
-    }
+const loadAffiliateVideoPerformance = async (shopId, videoId) => {
+  const recentExports = await TikTokCreatorPerformanceExport.findAll({
+    where: {
+      shop_id: shopId,
+      module_type: 'VIDEO_API',
+      status: 'SUCCEEDED',
+    },
+    attributes: ['id', 'start_date', 'end_date'],
+    order: [['end_date', 'DESC'], ['created_at', 'DESC']],
+    limit: 20,
+  });
+  const findSnapshot = async (days) => {
+    const exportIds = recentExports
+      .filter((record) => exportDurationDays(record) === days)
+      .map((record) => record.id);
+    if (!exportIds.length) return null;
+    return TikTokVideoPerformanceSnapshot.findOne({
+      where: {
+        export_id: { [Op.in]: exportIds },
+        video_id: String(videoId),
+      },
+      order: [['export_id', 'DESC']],
+    });
+  };
+  return (await findSnapshot(30)) || findSnapshot(7);
+};
+
+const affiliateCandidateFromSnapshot = (snapshot) => {
+  const source = snapshot.raw_metrics?.list || {};
+  const postedAt = postedAtOf({ video_post_time: snapshot.post_date, post_time: snapshot.post_date });
+  return {
+    id: String(snapshot.video_id),
+    title: snapshot.video_title || source.title || snapshot.video_id,
+    username: usernameOf(source),
+    posted_at: postedAt,
+    video_url: snapshot.video_link || null,
+    gmv: {
+      amount: numberOrZero(snapshot.creator_attributed_gmv),
+      currency: snapshot.raw_metrics?.detail?.performance?.intervals?.[0]?.sales?.overall?.gmv?.currency
+        || source.gmv?.currency
+        || null,
+    },
+    views: numberOrZero(snapshot.video_views),
+    orders: numberOrZero(snapshot.attributed_orders),
+    items_sold: numberOrZero(snapshot.attributed_items_sold),
+    ctr: snapshot.ctr ?? null,
+  };
+};
+
+const autoLinkBookingVideos = async (booking, now = new Date()) => {
+  const username = String(booking.creator_username || '').trim().replace(/^@+/, '').toLowerCase();
+  if (!username || !booking.target_shop_id) return { status: 'missing_identity' };
+  const recentExports = await TikTokCreatorPerformanceExport.findAll({
+    where: {
+      shop_id: booking.target_shop_id,
+      module_type: 'VIDEO_API',
+      status: 'SUCCEEDED',
+    },
+    attributes: ['id', 'start_date', 'end_date'],
+    order: [['end_date', 'DESC'], ['created_at', 'DESC']],
+    limit: 20,
+  });
+  const exportRecord = recentExports.find((record) => exportDurationDays(record) === 30)
+    || recentExports.find((record) => exportDurationDays(record) === 7);
+  if (!exportRecord) return { status: 'missing_snapshot' };
+  const snapshots = await TikTokVideoPerformanceSnapshot.findAll({
+    where: {
+      export_id: exportRecord.id,
+      video_link: { [Op.iLike]: `%/@${username}/video/%` },
+    },
+    order: [['post_date', 'DESC'], ['id', 'DESC']],
+  });
+  const candidates = snapshots.map(affiliateCandidateFromSnapshot);
+  if (!candidates.length) return { status: 'no_match', candidate_count: 0 };
+  const selected = candidates[0];
+  const mappingSource = 'AFFILIATE_VIDEO_PERFORMANCE';
+  await booking.update({
+    video_platform_id: selected.id,
+    video_url: selected.video_url,
+    posted_at: selected.posted_at,
+    evaluation_snapshot: {
+      ...booking.evaluation_snapshot,
+      video_match: {
+        source: mappingSource,
+        matched_at: new Date().toISOString(),
+        video_count: candidates.length,
+        ...selected,
+      },
+    },
+    updated_at: now,
+  });
+  for (const candidate of candidates) {
+    await recordBookingVideoMatch(booking, candidate, mappingSource, now);
   }
-  return null;
+  return { status: 'matched', video_id: selected.id, video_count: candidates.length };
+};
+
+const autoLinkCreatorVideos = async (now, signal) => {
+  const bookings = await Booking.findAll({
+    where: {
+      evaluation_snapshot: { [Op.not]: null },
+      target_shop_id: { [Op.not]: null },
+    },
+    order: [['id', 'ASC']],
+  });
+  const results = [];
+  for (const booking of bookings) {
+    if (signal?.aborted) {
+      const error = new Error('Job was stopped by the user.');
+      error.name = 'AbortError';
+      throw error;
+    }
+    results.push({ booking_id: booking.id, ...(await autoLinkBookingVideos(booking, now)) });
+  }
+  return results;
 };
 
 const syncBookingVideo = async (bookingVideo, { shop: suppliedShop, now = new Date(), signal } = {}) => {
@@ -134,34 +216,34 @@ const syncBookingVideo = async (bookingVideo, { shop: suppliedShop, now = new Da
     throw error;
   }
   const booking = bookingVideo.booking;
-  const shop = suppliedShop || await TikTokShop.findByPk(booking?.target_shop_id, {
-    include: [{ association: 'authorization' }],
-  });
-  if (!shop?.authorization) throw new Error('TikTok Shop is not connected.');
+  const shop = suppliedShop || await TikTokShop.findByPk(booking?.target_shop_id);
+  if (!shop) throw new Error('Booking is not linked to a TikTok Shop.');
   try {
-    const rawVideo = await loadVideoPerformance(shop, bookingVideo);
-    if (!rawVideo) throw new Error('Video was not returned by TikTok Shop Video Performance.');
-    const metrics = metricOf(rawVideo);
-    const detectedPostedAt = postedAtOf(rawVideo);
+    const affiliateSnapshot = await loadAffiliateVideoPerformance(shop.id, bookingVideo.platform_video_id);
+    if (!affiliateSnapshot) {
+      throw new Error('Video is not available in the latest Affiliate Video Performance snapshots.');
+    }
+    const sourceVideo = affiliateSnapshot.raw_metrics?.list || {};
+    const metrics = metricOfAffiliateSnapshot(affiliateSnapshot);
+    const detectedPostedAt = postedAtOf({
+      video_post_time: affiliateSnapshot.post_date,
+      post_time: affiliateSnapshot.post_date,
+    });
     await BookingVideoPerformanceSnapshot.upsert({
       booking_video_id: bookingVideo.id,
       snapshot_date: dateOnly(now),
       ...metrics,
       synced_at: now,
     });
-    const effectiveAttributionEnd = detectedPostedAt
-      ? shiftDate(detectedPostedAt, 30)
-      : bookingVideo.attribution_end;
-    const finalized = dateOnly(now) > effectiveAttributionEnd;
     await bookingVideo.update({
-      creator_username: usernameOf(rawVideo) || bookingVideo.creator_username,
-      title: rawVideo.title || bookingVideo.title,
+      creator_username: usernameOf(sourceVideo) || bookingVideo.creator_username,
+      title: affiliateSnapshot.video_title || sourceVideo.title || bookingVideo.title,
       posted_at: detectedPostedAt || bookingVideo.posted_at,
       ...(detectedPostedAt ? {
         attribution_start: dateOnly(detectedPostedAt),
-        attribution_end: effectiveAttributionEnd,
+        attribution_end: shiftDate(detectedPostedAt, 30),
       } : {}),
-      status: finalized ? 'FINALIZED' : 'COLLECTING',
+      status: 'COLLECTING',
       last_synced_at: now,
       last_sync_error: null,
       updated_at: now,
@@ -179,6 +261,7 @@ const syncBookingVideo = async (bookingVideo, { shop: suppliedShop, now = new Da
 };
 
 const syncActiveBookingVideos = async ({ signal, now = new Date() } = {}) => {
+  const autoLinked = await autoLinkCreatorVideos(now, signal);
   const videos = await BookingVideo.findAll({
     where: {
       status: { [Op.in]: ['COLLECTING', 'SYNC_FAILED'] },
@@ -192,16 +275,6 @@ const syncActiveBookingVideos = async ({ signal, now = new Date() } = {}) => {
       const error = new Error('Job was stopped by the user.');
       error.name = 'AbortError';
       throw error;
-    }
-    if (video.attribution_end < dateOnly(now)) {
-      await video.update({ status: 'FINALIZED', updated_at: now });
-      results.push({
-        booking_video_id: video.id,
-        platform_video_id: video.platform_video_id,
-        status: 'SUCCEEDED',
-        finalized: true,
-      });
-      continue;
     }
     try {
       results.push(await syncBookingVideo(video, { now, signal }));
@@ -219,6 +292,7 @@ const syncActiveBookingVideos = async ({ signal, now = new Date() } = {}) => {
     total: results.length,
     succeeded: results.filter((item) => item.status === 'SUCCEEDED').length,
     failed: results.filter((item) => item.status === 'FAILED').length,
+    auto_linked: autoLinked,
     results,
   };
 };
@@ -275,5 +349,12 @@ module.exports = {
   serializeBookingWithActual,
   syncActiveBookingVideos,
   syncBookingVideo,
-  __test: { dateOnly, shiftDate, metricOf, latestSnapshot },
+  __test: {
+    dateOnly,
+    shiftDate,
+    metricOfAffiliateSnapshot,
+    exportDurationDays,
+    affiliateCandidateFromSnapshot,
+    latestSnapshot,
+  },
 };

@@ -1,7 +1,48 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { calculateActualPerformance } = require('../src/services/bookingVideoPerformanceService');
+const {
+  calculateActualPerformance,
+  __test: { affiliateCandidateFromSnapshot, exportDurationDays, metricOfAffiliateSnapshot },
+} = require('../src/services/bookingVideoPerformanceService');
+
+test('booking maps the 30-day Affiliate Video snapshot metrics', () => {
+  assert.equal(exportDurationDays({ start_date: '2026-07-06', end_date: '2026-08-05' }), 30);
+  assert.equal(exportDurationDays({ start_date: '2026-07-29', end_date: '2026-08-05' }), 7);
+  const result = metricOfAffiliateSnapshot({
+    export_id: 73,
+    creator_attributed_gmv: '1734.58',
+    attributed_orders: 8,
+    attributed_items_sold: 8,
+    video_views: 12000,
+    ctr: '0.1234',
+    raw_metrics: { list: { gmv: { currency: 'MYR' } } },
+  });
+  assert.equal(result.gross_gmv, 1734.58);
+  assert.equal(result.orders, 8);
+  assert.equal(result.items_sold, 8);
+  assert.equal(result.views, 12000);
+  assert.equal(result.currency, 'MYR');
+  assert.equal(result.raw_metrics.source, 'AFFILIATE_VIDEO_PERFORMANCE');
+});
+
+test('Affiliate Video snapshot becomes a booking video candidate', () => {
+  const candidate = affiliateCandidateFromSnapshot({
+    video_id: '7668576967792397589',
+    video_title: 'Actiscar video',
+    post_date: '2026-07-31 14:35:18',
+    video_link: 'https://www.tiktok.com/@drhanafee/video/7668576967792397589',
+    creator_attributed_gmv: '125.50',
+    attributed_orders: 2,
+    attributed_items_sold: 3,
+    video_views: 1404,
+    raw_metrics: { list: { creator: { user_name: 'drhanafee' }, gmv: { currency: 'MYR' } } },
+  });
+  assert.equal(candidate.id, '7668576967792397589');
+  assert.equal(candidate.username, 'drhanafee');
+  assert.equal(candidate.gmv.amount, 125.5);
+  assert.equal(candidate.posted_at, '2026-07-31T14:35:18.000Z');
+});
 
 test('actual booking performance uses latest snapshot and does not invent Net GMV', () => {
   const result = calculateActualPerformance({

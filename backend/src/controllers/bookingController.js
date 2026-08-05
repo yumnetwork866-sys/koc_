@@ -160,7 +160,12 @@ const normalizeCachedVideoCandidate = (videoInstance) => {
 const bookingVideoDateRange = (booking, now = new Date()) => {
   const earliest = new Date(now);
   earliest.setUTCDate(earliest.getUTCDate() - 89);
-  const bookingDate = new Date(booking.created_at || booking.evaluation_snapshot?.recorded_at || earliest);
+  const bookingDate = new Date(
+    booking.evaluation_snapshot?.collaboration?.start_at
+      || booking.created_at
+      || booking.evaluation_snapshot?.recorded_at
+      || earliest,
+  );
   const start = bookingDate > earliest ? bookingDate : earliest;
   const end = new Date(now);
   end.setUTCDate(end.getUTCDate() + 1);
@@ -334,34 +339,50 @@ const benchmarkPerformanceOrder = [
 ];
 
 const enrichPerformanceViews = async (performance) => {
-  if (!performance || performance.video_views !== null && performance.video_views !== undefined) return performance;
+  if (!performance) return performance;
   if (!sequelize?.query || !performance.shop_id || !performance.username) return performance;
+  const periodDays = performance.window_type === 'PAST_7_DAYS' ? 7
+    : performance.window_type === 'PAST_30_DAYS' ? 30 : null;
+  if (!periodDays) return performance;
   const rows = await sequelize.query(`
-    SELECT SUM(latest.views)::bigint AS video_views
-    FROM shop_videos video
-    JOIN LATERAL (
-      SELECT snapshot.views
-      FROM shop_video_performance_snapshots snapshot
-      WHERE snapshot.shop_video_id = video.id
-      ORDER BY snapshot.snapshot_date DESC, snapshot.synced_at DESC, snapshot.id DESC
+    WITH latest_export AS (
+      SELECT id
+      FROM tiktok_creator_performance_exports
+      WHERE shop_id = :shopId
+        AND module_type = 'VIDEO_API'
+        AND status = 'SUCCEEDED'
+        AND end_date - start_date = :periodDays
+      ORDER BY end_date DESC, created_at DESC, id DESC
       LIMIT 1
-    ) latest ON TRUE
-    WHERE video.shop_id = :shopId
-      AND LOWER(video.creator_username) = LOWER(:username)
-      AND video.posted_at::date BETWEEN :startDate AND :endDate
+    )
+    SELECT
+      SUM(video.video_views)::bigint AS video_views,
+      SUM(video.product_impressions)::bigint AS product_impressions,
+      SUM(video.product_clicks)::bigint AS product_clicks
+    FROM tiktok_video_performance_snapshots video
+    JOIN latest_export export_record ON export_record.id = video.export_id
+    WHERE LOWER(COALESCE(
+      video.raw_metrics->'list'->'creator'->>'user_name',
+      video.raw_metrics->'list'->>'username',
+      ''
+    )) = LOWER(:username)
   `, {
     replacements: {
       shopId: performance.shop_id,
       username: performance.username,
-      startDate: performance.start_date,
-      endDate: performance.end_date,
+      periodDays,
     },
     type: QueryTypes.SELECT,
   });
-  const catalogViews = rows[0]?.video_views;
-  return catalogViews === null || catalogViews === undefined
-    ? performance
-    : { ...performance, video_views: catalogViews, video_views_source: 'SHOP_VIDEO_CATALOG' };
+  const videoMetrics = rows[0] || {};
+  if (videoMetrics.video_views === null || videoMetrics.video_views === undefined) return performance;
+  return {
+    ...performance,
+    video_views: videoMetrics.video_views,
+    product_impressions: videoMetrics.product_impressions,
+    product_clicks: videoMetrics.product_clicks,
+    video_views_source: 'AFFILIATE_VIDEO_PERFORMANCE',
+  };
 };
 
 const addReferencePerformance = async (bookings, performanceWindow) => {

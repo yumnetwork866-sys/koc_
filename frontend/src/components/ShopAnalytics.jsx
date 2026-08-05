@@ -123,6 +123,168 @@ const CreatorAvatar = ({ src, name }) => {
   return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
 };
 
+const CreatorDropdownAvatar = ({ creator, fallbackLabel }) => {
+  const [failed, setFailed] = useState(false);
+  const src = creator?.avatarUrl;
+  useEffect(() => setFailed(false), [src]);
+  return (
+    <span className={`shop-dropdown__avatar${src && !failed ? '' : ' shop-dropdown__avatar--fallback'}`} aria-hidden="true">
+      {src && !failed
+        ? <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+        : String(creator?.name || creator?.username || fallbackLabel || 'C').trim().charAt(0).toUpperCase()}
+    </span>
+  );
+};
+
+const CreatorDropdown = ({
+  id, options, value, onChange, disabled, allLabel, searchPlaceholder, noResultsLabel,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const rootRef = useRef(null);
+  const menuRef = useRef(null);
+  const searchRef = useRef(null);
+  const selectedCreator = options.find((creator) => creator.value === value) || null;
+  const normalizedQuery = query.trim().replace(/^@+/, '').toLocaleLowerCase();
+  const filteredOptions = normalizedQuery
+    ? options.filter((creator) => [creator.name, creator.username]
+      .filter(Boolean)
+      .some((text) => String(text).toLocaleLowerCase().includes(normalizedQuery)))
+    : options;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (event.key === 'Escape' || (event.type === 'pointerdown' && !rootRef.current?.contains(event.target))) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open) window.requestAnimationFrame(() => searchRef.current?.focus());
+  }, [open]);
+
+  const focusOption = (direction) => {
+    window.requestAnimationFrame(() => {
+      const menuOptions = [...(menuRef.current?.querySelectorAll('[role="option"]') || [])];
+      if (!menuOptions.length) return;
+      const focusedIndex = menuOptions.indexOf(document.activeElement);
+      const selectedIndex = menuOptions.findIndex((option) => option.getAttribute('aria-selected') === 'true');
+      const targetIndex = focusedIndex >= 0
+        ? (focusedIndex + direction + menuOptions.length) % menuOptions.length
+        : selectedIndex >= 0 ? selectedIndex : direction < 0 ? menuOptions.length - 1 : 0;
+      menuOptions[targetIndex]?.focus();
+    });
+  };
+
+  const handleKeyDown = (event) => {
+    const fromSearch = event.target === searchRef.current;
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)
+      || (fromSearch && ['Home', 'End'].includes(event.key))) return;
+    event.preventDefault();
+    if (!open) {
+      setOpen(true);
+      focusOption(0);
+      return;
+    }
+    if (event.key === 'Home' || event.key === 'End') {
+      window.requestAnimationFrame(() => {
+        const menuOptions = [...(menuRef.current?.querySelectorAll('[role="option"]') || [])];
+        menuOptions[event.key === 'Home' ? 0 : menuOptions.length - 1]?.focus();
+      });
+      return;
+    }
+    focusOption(event.key === 'ArrowDown' ? 1 : -1);
+  };
+
+  const choose = (nextValue) => {
+    onChange(nextValue);
+    setOpen(false);
+  };
+
+  const renderCopy = (creator) => (
+    <span className="shop-dropdown__copy">
+      <strong>{creator?.name || (creator?.username ? `@${creator.username}` : allLabel)}</strong>
+      {creator?.name && creator?.username ? <small>@{creator.username}</small> : null}
+    </span>
+  );
+
+  return (
+    <div className="shop-dropdown creator-filter-dropdown" ref={rootRef}>
+      <button
+        id={id}
+        className="shop-dropdown__trigger"
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => {
+          setQuery('');
+          setOpen((current) => !current);
+        }}
+        onKeyDown={handleKeyDown}
+      >
+        <span className="shop-dropdown__current">
+          <CreatorDropdownAvatar creator={selectedCreator} fallbackLabel={allLabel} />
+          {renderCopy(selectedCreator)}
+        </span>
+        <span className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="shop-dropdown__menu creator-filter-dropdown__menu" ref={menuRef} onKeyDown={handleKeyDown}>
+          <div className="creator-filter-dropdown__search">
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              aria-label={searchPlaceholder}
+              placeholder={searchPlaceholder}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <div role="listbox">
+            {!normalizedQuery ? (
+              <button
+                className={`shop-dropdown__option${value ? '' : ' shop-dropdown__option--active'}`}
+                type="button"
+                role="option"
+                aria-selected={!value}
+                onClick={() => choose('')}
+              >
+                <CreatorDropdownAvatar fallbackLabel={allLabel} />
+                {renderCopy(null)}
+              </button>
+            ) : null}
+            {filteredOptions.map((creator) => (
+              <button
+                className={`shop-dropdown__option${creator.value === value ? ' shop-dropdown__option--active' : ''}`}
+                type="button"
+                role="option"
+                aria-selected={creator.value === value}
+                key={creator.value}
+                onClick={() => choose(creator.value)}
+              >
+                <CreatorDropdownAvatar creator={creator} />
+                {renderCopy(creator)}
+              </button>
+            ))}
+            {normalizedQuery && !filteredOptions.length ? (
+              <div className="creator-filter-dropdown__empty">{noResultsLabel}</div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 const ProductThumbnail = ({ src }) => {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
@@ -204,6 +366,38 @@ const productsForVideo = (video, metadata = {}) => {
         || null,
     };
   });
+};
+
+const creatorForVideo = (video) => {
+  const source = video?.raw_metrics?.list || {};
+  const creator = video?.creator || source.creator || {};
+  const username = String(
+    video?.creator_username
+      || creator.user_name
+      || source.username
+      || video?.username
+      || '',
+  ).trim().replace(/^@+/, '');
+  const name = String(
+    video?.creator_name
+      || creator.nick_name
+      || creator.nickname
+      || '',
+  ).trim();
+  const avatarUrl = video?.creator_avatar_url
+    || creator.avatar_url
+    || creator.avatar
+    || source.creator_avatar_url
+    || '';
+  const normalizedUsername = username.toLocaleLowerCase();
+  const normalizedName = name.toLocaleLowerCase();
+  const key = normalizedUsername
+    ? `username:${normalizedUsername}`
+    : normalizedName ? `name:${normalizedName}` : '';
+  const label = name && normalizedName !== normalizedUsername
+    ? `${name}${username ? ` (@${username})` : ''}`
+    : username ? `@${username}` : name;
+  return { key, label, name, username, avatarUrl };
 };
 
 const dateOnly = (date) => [
@@ -317,6 +511,7 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
   const [videoReloadKey, setVideoReloadKey] = useState(0);
   const [videoPage, setVideoPage] = useState(1);
   const [videoSearch, setVideoSearch] = useState('');
+  const [videoCreator, setVideoCreator] = useState('');
   const [videoProductMetadata, setVideoProductMetadata] = useState({});
   const videoProductRequestsRef = useRef(new Set());
   const [videoAccountType, setVideoAccountType] = useState('LINKED_ACCOUNTS');
@@ -630,6 +825,25 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
     () => Array.isArray(videoAnalytics?.videos) ? videoAnalytics.videos : [],
     [videoAnalytics],
   );
+  const videoCreatorOptions = useMemo(() => {
+    const creators = new Map();
+    videoRows.forEach((video) => {
+      const creator = creatorForVideo(video);
+      if (!creator.key) return;
+      const current = creators.get(creator.key);
+      if (!current || (!current.avatarUrl && creator.avatarUrl)) {
+        creators.set(creator.key, { ...creator, value: creator.key });
+      }
+    });
+    return [...creators.values()]
+      .sort((left, right) => left.label.localeCompare(right.label, locale));
+  }, [locale, videoRows]);
+  useEffect(() => {
+    if (videoCreator && !videoCreatorOptions.some((option) => option.value === videoCreator)) {
+      setVideoCreator('');
+      setVideoPage(1);
+    }
+  }, [videoCreator, videoCreatorOptions]);
   useEffect(() => {
     videoProductRequestsRef.current.clear();
     setVideoProductMetadata({});
@@ -655,16 +869,21 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
       setVideoProductMetadata((current) => ({ ...sourceMetadata, ...current }));
     }
   }, [selectedShopId, videoExportOnly, videoRows]);
-  const videoTotals = useMemo(() => videoRows.reduce((total, video) => ({
+  const creatorFilteredVideoRows = useMemo(() => (
+    videoExportOnly && videoCreator
+      ? videoRows.filter((video) => creatorForVideo(video).key === videoCreator)
+      : videoRows
+  ), [videoCreator, videoExportOnly, videoRows]);
+  const videoTotals = useMemo(() => creatorFilteredVideoRows.reduce((total, video) => ({
     gmv: total.gmv + moneyValue(video.gmv),
     views: total.views + numericValue(video.views ?? video.video_views),
     orders: total.orders + numericValue(video.sku_orders ?? video.orders),
     itemsSold: total.itemsSold + numericValue(video.items_sold ?? video.units_sold),
-  }), { gmv: 0, views: 0, orders: 0, itemsSold: 0 }), [videoRows]);
+  }), { gmv: 0, views: 0, orders: 0, itemsSold: 0 }), [creatorFilteredVideoRows]);
   const filteredVideoRows = useMemo(() => {
     const terms = videoSearch.trim().toLocaleLowerCase(locale).split(/\s+/).filter(Boolean);
-    if (!videoExportOnly || !terms.length) return videoRows;
-    return videoRows.filter((video) => {
+    if (!videoExportOnly || !terms.length) return creatorFilteredVideoRows;
+    return creatorFilteredVideoRows.filter((video) => {
       const source = video.raw_metrics?.list || {};
       const creator = source.creator || video.creator || {};
       const haystack = [
@@ -684,7 +903,7 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
       ].filter(Boolean).join(' ').toLocaleLowerCase(locale);
       return terms.every((term) => haystack.includes(term));
     });
-  }, [locale, videoExportOnly, videoRows, videoSearch]);
+  }, [creatorFilteredVideoRows, locale, videoExportOnly, videoSearch]);
   const videoPageCount = Math.max(1, Math.ceil(filteredVideoRows.length / VIDEO_EXPORT_PAGE_SIZE));
   const paginatedVideoRows = useMemo(() => (videoExportOnly
     ? filteredVideoRows.slice((videoPage - 1) * VIDEO_EXPORT_PAGE_SIZE, videoPage * VIDEO_EXPORT_PAGE_SIZE)
@@ -858,6 +1077,8 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
   const changeSelectedShop = (nextShopId) => {
     if (nextShopId === selectedShopId) return;
     setSnapshot(null);
+    setVideoCreator('');
+    setVideoPage(1);
     setSelectedShopId(nextShopId);
   };
 
@@ -1450,6 +1671,24 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                   </select>
                 </div>
               ) : null}
+              {videoExportOnly ? (
+                <div className="field">
+                  <label htmlFor="video-creator-filter">{t('shopAnalytics.creator')}</label>
+                  <CreatorDropdown
+                    id="video-creator-filter"
+                    options={videoCreatorOptions}
+                    value={videoCreator}
+                    disabled={videoAnalyticsLoading && !videoRows.length}
+                    allLabel={t('shopAnalytics.allCreators')}
+                    searchPlaceholder={t('shopAnalytics.searchCreators')}
+                    noResultsLabel={t('shopAnalytics.creatorSearchNoResults')}
+                    onChange={(nextCreator) => {
+                      setVideoCreator(nextCreator);
+                      setVideoPage(1);
+                    }}
+                  />
+                </div>
+              ) : null}
               <div className="field">
                 <label htmlFor="video-analytics-period">{t('shopAnalytics.period')}</label>
                 <select id="video-analytics-period" value={periodPreset} onChange={changePeriodPreset}>
@@ -1492,7 +1731,7 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                 </article>
                 <article className="stat-card shop-analytics__stat">
                   <p className="stat-card__label">{t('shopAnalytics.videos')}</p>
-                  <p className="stat-card__value">{videoAnalyticsLoading && !videoRows.length ? '—' : formatNumber(videoAnalytics?.total_count ?? videoRows.length)}</p>
+                  <p className="stat-card__value">{videoAnalyticsLoading && !videoRows.length ? '—' : formatNumber(videoCreator ? creatorFilteredVideoRows.length : videoAnalytics?.total_count ?? videoRows.length)}</p>
                 </article>
                 <article className="stat-card shop-analytics__stat">
                   <p className="stat-card__label">{t('shopAnalytics.videoViews')}</p>
