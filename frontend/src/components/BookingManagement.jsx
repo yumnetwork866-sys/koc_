@@ -33,11 +33,6 @@ const targetKocKey = (creator) => {
   const identity = creator.creator_open_id || `username:${String(creator.username || '').toLocaleLowerCase()}`;
   return `${creator.shop_id}:${identity}`;
 };
-const targetKocLabel = (creator) => {
-  if (!creator) return '';
-  const name = creator.nickname || creator.username || 'KOC';
-  return `${name}${creator.username ? ` (@${creator.username})` : ''}`;
-};
 const snapshotOf = (booking) => booking?.evaluation_snapshot || {};
 const collaborationOf = (booking) => snapshotOf(booking).collaboration || {};
 const performanceOf = (booking) => Object.prototype.hasOwnProperty.call(booking || {}, 'reference_performance')
@@ -404,14 +399,15 @@ const TargetKocCombobox = ({
   );
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const selectedName = selectedCreator?.nickname || selectedCreator?.username || '';
 
-  useEffect(() => setQuery(targetKocLabel(selectedCreator)), [selectedCreator]);
+  useEffect(() => setQuery(selectedName), [selectedName]);
   useEffect(() => {
     if (!open) return undefined;
     const close = (event) => {
       if (event.key === 'Escape' || (event.type === 'pointerdown' && !rootRef.current?.contains(event.target))) {
         setOpen(false);
-        setQuery(targetKocLabel(selectedCreator));
+        setQuery(selectedName);
       }
     };
     window.addEventListener('pointerdown', close);
@@ -420,11 +416,22 @@ const TargetKocCombobox = ({
       window.removeEventListener('pointerdown', close);
       window.removeEventListener('keydown', close);
     };
-  }, [open, selectedCreator]);
+  }, [open, selectedName]);
+
+  const openSearch = () => {
+    setQuery('');
+    onSearch('');
+    setOpen(true);
+  };
 
   return (
     <div className="booking-koc-combobox" ref={rootRef}>
-      <div className="booking-koc-combobox__control">
+      <div className={`booking-koc-combobox__control${selectedCreator && !open ? ' booking-koc-combobox__control--selected' : ''}`}>
+        {selectedCreator && !open ? (
+          <span className="booking-koc-combobox__selected-avatar" aria-hidden="true">
+            <TargetKocAvatar src={selectedCreator.avatar_url} name={selectedName} />
+          </span>
+        ) : null}
         <input
           type="text"
           role="combobox"
@@ -434,7 +441,7 @@ const TargetKocCombobox = ({
           value={query}
           placeholder={placeholder}
           required
-          onFocus={() => setOpen(true)}
+          onFocus={openSearch}
           onChange={(event) => {
             setQuery(event.target.value);
             onSearch(event.target.value);
@@ -442,7 +449,14 @@ const TargetKocCombobox = ({
             setOpen(true);
           }}
         />
-        <button type="button" aria-label={placeholder} aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <button type="button" aria-label={placeholder} aria-expanded={open} onClick={() => {
+          if (open) {
+            setOpen(false);
+            setQuery(selectedName);
+          } else {
+            openSearch();
+          }
+        }}>
           <span className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" />
         </button>
       </div>
@@ -455,7 +469,7 @@ const TargetKocCombobox = ({
               role="option"
               aria-selected={targetKocKey(creator) === value}
               key={targetKocKey(creator)}
-              onClick={() => { onChange(targetKocKey(creator)); setQuery(targetKocLabel(creator)); setOpen(false); }}
+              onClick={() => { onChange(targetKocKey(creator)); setQuery(creator.nickname || creator.username || ''); setOpen(false); }}
             >
               <TargetKocAvatar src={creator.avatar_url} name={creator.nickname || creator.username} />
               <span>
@@ -480,6 +494,7 @@ const BookingManagement = ({ heroTitle }) => {
   const [targetKocs, setTargetKocs] = useState([]);
   const [targetKocQuery, setTargetKocQuery] = useState('');
   const [performanceWindow, setPerformanceWindow] = useState(DEFAULT_PERFORMANCE_WINDOW);
+  const [selectedManagerKey, setSelectedManagerKey] = useState('');
   const [customRange, setCustomRange] = useState(defaultCustomRange);
   const [targetKocPage, setTargetKocPage] = useState(1);
   const [targetKocPagination, setTargetKocPagination] = useState({ page: 1, total_pages: 1 });
@@ -707,6 +722,9 @@ const BookingManagement = ({ heroTitle }) => {
       return left.manager.name.localeCompare(right.manager.name, locale);
     });
   }, [bookings, convertAmount, locale, t, users]);
+  const activeBookingGroup = bookingGroups.find((group) => group.key === selectedManagerKey)
+    || bookingGroups[0]
+    || null;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -851,17 +869,11 @@ const BookingManagement = ({ heroTitle }) => {
           <div className="field"><label htmlFor="total_cost">{t('booking.totalCost')} ({currencyLabel})</label><input id="total_cost" type="number" min="0" step={selectedCurrency === 'VND' ? '1' : '0.01'} inputMode="decimal" value={form.total_cost} onChange={(event) => setForm((current) => ({ ...current, total_cost: event.target.value }))} required /></div>
           <div className="actions"><button className="button" type="submit" disabled={saving || !selectedKoc || !form.staff_id}>{saving ? t('booking.submitting') : t('booking.evaluate')}</button></div>
         </form>
-        {selectedKoc ? (
-          <div className="booking-source-preview">
-            {selectedKoc.collaboration_id ? <div><span>{t('booking.collaboration')}</span><strong>{selectedKoc.collaboration_name || selectedKoc.collaboration_id}</strong><small>{formatCollaborationStatus(selectedKoc.collaboration_status)} · {t('booking.validUntil')} {formatDate(selectedKoc.collaboration_end_at)}</small></div> : null}
-            <div><span>{t('booking.creatorPerformance')}</span>{renderPerformance(selectedKoc.performance)}</div>
-          </div>
-        ) : null}
       </section>
 
       <section className="section-card">
-        <div className="section-card__header booking-evaluation-list-header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div><div className="booking-performance-controls"><div className="field booking-performance-period"><label htmlFor="booking-performance-window">{t('booking.performancePeriod')}</label><select id="booking-performance-window" value={performanceWindow} onChange={(event) => setPerformanceWindow(event.target.value)}><option value="PAST_7_DAYS">{t('booking.period7Days')}</option><option value="PAST_30_DAYS">{t('booking.period30Days')}</option><option value="CUSTOM">{t('booking.periodCustom')}</option></select></div>{performanceWindow === 'CUSTOM' ? <><div className="field booking-performance-date"><label htmlFor="booking-performance-start">{t('booking.startDate')}</label><input id="booking-performance-start" type="date" value={customRange.start} max={customRange.end || undefined} onChange={(event) => setCustomRange((current) => ({ ...current, start: event.target.value }))} /></div><div className="field booking-performance-date"><label htmlFor="booking-performance-end">{t('booking.endDate')}</label><input id="booking-performance-end" type="date" value={customRange.end} min={customRange.start || undefined} max={dateInputValue(new Date())} onChange={(event) => setCustomRange((current) => ({ ...current, end: event.target.value }))} /></div></> : null}</div></div>
-        {loading ? <div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div> : bookings.length ? <div className="content-performance__groups content-performance__groups--filtered booking-manager-groups">{bookingGroups.map((group) => <article className="content-performance__group booking-manager-group" key={group.key}>
+        <div className="section-card__header booking-evaluation-list-header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div><div className="booking-performance-controls">{bookingGroups.length ? <div className="field booking-manager-filter"><label>{t('booking.bookingStaff')}</label><BookingStaffSelect users={bookingGroups.map((group) => ({ id: group.key, ...group.manager }))} value={activeBookingGroup?.key || ''} onChange={(value) => { setSelectedManagerKey(value); setExpandedBookingId(null); }} placeholder={t('booking.selectStaff')} loading={false} loadingLabel={t('booking.loading')} /></div> : null}<div className="field booking-performance-period"><label htmlFor="booking-performance-window">{t('booking.performancePeriod')}</label><select id="booking-performance-window" value={performanceWindow} onChange={(event) => setPerformanceWindow(event.target.value)}><option value="PAST_7_DAYS">{t('booking.period7Days')}</option><option value="PAST_30_DAYS">{t('booking.period30Days')}</option><option value="CUSTOM">{t('booking.periodCustom')}</option></select></div>{performanceWindow === 'CUSTOM' ? <><div className="field booking-performance-date"><label htmlFor="booking-performance-start">{t('booking.startDate')}</label><input id="booking-performance-start" type="date" value={customRange.start} max={customRange.end || undefined} onChange={(event) => setCustomRange((current) => ({ ...current, start: event.target.value }))} /></div><div className="field booking-performance-date"><label htmlFor="booking-performance-end">{t('booking.endDate')}</label><input id="booking-performance-end" type="date" value={customRange.end} min={customRange.start || undefined} max={dateInputValue(new Date())} onChange={(event) => setCustomRange((current) => ({ ...current, end: event.target.value }))} /></div></> : null}</div></div>
+        {loading ? <div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div> : activeBookingGroup ? <div className="content-performance__groups content-performance__groups--filtered booking-manager-groups">{[activeBookingGroup].map((group) => <article className="content-performance__group booking-manager-group" key={group.key}>
         <div className="content-performance__group-header"><div className="booking-manager-group__identity"><TargetKocAvatar src={group.manager.avatar_url} name={group.manager.name} /><span><h3>{group.manager.name}</h3>{group.manager.email ? <small>{group.manager.email}</small> : null}</span></div></div>
         <div className="content-performance__metrics booking-manager-group__metrics">
           <span><small>{t('booking.evaluations')}</small><strong>{formatNumber(group.bookings.length)}</strong></span>

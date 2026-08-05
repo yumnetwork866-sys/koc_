@@ -158,6 +158,7 @@ async function getKpiSnapshot() {
         ORDER BY v_top.views DESC, v_top.id ASC
         LIMIT 1
       ) top_video ON true
+      WHERE u.role = 'koc'
       GROUP BY u.id, u.name, u.email, u.role, top_video.id, top_video.title, top_video.views
       ORDER BY "totalViews" DESC, "videoCount" DESC, u.id ASC
     `, { type: QueryTypes.SELECT }),
@@ -406,13 +407,16 @@ function formatBookingContext(bookings) {
 }
 
 function formatTopUsers(users) {
-  const topUsers = (users || []).slice(0, 5);
-  if (!topUsers.length) return '- Chưa có dữ liệu KOC';
+  const managedKocs = (users || []).filter((user) => user.role === 'koc').slice(0, 50);
+  if (!managedKocs.length) return '- Chưa có tài khoản role KOC trong Quản lý User';
 
-  return topUsers
+  return managedKocs
     .map((user, index) => {
+      if (!Number(user.videoCount || 0)) {
+        return `${index + 1}. ${user.name} (${user.email || 'chưa có email'}) - chưa có video được gán, chưa đủ dữ liệu đánh giá`;
+      }
       const topVideo = user.topVideo ? `${user.topVideo.title} (${Number(user.topVideo.views || 0).toLocaleString()} views)` : 'chưa có video nổi bật';
-      return `${index + 1}. ${user.name} - ${Number(user.totalViews || 0).toLocaleString()} views, ${user.videoCount || 0} video, top video: ${topVideo}`;
+      return `${index + 1}. ${user.name} (${user.email || 'chưa có email'}) - ${Number(user.totalViews || 0).toLocaleString()} views, ${user.videoCount || 0} video, trung bình ${Number(user.avgViewsPerVideo || 0).toLocaleString()} views/video, ${Number(user.over10kRate || 0)}% video trên 10.000 views, top video: ${topVideo}`;
     })
     .join('\n');
 }
@@ -502,8 +506,14 @@ function buildPrompt(message, snapshot) {
     `- Total comments: ${Number(overview.totalComments || 0).toLocaleString()}`,
     `- Total shares: ${Number(overview.totalShares || 0).toLocaleString()}`,
     '',
-    'Top KOC:',
+    'Danh sách tài khoản KOC từ Quản lý User, kèm hiệu suất video được gán:',
     formatTopUsers(snapshot.users),
+    '',
+    'Quy tắc đánh giá KOC:',
+    '- Chỉ đánh giá các tài khoản có role KOC trong Quản lý User.',
+    '- Dùng video được gán cho từng tài khoản KOC để so sánh số video, tổng views, views/video, tỷ lệ video trên 10.000 views và video nổi bật.',
+    '- Tài khoản chưa có video vẫn thuộc danh sách KOC và phải được nêu là chưa đủ dữ liệu, không được xem là hiệu suất bằng 0.',
+    '- Không dùng Booking hoặc Target Collaboration để thay thế danh sách tài khoản KOC.',
     '',
     'Báo cáo hiệu suất nhân viên tháng hiện tại từ TikTok Channel, phân bổ theo team + hashtag:',
     formatEmployeeContext(snapshot.employees),
@@ -553,22 +563,31 @@ function formatOverviewAnswer(snapshot) {
 }
 
 function formatKocAnswer(snapshot) {
-  if (snapshot.bookings?.length) return formatBookingAnswer(snapshot);
-  const topUsers = (snapshot.users || []).slice(0, 5);
-  if (!topUsers.length) {
-    return 'Chưa có đủ dữ liệu để đánh giá KOC. Bạn cần đồng bộ video và assignment trước.';
+  const kocs = (snapshot.users || []).filter((user) => user.role === 'koc');
+  if (!kocs.length) {
+    return 'Chưa có tài khoản KOC trong Quản lý User để đánh giá.';
   }
 
-  const leader = topUsers[0];
-  const challengers = topUsers.slice(1, 4);
+  const activeKocs = kocs.filter((user) => Number(user.videoCount || 0) > 0);
+  const noDataKocs = kocs.filter((user) => Number(user.videoCount || 0) === 0);
+  if (!activeKocs.length) {
+    return `Có ${kocs.length} tài khoản KOC trong Quản lý User nhưng chưa tài khoản nào có video được gán. Bạn cần kiểm tra assignment video trước khi đánh giá hiệu suất.`;
+  }
+
+  const leader = activeKocs[0];
+  const challengers = activeKocs.slice(1, 4);
   const leaderTopVideo = leader.topVideo?.title || 'chưa có top video rõ ràng';
 
   return [
-    `KOC nổi bật nhất hiện tại là ${leader.name} với ${Number(leader.totalViews || 0).toLocaleString()} views từ ${leader.videoCount || 0} video, top video là "${leaderTopVideo}".`,
+    `Đang đánh giá ${kocs.length} tài khoản KOC trong Quản lý User dựa trên các video được gán.`,
+    `${leader.name} đang dẫn đầu với ${Number(leader.totalViews || 0).toLocaleString()} views từ ${leader.videoCount || 0} video, trung bình ${Number(leader.avgViewsPerVideo || 0).toLocaleString()} views/video, tỷ lệ video trên 10.000 views là ${Number(leader.over10kRate || 0)}%; video nổi bật là "${leaderTopVideo}".`,
     challengers.length
       ? `Những KOC bám sát phía sau gồm ${challengers.map((user) => `${user.name} (${Number(user.totalViews || 0).toLocaleString()} views)`).join(', ')}.`
       : 'Hiện chưa có thêm KOC đủ dữ liệu để so sánh sâu.',
-    'Gợi ý: ưu tiên phân tích video format, chủ đề và thời điểm đăng của nhóm đầu bảng, sau đó nhân rộng cho các KOC còn lại.',
+    noDataKocs.length
+      ? `${noDataKocs.length} tài khoản KOC chưa có video được gán nên chưa đủ dữ liệu đánh giá: ${noDataKocs.slice(0, 8).map((user) => user.name).join(', ')}.`
+      : 'Tất cả tài khoản KOC đều đã có video được gán.',
+    'Gợi ý: kiểm tra assignment cho KOC chưa có dữ liệu và đối chiếu format, chủ đề, thời điểm đăng của nhóm đầu bảng.',
   ].join(' ');
 }
 
@@ -637,7 +656,7 @@ async function askAssistant(message) {
     'Không mở đầu câu trả lời bằng lời chào; đi thẳng vào nội dung.',
     'Khi phù hợp, hãy đưa ra 1 đến 3 gợi ý hành động cụ thể.',
     'Khi đánh giá nhân viên, chỉ dùng mục Báo cáo hiệu suất nhân viên từ TikTok Channel và phân bổ team/hashtag; không trộn dữ liệu Booking/KOC.',
-    'Khi đánh giá KOC, phải ưu tiên dữ liệu Booking; không được xem hiệu suất tổng của creator là doanh thu trực tiếp từ Booking.',
+    'Khi đánh giá KOC, chỉ đánh giá tài khoản role KOC trong Quản lý User bằng hiệu suất các video được gán; không dùng Booking hoặc Target Collaboration để thay thế danh sách này.',
   ].join(' ');
   const userPrompt = [
     buildPrompt(normalizedMessage, snapshot),
@@ -735,7 +754,7 @@ async function streamAssistantAnswer(message, onDelta) {
     'Trình bày câu trả lời bằng markdown nhẹ khi phù hợp.',
     'Không mở đầu câu trả lời bằng lời chào; đi thẳng vào nội dung.',
     'Khi đánh giá nhân viên, chỉ dùng mục Báo cáo hiệu suất nhân viên từ TikTok Channel và phân bổ team/hashtag; không trộn dữ liệu Booking/KOC.',
-    'Khi đánh giá KOC, phải ưu tiên dữ liệu Booking; không được xem hiệu suất tổng của creator là doanh thu trực tiếp từ Booking.',
+    'Khi đánh giá KOC, chỉ đánh giá tài khoản role KOC trong Quản lý User bằng hiệu suất các video được gán; không dùng Booking hoặc Target Collaboration để thay thế danh sách này.',
   ].join(' ');
   const userPrompt = buildPrompt(normalizedMessage, snapshot);
   let receivedText = false;
@@ -862,8 +881,10 @@ module.exports = {
     summarizeBookingKocs,
     formatBookingContext,
     formatBookingAnswer,
+    formatTopUsers,
     formatEmployeeContext,
     formatEmployeeAnswer,
+    formatKocAnswer,
     fallbackAnswer,
     getKpiSnapshot,
   },
