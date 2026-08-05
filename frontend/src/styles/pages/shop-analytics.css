@@ -398,6 +398,28 @@
   opacity: 1;
 }
 
+.video-export-table__engagement {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-soft);
+  font-size: .78rem;
+  font-weight: 700;
+}
+
+.video-export-table__engagement > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.video-export-table__engagement .shop-analytics__icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}
+
 .shop-video-analytics__thumbnail {
   position: relative;
   flex: 0 0 88px;
@@ -458,7 +480,7 @@
 }
 
 .shop-analytics__table.video-export-table {
-  min-width: 1960px;
+  min-width: 1480px;
   table-layout: auto;
 }
 

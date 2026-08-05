@@ -56,6 +56,10 @@ const ICON_PATHS = {
   connect: ['M12 5v14', 'M5 12h14'],
   analytics: ['M4 19V9', 'M10 19V5', 'M16 19v-7', 'M3 19h18'],
   connections: ['M8 12h8', 'M9 8H7a4 4 0 0 0 0 8h2', 'M15 8h2a4 4 0 0 1 0 8h-2'],
+  likes: ['M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6a5.5 5.5 0 0 0 1-8.8Z'],
+  comments: ['M21 12a8 8 0 0 1-8 8 9 9 0 0 1-4-.9L3 21l1.4-3.5A8 8 0 1 1 21 12Z'],
+  shares: ['M12 5l7 7-7 7', 'M19 12H5'],
+  views: ['M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z'],
 };
 
 const AnalyticsIcon = ({ name, className = '' }) => (
@@ -1533,19 +1537,15 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                         <th>{t('shopAnalytics.creator')}</th>
                         <th>{t('shopAnalytics.productId')}</th>
                         <th className="cell-number">{t('shopAnalytics.videoRevenue')}</th>
-                        <th className="cell-number">{t('shopAnalytics.videoAttributedOrders')}</th>
                         <th className="cell-number">AOV</th>
                         <th className="cell-number">{t('shopAnalytics.unitsSold')}</th>
-                        <th className="cell-number">{t('videoLibrary.likes')}</th>
-                        <th className="cell-number">{t('videoLibrary.comments')}</th>
-                        <th className="cell-number">{t('videoLibrary.shares')}</th>
                         <th className="cell-number">{t('shopAnalytics.videoImpressions')}</th>
                         <th className="cell-number">{t('shopAnalytics.videoClicks')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {videoAnalyticsLoading && !videoRows.length ? (
-                        <tr><td colSpan={13}><div className="empty-state"><span className="loading-dot" />{t('shopAnalytics.loadingVideos')}</div></td></tr>
+                        <tr><td colSpan={9}><div className="empty-state"><span className="loading-dot" />{t('shopAnalytics.loadingVideos')}</div></td></tr>
                       ) : null}
                       {paginatedVideoRows.map((video, index) => {
                         const url = videoUrl(video);
@@ -1565,6 +1565,24 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                                     </a>
                                   ) : <strong title={title}>{title}</strong>}
                                   <span className="shop-video-analytics__creator video-export-table__video-id">ID: {video.video_id || '—'}</span>
+                                  <span className="video-export-table__engagement">
+                                    <span title={`${t('shopAnalytics.videoViews')}: ${formatNumber(video.video_views ?? video.views)}`}>
+                                      <AnalyticsIcon name="views" />
+                                      {formatNumber(video.video_views ?? video.views)}
+                                    </span>
+                                    <span title={`${t('videoLibrary.likes')}: ${formatNumber(video.likes)}`}>
+                                      <AnalyticsIcon name="likes" />
+                                      {formatNumber(video.likes)}
+                                    </span>
+                                    <span title={`${t('videoLibrary.comments')}: ${formatNumber(video.comments)}`}>
+                                      <AnalyticsIcon name="comments" />
+                                      {formatNumber(video.comments)}
+                                    </span>
+                                    <span title={`${t('videoLibrary.shares')}: ${formatNumber(video.shares)}`}>
+                                      <AnalyticsIcon name="shares" />
+                                      {formatNumber(video.shares)}
+                                    </span>
+                                  </span>
                                 </span>
                               </div>
                             </td>
@@ -1588,22 +1606,18 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                               ) : '—'}
                             </td>
                             <td className="cell-number"><strong>{formatVideoMoney(video.creator_attributed_gmv ?? video.gmv)}</strong></td>
-                            <td className="cell-number">{formatNumber(video.attributed_orders ?? video.sku_orders ?? video.orders)}</td>
                             <td className="cell-number">{formatVideoMoney(video.aov)}</td>
                             <td className="cell-number">{formatNumber(video.attributed_items_sold ?? video.items_sold ?? video.units_sold)}</td>
-                            <td className="cell-number">{formatNumber(video.likes)}</td>
-                            <td className="cell-number">{formatNumber(video.comments)}</td>
-                            <td className="cell-number">{formatNumber(video.shares)}</td>
                             <td className="cell-number">{formatNumber(video.product_impressions)}</td>
                             <td className="cell-number">{formatNumber(video.product_clicks)}</td>
                           </tr>
                         );
                       })}
                       {!videoAnalyticsLoading && !videoRows.length ? (
-                        <tr><td colSpan={13}><div className="empty-state">{t('shopAnalytics.videoApiNoData')}</div></td></tr>
+                        <tr><td colSpan={9}><div className="empty-state">{t('shopAnalytics.videoApiNoData')}</div></td></tr>
                       ) : null}
                       {!videoAnalyticsLoading && videoRows.length > 0 && !filteredVideoRows.length ? (
-                        <tr><td colSpan={13}><div className="empty-state">{t('shopAnalytics.videoSearchNoResults')}</div></td></tr>
+                        <tr><td colSpan={9}><div className="empty-state">{t('shopAnalytics.videoSearchNoResults')}</div></td></tr>
                       ) : null}
                     </tbody>
                   </table>
