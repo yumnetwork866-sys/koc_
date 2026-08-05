@@ -28,7 +28,13 @@ test('TikTok Analytics list and detail responses are normalized into a video sna
         performance: {
           intervals: [{
             sales: {
-              overall: { product_impressions: 800, product_clicks: 150 },
+              overall: {
+                gmv: { amount: '180', currency: 'MYR' },
+                customers: 6,
+                items_sold: 7,
+                product_impressions: 800,
+                product_clicks: 150,
+              },
               breakdowns: [{ product_id: 'product-1' }, { product_id: 'product-2' }],
             },
             traffic: { views: 1000, likes: 30, comments: 5, shares: 2 },
@@ -43,10 +49,10 @@ test('TikTok Analytics list and detail responses are normalized into a video sna
   assert.equal(row.video_link, 'https://www.tiktok.com/@demo.creator/video/7616717880972856597');
   assert.equal(row.creator_name, 'Demo Creator');
   assert.equal(row.product_id, 'product-1, product-2');
-  assert.equal(row.creator_attributed_gmv, 120);
-  assert.equal(row.attributed_orders, 3);
-  assert.equal(row.aov, 40);
-  assert.equal(row.attributed_items_sold, 4);
+  assert.equal(row.creator_attributed_gmv, 180);
+  assert.equal(row.attributed_orders, 6);
+  assert.equal(row.aov, 30);
+  assert.equal(row.attributed_items_sold, 7);
   assert.equal(row.refunds, 0);
   assert.equal(row.items_refunded, 0);
   assert.equal(row.likes, 30);

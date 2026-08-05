@@ -75,9 +75,12 @@ const apiVideoRow = ({ exportId, shopId, video, detail, detailError, syncedAt = 
       ? interval.sales.breakdowns.map((product) => product?.product_id || product?.id)
       : []),
   ]);
-  const gmv = moneyValue(video?.gmv ?? sales.gmv);
-  const orders = Math.round(numberValue(video?.sku_orders ?? video?.orders));
-  const customers = numberValue(video?.avg_customers ?? sales.customers);
+  // Affiliate Center's All videos export follows the per-video detail metrics.
+  // The list endpoint can return a different attribution value for individual
+  // videos, so use it only when the detail request did not supply the metric.
+  const gmv = moneyValue(sales.gmv ?? video?.gmv);
+  const orders = Math.round(numberValue(sales.customers ?? video?.sku_orders ?? video?.orders));
+  const customers = numberValue(sales.customers ?? video?.avg_customers);
   const views = Math.round(numberValue(video?.views ?? traffic.views));
   const likes = Math.round(numberValue(traffic.likes));
   const comments = Math.round(numberValue(traffic.comments));
@@ -96,7 +99,7 @@ const apiVideoRow = ({ exportId, shopId, video, detail, detailError, syncedAt = 
     creator_attributed_gmv: gmv,
     attributed_orders: orders,
     aov: orders > 0 ? gmv / orders : 0,
-    attributed_items_sold: Math.round(numberValue(video?.items_sold ?? sales.items_sold)),
+    attributed_items_sold: Math.round(numberValue(sales.items_sold ?? video?.items_sold)),
     refunds: 0,
     items_refunded: 0,
     likes,

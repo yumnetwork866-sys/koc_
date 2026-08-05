@@ -307,6 +307,10 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.shop-video-analytics__period-hint {
+  margin: 0;
+}
+
 .shop-video-analytics__table {
   width: 100%;
   min-width: 1320px;
@@ -433,6 +437,26 @@
   scrollbar-gutter: stable;
 }
 
+.video-export-search {
+  width: min(100%, 380px);
+}
+
+.video-export-search input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 13px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.video-export-search input:focus {
+  border-color: var(--color-accent-strong);
+  outline: 3px solid color-mix(in srgb, var(--color-accent-strong) 16%, transparent);
+}
+
 .shop-analytics__table.video-export-table {
   min-width: 1960px;
   table-layout: auto;
@@ -461,6 +485,82 @@
 .video-export-table th:nth-child(4),
 .video-export-table td:nth-child(4) {
   min-width: 190px;
+}
+
+.video-export-table__creator {
+  min-width: 0;
+}
+
+.video-export-table__creator > span:last-child {
+  min-width: 0;
+}
+
+.video-export-table__creator strong,
+.video-export-table__creator .row-subtitle {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-export-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.video-export-product {
+  display: block;
+  min-width: 0;
+  border-radius: 8px;
+  outline: none;
+}
+
+.video-export-product:focus-visible {
+  outline: 2px solid var(--color-accent-strong);
+  outline-offset: 3px;
+}
+
+.video-export-product__summary {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.video-export-product__thumbnail {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 8px;
+  background: var(--color-surface-subtle);
+  object-fit: cover;
+}
+
+.video-export-product__thumbnail--fallback {
+  display: grid;
+  place-items: center;
+  color: var(--color-text-soft);
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.video-export-product__tooltip {
+  position: fixed;
+  z-index: 1200;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-text);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .22);
+  color: var(--color-surface);
+  font-size: .8rem;
+  font-weight: 650;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.video-export-product__tooltip--above {
+  transform: translateY(-100%);
 }
 
 .video-export-table td:first-child strong {
@@ -496,6 +596,10 @@
   .shop-video-analytics__filters,
   .shop-video-analytics__stats {
     grid-template-columns: 1fr;
+  }
+
+  .video-export-search {
+    width: 100%;
   }
 }
 

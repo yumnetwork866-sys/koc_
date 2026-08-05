@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Area,
   AreaChart,
@@ -15,6 +16,7 @@ import {
   fetchTikTokShopVideoAnalytics,
   fetchTikTokShopVideoPerformance,
   fetchTikTokShopVideoThumbnail,
+  fetchTikTokSellerOpenCollaborations,
   fetchTikTokShops,
   startTikTokShopOauth,
   syncTikTokShopAnalytics,
@@ -103,6 +105,98 @@ const VideoThumbnail = ({ shopId, video, href }) => {
   return <span className="shop-video-analytics__thumbnail" ref={containerRef}>{href ? <a href={href} target="_blank" rel="noreferrer">{content}</a> : content}</span>;
 };
 
+const CreatorAvatar = ({ src, name }) => {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  if (!src || failed) {
+    return <span className="creator-identity__avatar creator-identity__avatar--fallback" aria-hidden="true">{String(name || 'C').trim().charAt(0).toUpperCase()}</span>;
+  }
+  return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+};
+
+const ProductThumbnail = ({ src }) => {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  if (!src || failed) {
+    return <span className="video-export-product__thumbnail video-export-product__thumbnail--fallback" aria-hidden="true">P</span>;
+  }
+  return <img className="video-export-product__thumbnail" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+};
+
+const VideoProduct = ({ product }) => {
+  const tooltipId = useId();
+  const itemRef = useRef(null);
+  const [tooltip, setTooltip] = useState(null);
+  const showTooltip = () => {
+    if (!product.name) return;
+    const rect = itemRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(320, window.innerWidth - 24);
+    const showAbove = rect.bottom + 110 > window.innerHeight;
+    setTooltip({
+      left: Math.min(window.innerWidth - width - 12, Math.max(12, rect.left)),
+      top: showAbove ? rect.top - 8 : rect.bottom + 8,
+      width,
+      showAbove,
+    });
+  };
+  const hideTooltip = () => setTooltip(null);
+  return (
+    <div
+      className="video-export-product"
+      ref={itemRef}
+      tabIndex={product.name ? 0 : undefined}
+      aria-label={product.name || product.id}
+      aria-describedby={tooltip ? tooltipId : undefined}
+      onMouseEnter={showTooltip}
+      onMouseLeave={hideTooltip}
+      onFocus={showTooltip}
+      onBlur={hideTooltip}
+    >
+      <span className="video-export-product__summary">
+        <ProductThumbnail src={product.thumbnailUrl} />
+      </span>
+      {tooltip ? createPortal(
+        <span
+          className={`video-export-product__tooltip${tooltip.showAbove ? ' video-export-product__tooltip--above' : ''}`}
+          id={tooltipId}
+          role="tooltip"
+          style={{ left: tooltip.left, top: tooltip.top, width: tooltip.width }}
+        >
+          {product.name}
+        </span>,
+        document.body,
+      ) : null}
+    </div>
+  );
+};
+
+const productsForVideo = (video, metadata = {}) => {
+  const sourceProducts = Array.isArray(video?.raw_metrics?.list?.products)
+    ? video.raw_metrics.list.products
+    : [];
+  const sourceById = new Map(sourceProducts
+    .filter((product) => product?.id)
+    .map((product) => [String(product.id), product]));
+  const ids = [...new Set([
+    ...sourceProducts.map((product) => product?.id),
+    ...String(video?.product_id || '').split(','),
+  ].map((id) => String(id || '').trim()).filter(Boolean))];
+  return ids.map((id) => {
+    const source = sourceById.get(id) || {};
+    const mapped = metadata[id] || {};
+    return {
+      id,
+      name: source.name || source.title || mapped.name || mapped.title || null,
+      thumbnailUrl: source.main_image_url
+        || source.thumbnail_url
+        || mapped.main_image_url
+        || mapped.thumbnail_url
+        || null,
+    };
+  });
+};
+
 const dateOnly = (date) => [
   date.getFullYear(),
   String(date.getMonth() + 1).padStart(2, '0'),
@@ -146,6 +240,19 @@ const formatDisplayDateTime = (value, fallback) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return fallback;
   return `${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())} ${padDatePart(date.getDate())}/${padDatePart(date.getMonth() + 1)}/${date.getFullYear()}`;
+};
+
+const formatVideoPostDate = (value, fallback = '—') => {
+  const match = String(value || '').trim().match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/,
+  );
+  if (match) {
+    const [, year, month, day, hour = '00', minute = '00', second = '00'] = match;
+    return `${day}/${month}/${year} ${hour}:${minute}:${second}`;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return `${padDatePart(date.getDate())}/${padDatePart(date.getMonth() + 1)}/${date.getFullYear()} ${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}`;
 };
 
 const scopesOf = (authorization) => {
@@ -200,6 +307,8 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
   const [videoAnalyticsLoading, setVideoAnalyticsLoading] = useState(false);
   const [videoReloadKey, setVideoReloadKey] = useState(0);
   const [videoPage, setVideoPage] = useState(1);
+  const [videoSearch, setVideoSearch] = useState('');
+  const [videoProductMetadata, setVideoProductMetadata] = useState({});
   const [videoAccountType, setVideoAccountType] = useState('LINKED_ACCOUNTS');
   const [videoSortField, setVideoSortField] = useState('gmv');
   const [loading, setLoading] = useState(true);
@@ -381,8 +490,12 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
         ...row,
         id: row.video_id,
         title: row.video_title,
-        creator: row.raw_metrics?.list?.creator,
-        username: row.raw_metrics?.list?.username || row.creator_name,
+        creator: {
+          ...(row.raw_metrics?.list?.creator || {}),
+          ...(row.creator_username ? { user_name: row.creator_username } : {}),
+          ...(row.creator_avatar_url ? { avatar_url: row.creator_avatar_url } : {}),
+        },
+        username: row.creator_username || row.raw_metrics?.list?.username || row.creator_name,
         video_post_time: row.post_date,
         video_url: row.video_link,
         gmv: {
@@ -507,15 +620,100 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
     () => Array.isArray(videoAnalytics?.videos) ? videoAnalytics.videos : [],
     [videoAnalytics],
   );
+  useEffect(() => {
+    if (!videoExportOnly || !selectedShopId || !videoRows.length) {
+      setVideoProductMetadata({});
+      return undefined;
+    }
+    const sourceMetadata = {};
+    for (const video of videoRows) {
+      const products = Array.isArray(video?.raw_metrics?.list?.products)
+        ? video.raw_metrics.list.products
+        : [];
+      for (const product of products) {
+        const id = String(product?.id || '').trim();
+        if (!id) continue;
+        sourceMetadata[id] = {
+          id,
+          name: product.name || product.title || null,
+          main_image_url: product.main_image_url || product.thumbnail_url || null,
+        };
+      }
+    }
+    const productIds = [...new Set(videoRows.flatMap((video) => [
+      ...(Array.isArray(video?.raw_metrics?.list?.products)
+        ? video.raw_metrics.list.products.map((product) => product?.id)
+        : []),
+      ...String(video?.product_id || '').split(','),
+    ]).map((id) => String(id || '').trim()).filter(Boolean))];
+    setVideoProductMetadata(sourceMetadata);
+    if (!productIds.length) return undefined;
+    const controller = new AbortController();
+    let cursor = 0;
+    const resolved = {};
+    const worker = async () => {
+      while (cursor < productIds.length && !controller.signal.aborted) {
+        const id = productIds[cursor];
+        cursor += 1;
+        try {
+          const payload = await fetchTikTokSellerOpenCollaborations(selectedShopId, {
+            signal: controller.signal,
+            pageSize: 20,
+            keyword: id,
+          });
+          const row = (payload?.open_collaborations || []).find((item) => String(item?.product?.id) === id);
+          if (row?.product) {
+            resolved[id] = {
+              id,
+              name: row.product.title || sourceMetadata[id]?.name || null,
+              main_image_url: row.product.main_image_url || null,
+            };
+          }
+        } catch (error) {
+          if (error.name === 'AbortError') return;
+        }
+      }
+    };
+    Promise.all(Array.from({ length: Math.min(3, productIds.length) }, worker)).then(() => {
+      if (!controller.signal.aborted && Object.keys(resolved).length) {
+        setVideoProductMetadata((current) => ({ ...current, ...resolved }));
+      }
+    });
+    return () => controller.abort();
+  }, [selectedShopId, videoExportOnly, videoRows]);
   const videoTotals = useMemo(() => videoRows.reduce((total, video) => ({
     gmv: total.gmv + moneyValue(video.gmv),
     views: total.views + numericValue(video.views ?? video.video_views),
     orders: total.orders + numericValue(video.sku_orders ?? video.orders),
     itemsSold: total.itemsSold + numericValue(video.items_sold ?? video.units_sold),
   }), { gmv: 0, views: 0, orders: 0, itemsSold: 0 }), [videoRows]);
-  const videoPageCount = Math.max(1, Math.ceil(videoRows.length / VIDEO_EXPORT_PAGE_SIZE));
+  const filteredVideoRows = useMemo(() => {
+    const terms = videoSearch.trim().toLocaleLowerCase(locale).split(/\s+/).filter(Boolean);
+    if (!videoExportOnly || !terms.length) return videoRows;
+    return videoRows.filter((video) => {
+      const source = video.raw_metrics?.list || {};
+      const creator = source.creator || video.creator || {};
+      const haystack = [
+        video.video_title,
+        video.title,
+        video.video_id,
+        video.creator_name,
+        video.creator_username,
+        video.username,
+        creator.nick_name,
+        creator.nickname,
+        creator.user_name,
+        video.product_id,
+        ...(Array.isArray(source.products)
+          ? source.products.flatMap((product) => [product?.name, product?.title])
+          : []),
+      ].filter(Boolean).join(' ').toLocaleLowerCase(locale);
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [locale, videoExportOnly, videoRows, videoSearch]);
+  const videoPageCount = Math.max(1, Math.ceil(filteredVideoRows.length / VIDEO_EXPORT_PAGE_SIZE));
   const paginatedVideoRows = videoExportOnly
-    ? videoRows.slice((videoPage - 1) * VIDEO_EXPORT_PAGE_SIZE, videoPage * VIDEO_EXPORT_PAGE_SIZE)
+    ? filteredVideoRows.slice((videoPage - 1) * VIDEO_EXPORT_PAGE_SIZE, videoPage * VIDEO_EXPORT_PAGE_SIZE)
     : videoRows;
   const formatVideoMoney = (value) => formatMoney(
     moneyValue(value),
@@ -1269,6 +1467,11 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                 </>
               ) : null}
             </div>
+            {videoExportOnly ? (
+              <p className="section-card__meta shop-video-analytics__period-hint">
+                {t('shopAnalytics.videoPeriodHint')}
+              </p>
+            ) : null}
           </section>
 
           {selectedShop && (missingAnalyticsScope || tokenExpired) ? (
@@ -1296,7 +1499,7 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                   <p className="stat-card__value">{videoAnalyticsLoading && !videoRows.length ? '—' : formatNumber(videoTotals.views)}</p>
                 </article>
                 <article className="stat-card shop-analytics__stat">
-                  <p className="stat-card__label">{t('shopAnalytics.orders')}</p>
+                  <p className="stat-card__label">{t(videoExportOnly ? 'shopAnalytics.videoAttributedOrders' : 'shopAnalytics.orders')}</p>
                   <p className="stat-card__value">{videoAnalyticsLoading && !videoRows.length ? '—' : formatNumber(videoTotals.orders)}</p>
                 </article>
               </section>
@@ -1306,8 +1509,20 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                 <div className="section-card__header">
                   <div>
                     <h2 className="section-card__title">{t('shopAnalytics.videoExportTableTitle')}</h2>
-                    <p className="section-card__meta">{t('shopAnalytics.videoExportTableMeta', { count: videoRows.length })}</p>
+                    <p className="section-card__meta">{t('shopAnalytics.videoExportTableMeta', { count: filteredVideoRows.length })}</p>
                   </div>
+                  <label className="video-export-search">
+                    <span className="sr-only">{t('common.search')}</span>
+                    <input
+                      type="search"
+                      value={videoSearch}
+                      placeholder={t('shopAnalytics.videoSearchPlaceholder')}
+                      onChange={(event) => {
+                        setVideoSearch(event.target.value);
+                        setVideoPage(1);
+                      }}
+                    />
+                  </label>
                 </div>
                 <div className="table-wrap shop-analytics__table-wrap video-export-table-wrap">
                   <table className="data-table shop-analytics__table shop-video-analytics__table video-export-table">
@@ -1318,7 +1533,7 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                         <th>{t('shopAnalytics.creator')}</th>
                         <th>{t('shopAnalytics.productId')}</th>
                         <th className="cell-number">{t('shopAnalytics.videoRevenue')}</th>
-                        <th className="cell-number">{t('shopAnalytics.orders')}</th>
+                        <th className="cell-number">{t('shopAnalytics.videoAttributedOrders')}</th>
                         <th className="cell-number">AOV</th>
                         <th className="cell-number">{t('shopAnalytics.unitsSold')}</th>
                         <th className="cell-number">{t('videoLibrary.likes')}</th>
@@ -1335,7 +1550,9 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                       {paginatedVideoRows.map((video, index) => {
                         const url = videoUrl(video);
                         const creatorName = video.creator?.nick_name || video.creator?.user_name || video.username || '—';
+                        const creatorUsername = video.creator_username || video.creator?.user_name || video.username || '';
                         const title = video.video_title || video.title || video.video_id || t('common.unknown');
+                        const products = productsForVideo(video, videoProductMetadata);
                         return (
                           <tr key={video.id || index}>
                             <td>
@@ -1351,9 +1568,25 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                                 </span>
                               </div>
                             </td>
-                            <td>{video.post_date || '—'}</td>
-                            <td>{video.creator_name || creatorName || '—'}</td>
-                            <td>{video.product_id || '—'}</td>
+                            <td>{formatVideoPostDate(video.post_date)}</td>
+                            <td>
+                              <div className="creator-identity video-export-table__creator">
+                                <CreatorAvatar src={video.creator_avatar_url || video.creator?.avatar_url} name={video.creator_name || creatorName} />
+                                <span>
+                                  <strong>{video.creator_name || creatorName || '—'}</strong>
+                                  {creatorUsername ? <span className="row-subtitle">@{String(creatorUsername).replace(/^@+/, '')}</span> : null}
+                                </span>
+                              </div>
+                            </td>
+                            <td>
+                              {products.length ? (
+                                <div className="video-export-products">
+                                  {products.map((product) => (
+                                    <VideoProduct product={product} key={product.id} />
+                                  ))}
+                                </div>
+                              ) : '—'}
+                            </td>
                             <td className="cell-number"><strong>{formatVideoMoney(video.creator_attributed_gmv ?? video.gmv)}</strong></td>
                             <td className="cell-number">{formatNumber(video.attributed_orders ?? video.sku_orders ?? video.orders)}</td>
                             <td className="cell-number">{formatVideoMoney(video.aov)}</td>
@@ -1369,19 +1602,24 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                       {!videoAnalyticsLoading && !videoRows.length ? (
                         <tr><td colSpan={13}><div className="empty-state">{t('shopAnalytics.videoApiNoData')}</div></td></tr>
                       ) : null}
+                      {!videoAnalyticsLoading && videoRows.length > 0 && !filteredVideoRows.length ? (
+                        <tr><td colSpan={13}><div className="empty-state">{t('shopAnalytics.videoSearchNoResults')}</div></td></tr>
+                      ) : null}
                     </tbody>
                   </table>
                 </div>
-                <Pagination
-                  currentPage={videoPage}
-                  totalPages={videoPageCount}
-                  onPageChange={setVideoPage}
-                  disabled={videoAnalyticsLoading}
-                  previousLabel={t('common.previous')}
-                  nextLabel={t('common.next')}
-                  ariaLabel={t('shopAnalytics.videoExportPagination')}
-                  className="video-export-pagination"
-                />
+                {filteredVideoRows.length ? (
+                  <Pagination
+                    currentPage={videoPage}
+                    totalPages={videoPageCount}
+                    onPageChange={setVideoPage}
+                    disabled={videoAnalyticsLoading}
+                    previousLabel={t('common.previous')}
+                    nextLabel={t('common.next')}
+                    ariaLabel={t('shopAnalytics.videoExportPagination')}
+                    className="video-export-pagination"
+                  />
+                ) : null}
                 </section>
               ) : (
                 <section className="section-card shop-video-analytics__table-card">

@@ -1623,17 +1623,40 @@ const listVideoPerformanceApi = async (req, res) => {
     const { count, rows } = exportRecord.status === 'SUCCEEDED'
       ? await TikTokVideoPerformanceSnapshot.findAndCountAll({
         where: { export_id: exportRecord.id },
-        order: [['creator_attributed_gmv', 'DESC'], ['video_id', 'ASC']],
+        // Snapshot IDs follow the page-token order returned by TikTok. Keep that
+        // source order so the report matches Affiliate Center instead of sorting
+        // the rows again using a locally persisted metric.
+        order: [['id', 'ASC']],
         limit: pageSize,
         offset: (page - 1) * pageSize,
       })
       : { count: 0, rows: [] };
-    const videos = rows.map((row) => {
+    const videoValues = rows.map((row) => {
       const value = row.toJSON();
       delete value.refunds;
       delete value.items_refunded;
       return value;
     });
+    const videoCreators = await hydrateCreatorRows(shop.id, videoValues.map((video) => {
+      const source = video.raw_metrics?.list || {};
+      const creator = source.creator || {};
+      const linkedUsername = String(
+        creator.user_name
+          || creator.username
+          || source.username
+          || video.video_link?.match(/tiktok\.com\/@([^/]+)/i)?.[1]
+          || '',
+      ).trim().replace(/^@+/, '');
+      return {
+        username: linkedUsername,
+        nickname: video.creator_name || creator.nick_name || creator.nickname || null,
+      };
+    }));
+    const videos = videoValues.map((video, index) => ({
+      ...video,
+      creator_username: videoCreators[index]?.username || null,
+      creator_avatar_url: videoCreators[index]?.avatar_url || null,
+    }));
     res.json({
       export: exportRecord,
       videos,
