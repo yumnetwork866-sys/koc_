@@ -199,6 +199,31 @@ const productsOfBookingVideo = (video, snapshot) => {
   return [...byId.values()];
 };
 
+const productCtrOfBookingVideo = (snapshot) => {
+  const raw = snapshot?.raw_metrics || {};
+  const rawVideo = raw?.video || raw;
+  const listVideo = rawVideo?.list || rawVideo;
+  const sales = rawVideo?.detail?.performance?.intervals?.[0]?.sales || {};
+  const ratioOf = (source) => {
+    const impressions = optionalNumber(source?.product_impressions);
+    const clicks = optionalNumber(source?.product_clicks);
+    return impressions !== null && impressions > 0 ? (clicks || 0) / impressions : null;
+  };
+  const overallRatio = ratioOf(sales.overall) ?? ratioOf(raw);
+  if (overallRatio !== null) return overallRatio;
+  const productRows = Array.isArray(sales.breakdowns) && sales.breakdowns.length
+    ? sales.breakdowns
+    : Array.isArray(listVideo.products) ? listVideo.products : [];
+  const totals = productRows.reduce((result, product) => {
+    const impressions = optionalNumber(product?.product_impressions);
+    if (impressions === null) return result;
+    result.impressions += impressions;
+    result.clicks += optionalNumber(product?.product_clicks) || 0;
+    return result;
+  }, { clicks: 0, impressions: 0 });
+  return totals.impressions > 0 ? totals.clicks / totals.impressions : null;
+};
+
 const BookingVideoProduct = ({ product }) => {
   const tooltipId = useId();
   const itemRef = useRef(null);
@@ -859,7 +884,7 @@ const BookingManagement = ({ heroTitle }) => {
                 <td className="booking-koc-column"><div className="booking-koc-identity"><TargetKocAvatar src={booking.creator_avatar_url} name={booking.creator_name || booking.creator_username} /><span><strong>{booking.creator_name || booking.creator_username || 'KOC'}</strong><small>@{booking.creator_username}</small></span></div></td>
                 <td className="booking-creator-performance-column">{renderPerformance(performance)}</td>
                 <td className="cell-number booking-total-cost-column"><strong>{formatMoney(booking.total_cost ?? booking.booking_cost, booking.currency)}</strong></td>
-                <td className="booking-video-column"><span className="booking-video-count"><span className={`sidebar__chevron${expanded ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" /><strong>{t('booking.videosCount', { count: videoCount })}</strong></span></td>
+                <td className="booking-video-column"><span className="booking-video-count"><strong>{t('booking.videosCount', { count: videoCount })}</strong></span></td>
                 <td className="cell-number booking-refunds-column">{creatorMetric(performance, 'refunded_gmv', { money: true })}</td>
                 <td className="cell-number"><div className="booking-product-summary"><strong>{creatorMetric(performance, 'items_sold')} <span>{t('booking.itemsSold')}</span></strong><small>{creatorMetric(performance, 'items_refunded')} {t('booking.refundedShort')}</small></div></td>
                 <td className="cell-number booking-samples-column">{creatorMetric(performance, 'samples_shipped')}</td>
@@ -942,7 +967,7 @@ const BookingManagement = ({ heroTitle }) => {
                     {latest ? <div className="booking-video-expansion__metrics">
                       <div><span>{t('booking.videoGmv')}</span><strong>{formatMoney(latest.gross_gmv, latest.currency || booking.currency)}</strong></div>
                       <div><span>{t('booking.videoItemsSold')}</span><strong>{formatNumber(latest.items_sold)}</strong></div>
-                      <div><span>{t('booking.videoCtr')}</span><strong>{formatRate(latest.ctr)}</strong></div>
+                      <div><span>{t('booking.videoCtr')}</span><strong>{formatRate(productCtrOfBookingVideo(latest))}</strong></div>
                       <BookingVideoProducts shopId={booking.target_shop_id} video={video} snapshot={latest} label={t('booking.products')} />
                     </div> : <div className="booking-video-expansion__pending"><span className="loading-dot" /><span>{t('booking.awaitingFirstSync')}</span></div>}
                     {video.last_sync_error ? <p className="booking-video-expansion__error">{video.last_sync_error}</p> : null}

@@ -15,6 +15,10 @@ const shiftDate = (value, days) => {
   return dateOnly(date);
 };
 const numberOrZero = (value) => Number.isFinite(Number(value)) ? Number(value) : 0;
+const productCtrOfSnapshot = (snapshot) => {
+  const impressions = numberOrZero(snapshot.product_impressions);
+  return impressions > 0 ? numberOrZero(snapshot.product_clicks) / impressions : null;
+};
 const usernameOf = (video) => String(
   video?.creator?.user_name || video?.creator?.username || video?.username || '',
 ).trim().replace(/^@+/, '').toLowerCase();
@@ -38,7 +42,7 @@ const metricOfAffiliateSnapshot = (snapshot) => ({
   orders: numberOrZero(snapshot.attributed_orders),
   items_sold: numberOrZero(snapshot.attributed_items_sold),
   views: numberOrZero(snapshot.video_views),
-  ctr: snapshot.ctr ?? null,
+  ctr: productCtrOfSnapshot(snapshot),
   currency: snapshot.raw_metrics?.detail?.performance?.intervals?.[0]?.sales?.overall?.gmv?.currency
     || snapshot.raw_metrics?.list?.gmv?.currency
     || null,
@@ -46,6 +50,8 @@ const metricOfAffiliateSnapshot = (snapshot) => ({
     source: 'AFFILIATE_VIDEO_PERFORMANCE',
     export_id: snapshot.export_id,
     product_id: snapshot.product_id || null,
+    product_impressions: numberOrZero(snapshot.product_impressions),
+    product_clicks: numberOrZero(snapshot.product_clicks),
     products: snapshot.raw_metrics?.list?.products || [],
     video: snapshot.raw_metrics,
   },
@@ -140,7 +146,9 @@ const affiliateCandidateFromSnapshot = (snapshot) => {
     views: numberOrZero(snapshot.video_views),
     orders: numberOrZero(snapshot.attributed_orders),
     items_sold: numberOrZero(snapshot.attributed_items_sold),
-    ctr: snapshot.ctr ?? null,
+    ctr: productCtrOfSnapshot(snapshot),
+    product_impressions: numberOrZero(snapshot.product_impressions),
+    product_clicks: numberOrZero(snapshot.product_clicks),
     product_id: snapshot.product_id || null,
     products: [
       ...(Array.isArray(source.products) ? source.products : []),
@@ -362,6 +370,7 @@ module.exports = {
     dateOnly,
     shiftDate,
     metricOfAffiliateSnapshot,
+    productCtrOfSnapshot,
     exportDurationDays,
     affiliateCandidateFromSnapshot,
     latestSnapshot,

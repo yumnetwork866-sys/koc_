@@ -60,6 +60,7 @@ test('TikTok Analytics list and detail responses are normalized into a video sna
   assert.equal(row.shares, 2);
   assert.equal(row.product_impressions, 800);
   assert.equal(row.product_clicks, 150);
+  assert.equal(row.ctr, 150 / 800);
   assert.equal(row.raw_metrics.source, 'TIKTOK_SHOP_ANALYTICS_API');
 });
 

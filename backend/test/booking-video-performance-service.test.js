@@ -16,6 +16,8 @@ test('booking maps the 30-day Affiliate Video snapshot metrics', () => {
     attributed_items_sold: 8,
     video_views: 12000,
     ctr: '0.1234',
+    product_impressions: 654,
+    product_clicks: 52,
     product_id: '998877',
     raw_metrics: { list: { gmv: { currency: 'MYR' } } },
   });
@@ -23,6 +25,7 @@ test('booking maps the 30-day Affiliate Video snapshot metrics', () => {
   assert.equal(result.orders, 8);
   assert.equal(result.items_sold, 8);
   assert.equal(result.views, 12000);
+  assert.equal(result.ctr, 52 / 654);
   assert.equal(result.currency, 'MYR');
   assert.equal(result.raw_metrics.source, 'AFFILIATE_VIDEO_PERFORMANCE');
   assert.equal(result.raw_metrics.product_id, '998877');
@@ -38,6 +41,8 @@ test('Affiliate Video snapshot becomes a booking video candidate', () => {
     attributed_orders: 2,
     attributed_items_sold: 3,
     video_views: 1404,
+    product_impressions: 654,
+    product_clicks: 52,
     product_id: '998877',
     raw_metrics: { list: { creator: { user_name: 'drhanafee' }, gmv: { currency: 'MYR' }, products: [{ id: '998877', title: 'Actiscar' }] } },
   });
@@ -46,6 +51,7 @@ test('Affiliate Video snapshot becomes a booking video candidate', () => {
   assert.equal(candidate.gmv.amount, 125.5);
   assert.equal(candidate.posted_at, '2026-07-31T14:35:18.000Z');
   assert.equal(candidate.product_id, '998877');
+  assert.equal(candidate.ctr, 52 / 654);
   assert.equal(candidate.products[0].title, 'Actiscar');
 });
 

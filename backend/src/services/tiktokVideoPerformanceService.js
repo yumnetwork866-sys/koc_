@@ -24,6 +24,10 @@ const numberValue = (value) => {
 const nullableNumber = (value) => (
   value === null || value === undefined || value === '' || value === '--' ? null : numberValue(value)
 );
+const productCtr = (clicks, impressions) => {
+  const impressionCount = numberValue(impressions);
+  return impressionCount > 0 ? numberValue(clicks) / impressionCount : null;
+};
 
 const moneyValue = (value) => numberValue(value && typeof value === 'object' ? value.amount : value);
 const uniqueValues = (values) => [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))];
@@ -85,6 +89,8 @@ const apiVideoRow = ({ exportId, shopId, video, detail, detailError, syncedAt = 
   const likes = Math.round(numberValue(traffic.likes));
   const comments = Math.round(numberValue(traffic.comments));
   const shares = Math.round(numberValue(traffic.shares));
+  const productImpressions = Math.round(numberValue(sales.product_impressions));
+  const productClicks = Math.round(numberValue(sales.product_clicks));
   return {
     export_id: exportId,
     shop_id: shopId,
@@ -105,11 +111,11 @@ const apiVideoRow = ({ exportId, shopId, video, detail, detailError, syncedAt = 
     likes,
     comments,
     shares,
-    product_impressions: Math.round(numberValue(sales.product_impressions)),
-    product_clicks: Math.round(numberValue(sales.product_clicks)),
+    product_impressions: productImpressions,
+    product_clicks: productClicks,
     completion_rate: null,
     video_views: views,
-    ctr: nullableNumber(video?.click_through_rate ?? sales.ctr),
+    ctr: productCtr(productClicks, productImpressions),
     video_gpm: moneyValue(video?.gpm ?? sales.gpm),
     engagement: views > 0 ? (likes + comments + shares) / views : null,
     avg_gmv_per_customer: customers > 0 ? gmv / customers : 0,
@@ -346,7 +352,7 @@ const parseVideoPerformanceWorkbook = (buffer, { exportId, shopId }) => {
       product_clicks: Math.round(numberValue(row['Video product clicks'])),
       completion_rate: nullableNumber(row['Completion rate']),
       video_views: Math.round(numberValue(row['Video views'])),
-      ctr: nullableNumber(row.CTR),
+      ctr: productCtr(row['Video product clicks'], row['Video product impressions']),
       video_gpm: numberValue(row['Video GPM']),
       engagement: nullableNumber(row.Engagement),
       avg_gmv_per_customer: numberValue(row['Avg. GMV per customer']),
@@ -397,6 +403,7 @@ module.exports = {
   __test: {
     apiVideoRow,
     mapWithConcurrency,
+    productCtr,
     retryableTikTokError,
   },
 };
