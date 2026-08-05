@@ -23,6 +23,7 @@ const {
 } = require('../services/tiktokPartnerService');
 const { getShopVideoPerformance } = require('../services/tiktokShopService');
 const {
+  autoLinkBookingVideos,
   recordBookingVideoMatch,
   serializeBookingWithActual,
   syncBookingVideo,
@@ -435,7 +436,19 @@ const addReferencePerformance = async (bookings, performanceWindow) => {
           :performanceWindow AS window_type,
           source.currency,
           SUM(source.affiliate_gmv) AS affiliate_gmv,
+          SUM(source.refunded_gmv) AS refunded_gmv,
           SUM(source.affiliate_orders) AS affiliate_orders,
+          SUM(source.items_sold) AS items_sold,
+          SUM(source.items_refunded) AS items_refunded,
+          CASE
+            WHEN SUM(source.affiliate_orders) > 0
+              THEN SUM(source.affiliate_gmv) / SUM(source.affiliate_orders)
+            ELSE 0
+          END AS average_order_value,
+          SUM(source.live_streams) AS live_streams,
+          SUM(source.shoppable_videos) AS shoppable_videos,
+          SUM(source.samples_shipped) AS samples_shipped,
+          SUM(source.estimated_commission) AS estimated_commission,
           CASE WHEN COUNT(source.video_views) = COUNT(*) THEN SUM(source.video_views) ELSE NULL END AS video_views,
           NOW() AS synced_at
         FROM source
@@ -829,6 +842,11 @@ const createBooking = async (req, res) => {
     }
 
     const booking = await Booking.create(payload);
+    try {
+      await autoLinkBookingVideos(booking);
+    } catch (error) {
+      console.warn(`Unable to auto-link Affiliate videos for booking ${booking.id}: ${error.message}`);
+    }
     const createdBooking = await Booking.findByPk(booking.id, { include: bookingInclude });
     const [serialized] = await serializeBookingsWithFreshCreatorAvatars([createdBooking]);
     res.status(201).json(serialized);

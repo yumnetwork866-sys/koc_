@@ -343,6 +343,7 @@ const serializeBookingWithActual = (instance) => {
 };
 
 module.exports = {
+  autoLinkBookingVideos,
   bookingVideoInclude,
   calculateActualPerformance,
   recordBookingVideoMatch,

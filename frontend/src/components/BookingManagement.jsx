@@ -6,6 +6,7 @@ import {
   fetchBookingTargetKocDetail,
   fetchBookingTargetKocs,
   fetchBookings,
+  fetchTikTokShopVideoThumbnail,
   matchBookingVideo,
   updateBooking,
 } from '../lib/api';
@@ -37,6 +38,28 @@ const latestBookingVideoSnapshot = (video) => [...(video?.performance_snapshots 
     String(right.snapshot_date || '').localeCompare(String(left.snapshot_date || ''))
     || new Date(right.synced_at || 0) - new Date(left.synced_at || 0)
   ))[0] || null;
+const BOOKING_VIDEO_ICON_PATHS = {
+  views: ['M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z'],
+  likes: ['M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6a5.5 5.5 0 0 0 1-8.8Z'],
+  comments: ['M21 12a8 8 0 0 1-8 8 9 9 0 0 1-4-.9L3 21l1.4-3.5A8 8 0 1 1 21 12Z'],
+  shares: ['M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', 'M6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', 'M18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z', 'M8.6 10.5l6.8-4', 'M8.6 13.5l6.8 4'],
+};
+const BookingVideoIcon = ({ name }) => (
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    {BOOKING_VIDEO_ICON_PATHS[name].map((path) => <path key={path} d={path} />)}
+  </svg>
+);
+const bookingVideoSocialMetrics = (snapshot) => {
+  const rawVideo = snapshot?.raw_metrics?.video || snapshot?.raw_metrics || {};
+  const listVideo = rawVideo?.list || rawVideo;
+  const traffic = rawVideo?.detail?.performance?.intervals?.[0]?.traffic || {};
+  return {
+    views: snapshot?.views ?? listVideo?.views ?? traffic.views,
+    likes: traffic.likes ?? listVideo?.likes ?? rawVideo?.likes,
+    comments: traffic.comments ?? listVideo?.comments ?? rawVideo?.comments,
+    shares: traffic.shares ?? listVideo?.shares ?? rawVideo?.shares,
+  };
+};
 const finiteNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -60,6 +83,42 @@ const TargetKocAvatar = ({ src, name }) => {
     return <span className="creator-identity__avatar creator-identity__avatar--fallback">{String(name || 'K').trim().charAt(0).toUpperCase()}</span>;
   }
   return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+};
+
+const BookingVideoThumbnail = ({ shopId, video, snapshot, index }) => {
+  const rawVideo = snapshot?.raw_metrics?.video || snapshot?.raw_metrics || {};
+  const listVideo = rawVideo?.list || rawVideo;
+  const directThumbnail = video?.thumbnail_url
+    || listVideo?.thumbnail_url
+    || listVideo?.cover_image_url
+    || listVideo?.cover_url
+    || rawVideo?.thumbnail_url
+    || rawVideo?.cover_image_url
+    || rawVideo?.cover_url
+    || null;
+  const [thumbnail, setThumbnail] = useState(directThumbnail);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setThumbnail(directThumbnail);
+    setFailed(false);
+    if (directThumbnail || !shopId || !video?.platform_video_id || !video?.creator_username) return undefined;
+    const controller = new AbortController();
+    fetchTikTokShopVideoThumbnail(shopId, video.platform_video_id, video.creator_username, controller.signal)
+      .then((payload) => setThumbnail(payload?.thumbnail_url || null))
+      .catch((error) => { if (error.name !== 'AbortError') setFailed(true); });
+    return () => controller.abort();
+  }, [directThumbnail, shopId, video?.creator_username, video?.platform_video_id]);
+
+  const content = thumbnail && !failed
+    ? <img src={thumbnail} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+    : <span className="booking-video-expansion__thumbnail-placeholder" aria-hidden="true">▶</span>;
+  return (
+    <span className="booking-video-expansion__thumbnail">
+      {video?.video_url ? <a href={video.video_url} target="_blank" rel="noreferrer" tabIndex={-1}>{content}</a> : content}
+      <span className="booking-video-expansion__index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+    </span>
+  );
 };
 
 const TargetKocCombobox = ({
@@ -170,6 +229,10 @@ const BookingManagement = ({ heroTitle }) => {
     bottom: 0,
     right: 0,
   });
+  const toggleBookingRow = (event, bookingId) => {
+    if (event.target.closest('button, a, input, select, textarea, label')) return;
+    setExpandedBookingId((current) => String(current) === String(bookingId) ? null : bookingId);
+  };
 
   const locale = language === 'vi' ? 'vi-VN' : 'en-US';
   const formatNumber = (value, options) => finiteNumber(value).toLocaleString(locale, options);
@@ -179,6 +242,11 @@ const BookingManagement = ({ heroTitle }) => {
   const formatDate = (value) => value
     ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(value))
     : '—';
+  const formatRate = (value) => {
+    const rate = optionalNumber(value);
+    if (rate === null) return '—';
+    return `${formatNumber(rate <= 1 ? rate * 100 : rate, { maximumFractionDigits: 2 })}%`;
+  };
   const formatCollaborationStatus = (value) => value
     ? t(`booking.collaborationStatuses.${String(value).toUpperCase()}`)
     : '—';
@@ -425,12 +493,11 @@ const BookingManagement = ({ heroTitle }) => {
   const renderPerformance = (performance) => {
     if (!performance) return <span className="chip">{t('booking.noPerformance')}</span>;
     const gmv = optionalNumber(performance.affiliate_gmv);
-    const orders = optionalNumber(performance.affiliate_orders);
     const views = optionalNumber(performance.video_views);
     return (
       <div className="booking-performance-cell">
         <strong>{gmv === null ? '—' : formatMoney(gmv, performance.currency)}</strong>
-        <small>{orders === null ? '—' : formatNumber(orders)} {t('booking.orders')} · {views === null ? '—' : formatNumber(views)} {t('booking.views')}</small>
+        <small>{views === null ? '—' : formatNumber(views)} {t('booking.views')}</small>
       </div>
     );
   };
@@ -439,17 +506,20 @@ const BookingManagement = ({ heroTitle }) => {
     const actual = booking.actual_performance || {};
     if (!actual.video_count) return <span className="chip">{t('booking.awaitingVideo')}</span>;
     if (!actual.snapshot_count) {
-      return <div className="booking-performance-cell"><strong>{t(`booking.actualStatuses.${actual.status}`)}</strong><small>{t('booking.awaitingFirstSync')}</small></div>;
+      return <span className="chip">{t('booking.awaitingFirstSync')}</span>;
     }
     return (
       <div className="booking-performance-cell">
-        <strong>{formatMoney(actual.gross_gmv, actual.currency)} · {actual.gross_roas == null ? '—' : `${formatNumber(actual.gross_roas, { maximumFractionDigits: 2 })}x`} {t('booking.grossRoas')}</strong>
-        <small>{formatNumber(actual.orders)} {t('booking.orders')} · {formatNumber(actual.views)} {t('booking.views')}</small>
-        <small>{actual.net_gmv == null ? t('booking.netGmvPending') : `${formatMoney(actual.net_gmv, actual.currency)} · ${formatNumber(actual.net_roas, { maximumFractionDigits: 2 })}x ${t('booking.netRoas')}`}</small>
-        <small>{t('booking.roiInsufficient')}</small>
-        <span className={`booking-actual-status is-${String(actual.status || '').toLowerCase()}`}>{t(`booking.actualStatuses.${actual.status}`)}</span>
+        <strong>{formatMoney(actual.gross_gmv, actual.currency)}</strong>
+        <small>{formatNumber(actual.views)} {t('booking.views')}</small>
       </div>
     );
+  };
+
+  const creatorMetric = (performance, field, { money = false } = {}) => {
+    const value = optionalNumber(performance?.[field]);
+    if (value === null) return '—';
+    return money ? formatMoney(value, performance.currency) : formatNumber(value);
   };
 
   return (
@@ -485,21 +555,26 @@ const BookingManagement = ({ heroTitle }) => {
         <div className="section-card__header booking-evaluation-list-header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div><div className="field booking-performance-period"><label htmlFor="booking-performance-window">{t('booking.performancePeriod')}</label><select id="booking-performance-window" value={performanceWindow} onChange={(event) => setPerformanceWindow(event.target.value)}><option value="PAST_7_DAYS">{t('booking.period7Days')}</option><option value="PAST_30_DAYS">{t('booking.period30Days')}</option><option value="PAST_60_DAYS">{t('booking.period60Days')}</option><option value="PAST_90_DAYS">{t('booking.period90Days')}</option><option value="PAST_120_DAYS">{t('booking.period120Days')}</option><option value="PAST_150_DAYS">{t('booking.period150Days')}</option><option value="PAST_180_DAYS">{t('booking.period180Days')}</option></select></div></div>
         <div className="table-wrap"><table className="data-table booking-evaluation-table">
           <thead>
-            <tr><th>{t('booking.kocColumn')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.totalCost')}</th><th>{t('booking.matchedVideo')}</th><th>{t('booking.actualPerformance')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr>
+            <tr><th>{t('booking.kocColumn')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.totalCost')}</th><th>{t('booking.matchedVideo')}</th><th className="cell-number">{t('booking.refunds')}</th><th className="cell-number">{t('booking.productsSold')}</th><th className="cell-number">{t('booking.itemsRefunded')}</th><th className="cell-number">{t('booking.aov')}</th><th className="cell-number">{t('booking.samplesShipped')}</th><th className="cell-number">{t('booking.estimatedCommission')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={6}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
+            {loading ? <tr><td colSpan={11}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
               const performance = performanceOf(booking);
               const bookingVideos = bookingVideosOf(booking);
               const videoCount = bookingVideos.length || Number(booking.actual_performance?.video_count || 0);
               const expanded = String(expandedBookingId) === String(booking.id);
               return <React.Fragment key={booking.id}>
-              <tr className={expanded ? 'booking-row booking-row--expanded' : 'booking-row'}>
+              <tr className={expanded ? 'booking-row booking-row--expanded' : 'booking-row'} onClick={(event) => toggleBookingRow(event, booking.id)}>
                 <td><div className="booking-koc-identity"><TargetKocAvatar src={booking.creator_avatar_url} name={booking.creator_name || booking.creator_username} /><span><strong>{booking.creator_name || booking.creator_username || 'KOC'}</strong><small>@{booking.creator_username}</small></span></div></td>
                 <td>{renderPerformance(performance)}</td>
                 <td className="cell-number"><strong>{formatMoney(booking.total_cost ?? booking.booking_cost, booking.currency)}</strong></td>
-                <td><button className="booking-video-count" type="button" aria-expanded={expanded} onClick={() => setExpandedBookingId((current) => String(current) === String(booking.id) ? null : booking.id)}><span className={`sidebar__chevron${expanded ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" /><strong>{t('booking.videosCount', { count: videoCount })}</strong></button></td>
-                <td>{renderActualPerformance(booking)}</td>
+                <td><span className="booking-video-count"><span className={`sidebar__chevron${expanded ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" /><strong>{t('booking.videosCount', { count: videoCount })}</strong></span></td>
+                <td className="cell-number">{creatorMetric(performance, 'refunded_gmv', { money: true })}</td>
+                <td className="cell-number">{creatorMetric(performance, 'items_sold')}</td>
+                <td className="cell-number">{creatorMetric(performance, 'items_refunded')}</td>
+                <td className="cell-number">{creatorMetric(performance, 'average_order_value', { money: true })}</td>
+                <td className="cell-number">{creatorMetric(performance, 'samples_shipped')}</td>
+                <td className="cell-number">{creatorMetric(performance, 'estimated_commission', { money: true })}</td>
                 <td className="cell-actions">
                   <div className="action-menu booking-action-menu">
                     <button
@@ -555,18 +630,37 @@ const BookingManagement = ({ heroTitle }) => {
                   </div>
                 </td>
               </tr>
-              {expanded ? <tr className="booking-video-detail-row"><td colSpan={6}><div className="booking-video-expansion">
-                <div className="booking-video-expansion__header"><strong>{t('booking.bookingVideos')}</strong><button className="button button--small button--ghost" type="button" disabled={matchingVideoId === booking.id} onClick={() => findBookingVideo(booking)}>{matchingVideoId === booking.id ? t('booking.refreshingVideo') : videoCount ? t('booking.refreshVideo') : t('booking.findVideo')}</button></div>
-                {bookingVideos.length ? <div className="booking-video-expansion__list">{bookingVideos.map((video) => {
+              {expanded ? <tr className="booking-video-detail-row"><td colSpan={11}><div className="booking-video-expansion">
+                {bookingVideos.length ? <div className="booking-video-expansion__list">{bookingVideos.map((video, videoIndex) => {
                   const latest = latestBookingVideoSnapshot(video);
+                  const social = bookingVideoSocialMetrics(latest);
                   return <article className="booking-video-expansion__item" key={video.id || video.platform_video_id}>
-                    <div>{video.video_url ? <a href={video.video_url} target="_blank" rel="noreferrer"><strong>{video.title || video.platform_video_id}</strong></a> : <strong>{video.title || video.platform_video_id}</strong>}<small>ID: {video.platform_video_id} · {formatDate(video.posted_at)}</small></div>
-                    <div><strong>{latest ? formatMoney(latest.gross_gmv, latest.currency || booking.currency) : '—'}</strong><small>{latest ? `${formatNumber(latest.items_sold)} ${t('booking.itemsSold')} · ${formatNumber(latest.views)} ${t('booking.views')}` : t('booking.awaitingFirstSync')}</small></div>
+                    <div className="booking-video-expansion__identity">
+                      <div className="booking-video-expansion__title">
+                        <BookingVideoThumbnail shopId={booking.target_shop_id} video={video} snapshot={latest} index={videoIndex} />
+                        <div>
+                          {video.video_url ? <a href={video.video_url} target="_blank" rel="noreferrer"><strong>{video.title || video.platform_video_id}</strong><span aria-hidden="true"> ↗</span></a> : <strong>{video.title || video.platform_video_id}</strong>}
+                          <small>{t('booking.postedAt')} {formatDate(video.posted_at)}</small>
+                          <span className="booking-video-expansion__social">
+                            <span title={`${t('booking.videoViews')}: ${formatNumber(social.views)}`}><BookingVideoIcon name="views" />{formatNumber(social.views)}</span>
+                            <span title={`${t('videoLibrary.likes')}: ${formatNumber(social.likes)}`}><BookingVideoIcon name="likes" />{formatNumber(social.likes)}</span>
+                            <span title={`${t('videoLibrary.comments')}: ${formatNumber(social.comments)}`}><BookingVideoIcon name="comments" />{formatNumber(social.comments)}</span>
+                            <span title={`${t('videoLibrary.shares')}: ${formatNumber(social.shares)}`}><BookingVideoIcon name="shares" />{formatNumber(social.shares)}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {latest ? <div className="booking-video-expansion__metrics">
+                      <div><span>{t('booking.videoGmv')}</span><strong>{formatMoney(latest.gross_gmv, latest.currency || booking.currency)}</strong></div>
+                      <div><span>{t('booking.videoItemsSold')}</span><strong>{formatNumber(latest.items_sold)}</strong></div>
+                      <div><span>{t('booking.videoCtr')}</span><strong>{formatRate(latest.ctr)}</strong></div>
+                    </div> : <div className="booking-video-expansion__pending"><span className="loading-dot" /><span>{t('booking.awaitingFirstSync')}</span></div>}
+                    {video.last_sync_error ? <p className="booking-video-expansion__error">{video.last_sync_error}</p> : null}
                   </article>;
                 })}</div> : <div className="empty-state empty-state--compact">{t('booking.awaitingVideo')}</div>}
               </div></td></tr> : null}
               </React.Fragment>;
-            }) : <tr><td colSpan={6}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
+            }) : <tr><td colSpan={11}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
           </tbody>
         </table></div>
       </section>
@@ -599,7 +693,7 @@ const BookingManagement = ({ heroTitle }) => {
               {collaboration.id ? <section className="drawer-section"><h3>{t('booking.collaboration')}</h3><div className="booking-detail-grid"><div><span>{t('booking.partnerStatus')}</span><strong>{formatCollaborationStatus(collaboration.status)}</strong></div><div><span>{t('booking.validUntil')}</span><strong>{formatDate(collaboration.end_at)}</strong></div><div className="booking-detail-grid__wide"><span>{t('booking.products')}</span><strong>{(collaboration.products || []).map((product) => product.title || product.name || product.id).filter(Boolean).join(', ') || '—'}</strong></div></div></section> : null}
               <section className="drawer-section"><h3>{t('booking.creatorPerformance')}</h3>{renderPerformance(performance)}<p className="section-card__meta">{t('booking.performancePeriodDisclaimer')}</p></section>
               <section className="drawer-section"><h3>{t('booking.matchedVideo')}</h3>{selectedBooking.video_platform_id ? <div className="booking-performance-cell"><strong>{videoMatch?.title || selectedBooking.video_platform_id}</strong>{selectedBooking.video_url ? <a href={selectedBooking.video_url} target="_blank" rel="noreferrer">{t('booking.openMatchedVideo')} ↗</a> : null}{videoMatch ? <small>{formatMoney(videoMatch.gmv?.amount, videoMatch.gmv?.currency)} · {formatNumber(videoMatch.views)} {t('booking.views')} · {formatNumber(videoMatch.orders)} {t('booking.orders')}</small> : null}<small>{formatDate(selectedBooking.posted_at)}</small><button className="button button--ghost" type="button" disabled={matchingVideoId === selectedBooking.id} onClick={() => findBookingVideo(selectedBooking)}>{matchingVideoId === selectedBooking.id ? t('booking.refreshingVideo') : t('booking.refreshVideo')}</button></div> : <button className="button button--ghost" type="button" disabled={matchingVideoId === selectedBooking.id} onClick={() => findBookingVideo(selectedBooking)}>{matchingVideoId === selectedBooking.id ? t('booking.findingVideo') : t('booking.findVideo')}</button>}</section>
-              <section className="drawer-section"><h3>{t('booking.actualResults')}</h3>{renderActualPerformance(selectedBooking)}<p className="section-card__meta">{t('booking.actualAttributionDisclaimer')}</p></section>
+              <section className="drawer-section"><h3>{t('booking.actualResults')}</h3>{renderActualPerformance(selectedBooking)}</section>
               <form className="booking-detail-form" onSubmit={saveCost}>
                 <label className="field booking-detail-form__wide"><span>{t('booking.totalCost')} ({currencyLabel})</span><input type="number" min="0" step={selectedCurrency === 'VND' ? '1' : '0.01'} value={detailCost} onChange={(event) => setDetailCost(event.target.value)} required /></label>
                 <div className="booking-detail-grid booking-detail-form__wide"><div><span>{t('booking.costPerThousandViews')}</span><strong>{benchmark.perThousandViews == null ? '—' : formatMoney(benchmark.perThousandViews, selectedCurrency)}</strong></div><div><span>{t('booking.costPerOrder')}</span><strong>{benchmark.perOrder == null ? '—' : formatMoney(benchmark.perOrder, selectedCurrency)}</strong></div><div><span>{t('booking.costGmvRatio')}</span><strong>{benchmark.gmvRatio == null ? '—' : `${formatNumber(benchmark.gmvRatio, { maximumFractionDigits: 2 })}%`}</strong></div></div>

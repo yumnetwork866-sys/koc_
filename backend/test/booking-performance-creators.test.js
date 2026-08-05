@@ -26,6 +26,7 @@ const loadController = (
     mockModule(require.resolve('../src/services/tiktokPartnerService'), {}),
     mockModule(require.resolve('../src/services/tiktokShopService'), shopService),
     mockModule(require.resolve('../src/services/bookingVideoPerformanceService'), {
+      autoLinkBookingVideos: async () => ({ status: 'no_match' }),
       recordBookingVideoMatch: async () => {},
       serializeBookingWithActual: (booking) => (
         typeof booking?.toJSON === 'function' ? booking.toJSON() : booking
@@ -402,6 +403,7 @@ test('booking can be created from Creator Performance using username only', asyn
     window_type: 'PAST_30_DAYS',
   };
   let createdPayload;
+  let autoLinkedBooking;
   const performanceQueries = [];
   const { createBooking } = loadController(t, {
     TikTokTargetCollaborationSnapshot: { findOne: async () => null },
@@ -414,6 +416,11 @@ test('booking can be created from Creator Performance using username only', asyn
     Booking: {
       create: async (payload) => { createdPayload = payload; return { id: 12 }; },
       findByPk: async () => ({ id: 12, ...createdPayload }),
+    },
+  }, {}, {
+    autoLinkBookingVideos: async (booking) => {
+      autoLinkedBooking = booking;
+      return { status: 'matched', video_count: 2 };
     },
   });
   let statusCode;
@@ -446,4 +453,5 @@ test('booking can be created from Creator Performance using username only', asyn
   assert.deepEqual(createdPayload.evaluation_snapshot.performance, performanceData);
   assert.equal(performanceQueries.length, 2);
   assert.equal(performanceQueries[1].where.window_type, 'PAST_30_DAYS');
+  assert.equal(autoLinkedBooking.id, 12);
 });
