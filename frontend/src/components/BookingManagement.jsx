@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   createBooking,
@@ -6,6 +6,7 @@ import {
   fetchBookingTargetKocDetail,
   fetchBookingTargetKocs,
   fetchBookings,
+  fetchTikTokSellerOpenCollaborations,
   fetchTikTokShopVideoThumbnail,
   matchBookingVideo,
   updateBooking,
@@ -118,6 +119,128 @@ const BookingVideoThumbnail = ({ shopId, video, snapshot, index }) => {
       {video?.video_url ? <a href={video.video_url} target="_blank" rel="noreferrer" tabIndex={-1}>{content}</a> : content}
       <span className="booking-video-expansion__index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
     </span>
+  );
+};
+
+const productsOfBookingVideo = (video, snapshot) => {
+  const raw = snapshot?.raw_metrics || {};
+  const rawVideo = raw?.video || raw;
+  const listVideo = rawVideo?.list || rawVideo;
+  const breakdowns = rawVideo?.detail?.performance?.intervals?.[0]?.sales?.breakdowns || [];
+  const sourceProducts = [
+    ...(Array.isArray(video?.affiliate_products) ? video.affiliate_products : []),
+    ...(Array.isArray(raw.products) ? raw.products : []),
+    ...(Array.isArray(listVideo.products) ? listVideo.products : []),
+    ...(Array.isArray(breakdowns) ? breakdowns : []),
+  ];
+  const byId = new Map();
+  for (const product of sourceProducts) {
+    const id = String(product?.id || product?.product_id || '').trim();
+    if (!id) continue;
+    const existing = byId.get(id) || {};
+    byId.set(id, {
+      id,
+      name: product?.name || product?.title || product?.product_name || existing.name || null,
+      thumbnailUrl: product?.main_image_url || product?.thumbnail_url || product?.thumbnailUrl || product?.image_url || existing.thumbnailUrl || null,
+    });
+  }
+  const ids = [raw.product_id, rawVideo.product_id, listVideo.product_id]
+    .flatMap((value) => String(value || '').split(','))
+    .map((id) => id.trim())
+    .filter(Boolean);
+  for (const id of ids) {
+    if (!byId.has(id)) byId.set(id, { id, name: null, thumbnailUrl: null });
+  }
+  return [...byId.values()];
+};
+
+const BookingVideoProduct = ({ product }) => {
+  const tooltipId = useId();
+  const itemRef = useRef(null);
+  const [failed, setFailed] = useState(false);
+  const [tooltip, setTooltip] = useState(null);
+  useEffect(() => setFailed(false), [product.thumbnailUrl]);
+  const showTooltip = () => {
+    const rect = itemRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const width = Math.min(320, window.innerWidth - 24);
+    const showAbove = rect.bottom + 110 > window.innerHeight;
+    setTooltip({
+      left: Math.min(window.innerWidth - width - 12, Math.max(12, rect.left)),
+      top: showAbove ? rect.top - 8 : rect.bottom + 8,
+      width,
+      showAbove,
+    });
+  };
+  return (
+    <span
+      className="booking-video-expansion__product"
+      ref={itemRef}
+      tabIndex={0}
+      aria-label={product.name || product.id}
+      aria-describedby={tooltip ? tooltipId : undefined}
+      onMouseEnter={showTooltip}
+      onMouseLeave={() => setTooltip(null)}
+      onFocus={showTooltip}
+      onBlur={() => setTooltip(null)}
+    >
+      {product.thumbnailUrl && !failed
+        ? <img src={product.thumbnailUrl} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+        : <span className="booking-video-expansion__product-placeholder" aria-hidden="true">P</span>}
+      {tooltip ? createPortal(
+        <span
+          className={`booking-video-expansion__product-tooltip${tooltip.showAbove ? ' booking-video-expansion__product-tooltip--above' : ''}`}
+          id={tooltipId}
+          role="tooltip"
+          style={{ left: tooltip.left, top: tooltip.top, width: tooltip.width }}
+        >
+          {product.name || product.id}
+        </span>,
+        document.body,
+      ) : null}
+    </span>
+  );
+};
+
+const BookingVideoProducts = ({ shopId, video, snapshot, label }) => {
+  const sourceProducts = useMemo(() => productsOfBookingVideo(video, snapshot), [snapshot, video]);
+  const [products, setProducts] = useState(sourceProducts);
+
+  useEffect(() => {
+    setProducts(sourceProducts);
+    if (!shopId || !sourceProducts.length) return undefined;
+    const missing = sourceProducts.filter((product) => !product.name || !product.thumbnailUrl);
+    if (!missing.length) return undefined;
+    const controller = new AbortController();
+    Promise.all(missing.map(async (product) => {
+      try {
+        const payload = await fetchTikTokSellerOpenCollaborations(shopId, {
+          signal: controller.signal,
+          pageSize: 20,
+          keyword: product.id,
+        });
+        const row = (payload?.open_collaborations || []).find((item) => String(item?.product?.id) === product.id);
+        return row?.product ? {
+          id: product.id,
+          name: row.product.title || product.name,
+          thumbnailUrl: row.product.main_image_url || product.thumbnailUrl,
+        } : product;
+      } catch {
+        return product;
+      }
+    })).then((loaded) => {
+      if (!controller.signal.aborted) setProducts(loaded);
+    });
+    return () => controller.abort();
+  }, [shopId, sourceProducts]);
+
+  return (
+    <div className="booking-video-expansion__products-card">
+      <span className="booking-video-expansion__products-label">{label}</span>
+      <span className="booking-video-expansion__products">
+        {products.length ? products.map((product) => <BookingVideoProduct product={product} key={product.id} />) : '—'}
+      </span>
+    </div>
   );
 };
 
@@ -555,10 +678,10 @@ const BookingManagement = ({ heroTitle }) => {
         <div className="section-card__header booking-evaluation-list-header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div><div className="field booking-performance-period"><label htmlFor="booking-performance-window">{t('booking.performancePeriod')}</label><select id="booking-performance-window" value={performanceWindow} onChange={(event) => setPerformanceWindow(event.target.value)}><option value="PAST_7_DAYS">{t('booking.period7Days')}</option><option value="PAST_30_DAYS">{t('booking.period30Days')}</option><option value="PAST_60_DAYS">{t('booking.period60Days')}</option><option value="PAST_90_DAYS">{t('booking.period90Days')}</option><option value="PAST_120_DAYS">{t('booking.period120Days')}</option><option value="PAST_150_DAYS">{t('booking.period150Days')}</option><option value="PAST_180_DAYS">{t('booking.period180Days')}</option></select></div></div>
         <div className="table-wrap"><table className="data-table booking-evaluation-table">
           <thead>
-            <tr><th>{t('booking.kocColumn')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.totalCost')}</th><th>{t('booking.matchedVideo')}</th><th className="cell-number">{t('booking.refunds')}</th><th className="cell-number">{t('booking.productsSold')}</th><th className="cell-number">{t('booking.itemsRefunded')}</th><th className="cell-number">{t('booking.aov')}</th><th className="cell-number">{t('booking.samplesShipped')}</th><th className="cell-number">{t('booking.estimatedCommission')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr>
+            <tr><th>{t('booking.kocColumn')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.totalCost')}</th><th>{t('booking.matchedVideo')}</th><th className="cell-number">{t('booking.refunds')}</th><th className="cell-number">{t('booking.productsSold')}</th><th className="cell-number">{t('booking.itemsRefunded')}</th><th className="cell-number booking-samples-column">{t('booking.samplesShipped')}</th><th className="cell-number">{t('booking.estimatedCommission')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={11}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
+            {loading ? <tr><td colSpan={10}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
               const performance = performanceOf(booking);
               const bookingVideos = bookingVideosOf(booking);
               const videoCount = bookingVideos.length || Number(booking.actual_performance?.video_count || 0);
@@ -572,8 +695,7 @@ const BookingManagement = ({ heroTitle }) => {
                 <td className="cell-number">{creatorMetric(performance, 'refunded_gmv', { money: true })}</td>
                 <td className="cell-number">{creatorMetric(performance, 'items_sold')}</td>
                 <td className="cell-number">{creatorMetric(performance, 'items_refunded')}</td>
-                <td className="cell-number">{creatorMetric(performance, 'average_order_value', { money: true })}</td>
-                <td className="cell-number">{creatorMetric(performance, 'samples_shipped')}</td>
+                <td className="cell-number booking-samples-column">{creatorMetric(performance, 'samples_shipped')}</td>
                 <td className="cell-number">{creatorMetric(performance, 'estimated_commission', { money: true })}</td>
                 <td className="cell-actions">
                   <div className="action-menu booking-action-menu">
@@ -630,7 +752,7 @@ const BookingManagement = ({ heroTitle }) => {
                   </div>
                 </td>
               </tr>
-              {expanded ? <tr className="booking-video-detail-row"><td colSpan={11}><div className="booking-video-expansion">
+              {expanded ? <tr className="booking-video-detail-row"><td colSpan={10}><div className="booking-video-expansion">
                 {bookingVideos.length ? <div className="booking-video-expansion__list">{bookingVideos.map((video, videoIndex) => {
                   const latest = latestBookingVideoSnapshot(video);
                   const social = bookingVideoSocialMetrics(latest);
@@ -654,13 +776,14 @@ const BookingManagement = ({ heroTitle }) => {
                       <div><span>{t('booking.videoGmv')}</span><strong>{formatMoney(latest.gross_gmv, latest.currency || booking.currency)}</strong></div>
                       <div><span>{t('booking.videoItemsSold')}</span><strong>{formatNumber(latest.items_sold)}</strong></div>
                       <div><span>{t('booking.videoCtr')}</span><strong>{formatRate(latest.ctr)}</strong></div>
+                      <BookingVideoProducts shopId={booking.target_shop_id} video={video} snapshot={latest} label={t('booking.products')} />
                     </div> : <div className="booking-video-expansion__pending"><span className="loading-dot" /><span>{t('booking.awaitingFirstSync')}</span></div>}
                     {video.last_sync_error ? <p className="booking-video-expansion__error">{video.last_sync_error}</p> : null}
                   </article>;
                 })}</div> : <div className="empty-state empty-state--compact">{t('booking.awaitingVideo')}</div>}
               </div></td></tr> : null}
               </React.Fragment>;
-            }) : <tr><td colSpan={11}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
+            }) : <tr><td colSpan={10}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
           </tbody>
         </table></div>
       </section>

@@ -45,6 +45,8 @@ const metricOfAffiliateSnapshot = (snapshot) => ({
   raw_metrics: {
     source: 'AFFILIATE_VIDEO_PERFORMANCE',
     export_id: snapshot.export_id,
+    product_id: snapshot.product_id || null,
+    products: snapshot.raw_metrics?.list?.products || [],
     video: snapshot.raw_metrics,
   },
 });
@@ -121,6 +123,7 @@ const loadAffiliateVideoPerformance = async (shopId, videoId) => {
 
 const affiliateCandidateFromSnapshot = (snapshot) => {
   const source = snapshot.raw_metrics?.list || {};
+  const breakdowns = snapshot.raw_metrics?.detail?.performance?.intervals?.[0]?.sales?.breakdowns || [];
   const postedAt = postedAtOf({ video_post_time: snapshot.post_date, post_time: snapshot.post_date });
   return {
     id: String(snapshot.video_id),
@@ -138,6 +141,11 @@ const affiliateCandidateFromSnapshot = (snapshot) => {
     orders: numberOrZero(snapshot.attributed_orders),
     items_sold: numberOrZero(snapshot.attributed_items_sold),
     ctr: snapshot.ctr ?? null,
+    product_id: snapshot.product_id || null,
+    products: [
+      ...(Array.isArray(source.products) ? source.products : []),
+      ...(Array.isArray(breakdowns) ? breakdowns : []),
+    ],
   };
 };
 

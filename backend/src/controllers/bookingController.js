@@ -3,6 +3,7 @@ const { Op, QueryTypes, literal } = require('sequelize');
 const {
   User, Booking, TikTokPartnerAuthorization, TikTokShop,
   TikTokTargetCollaborationSnapshot, TikTokCreatorPerformanceSnapshot,
+  TikTokVideoPerformanceSnapshot,
   BookingVideo, BookingVideoPerformanceSnapshot,
   ShopVideo, ShopVideoPerformanceSnapshot, sequelize,
 } = require('../models');
@@ -47,6 +48,58 @@ const compactPayload = (payload) => Object.fromEntries(
   Object.entries(payload).filter(([, value]) => value !== undefined),
 );
 
+const affiliateProductsOfSnapshot = (snapshot) => {
+  const list = snapshot?.raw_metrics?.list || {};
+  const breakdowns = snapshot?.raw_metrics?.detail?.performance?.intervals?.[0]?.sales?.breakdowns || [];
+  const products = [
+    ...(Array.isArray(list.products) ? list.products : []),
+    ...(Array.isArray(breakdowns) ? breakdowns : []),
+  ];
+  const byId = new Map();
+  for (const product of products) {
+    const id = String(product?.id || product?.product_id || '').trim();
+    if (!id) continue;
+    const existing = byId.get(id) || {};
+    byId.set(id, {
+      id,
+      name: product?.name || product?.title || product?.product_name || existing.name || null,
+      thumbnail_url: product?.main_image_url || product?.thumbnail_url || product?.image_url || existing.thumbnail_url || null,
+    });
+  }
+  for (const id of String(snapshot?.product_id || '').split(',').map((value) => value.trim()).filter(Boolean)) {
+    if (!byId.has(id)) byId.set(id, { id, name: null, thumbnail_url: null });
+  }
+  return [...byId.values()];
+};
+
+const hydrateBookingVideoProducts = async (bookings) => {
+  if (!TikTokVideoPerformanceSnapshot?.findAll) return bookings;
+  const shopIds = [...new Set(bookings.map((booking) => Number(booking.target_shop_id)).filter(Number.isInteger))];
+  const videoIds = [...new Set(bookings.flatMap((booking) => (
+    (booking.booking_videos || []).map((video) => String(video.platform_video_id || '').trim())
+  )).filter(Boolean))];
+  if (!shopIds.length || !videoIds.length) return bookings;
+  const snapshots = await TikTokVideoPerformanceSnapshot.findAll({
+    where: {
+      shop_id: { [Op.in]: shopIds },
+      video_id: { [Op.in]: videoIds },
+    },
+    attributes: ['shop_id', 'video_id', 'product_id', 'raw_metrics'],
+    order: [['id', 'DESC']],
+  });
+  const productsByVideo = new Map();
+  for (const snapshot of snapshots) {
+    const key = `${snapshot.shop_id}:${snapshot.video_id}`;
+    if (!productsByVideo.has(key)) productsByVideo.set(key, affiliateProductsOfSnapshot(snapshot));
+  }
+  for (const booking of bookings) {
+    for (const video of booking.booking_videos || []) {
+      video.affiliate_products = productsByVideo.get(`${booking.target_shop_id}:${video.platform_video_id}`) || [];
+    }
+  }
+  return bookings;
+};
+
 const serializeBookingsWithFreshCreatorAvatars = async (bookings = []) => {
   const serialized = bookings.map(serializeBookingWithActual);
   const bookingsByShop = new Map();
@@ -73,7 +126,7 @@ const serializeBookingsWithFreshCreatorAvatars = async (bookings = []) => {
     }
   }));
 
-  return serialized;
+  return hydrateBookingVideoProducts(serialized);
 };
 
 const normalizeBookingVideoUrl = (value) => {
