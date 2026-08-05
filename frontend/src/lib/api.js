@@ -71,9 +71,11 @@ export function fetchContentTeams(signal) {
   return apiRequest('/content-teams', { signal });
 }
 
-export function fetchBookings(signal, { windowType } = {}) {
+export function fetchBookings(signal, { windowType, startDate, endDate } = {}) {
   const params = new URLSearchParams();
   if (windowType) params.set('window_type', windowType);
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
   const query = params.toString();
   return apiRequest(`/bookings${query ? `?${query}` : ''}`, { signal });
 }

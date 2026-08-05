@@ -8,15 +8,26 @@ import {
   fetchBookings,
   fetchTikTokSellerOpenCollaborations,
   fetchTikTokShopVideoThumbnail,
+  fetchUsers,
   matchBookingVideo,
   updateBooking,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 import { useMoneyFormatter } from '../lib/currency';
 
-const initialForm = { creator_key: '', total_cost: '' };
-const ACTIVE_COLLABORATION_STATUSES = new Set(['ONGOING', 'VALID', 'EXPIRING']);
+const initialForm = { creator_key: '', staff_id: '', total_cost: '' };
 const DEFAULT_PERFORMANCE_WINDOW = 'PAST_30_DAYS';
+const dateInputValue = (date) => [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, '0'),
+  String(date.getDate()).padStart(2, '0'),
+].join('-');
+const defaultCustomRange = () => {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 30);
+  return { start: dateInputValue(start), end: dateInputValue(end) };
+};
 
 const targetKocKey = (creator) => {
   const identity = creator.creator_open_id || `username:${String(creator.username || '').toLocaleLowerCase()}`;
@@ -84,6 +95,41 @@ const TargetKocAvatar = ({ src, name }) => {
     return <span className="creator-identity__avatar creator-identity__avatar--fallback">{String(name || 'K').trim().charAt(0).toUpperCase()}</span>;
   }
   return <img className="creator-identity__avatar" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+};
+
+const BookingStaffSelect = ({ users, value, onChange, placeholder, loading, loadingLabel }) => {
+  const rootRef = useRef(null);
+  const menuId = useId();
+  const [open, setOpen] = useState(false);
+  const selected = users.find((user) => String(user.id) === String(value)) || null;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const close = (event) => {
+      if (event.key === 'Escape' || (event.type === 'pointerdown' && !rootRef.current?.contains(event.target))) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, [open]);
+
+  return (
+    <div className="booking-koc-combobox booking-staff-select" ref={rootRef}>
+      <button className="booking-staff-select__trigger" type="button" aria-haspopup="listbox" aria-expanded={open} aria-controls={menuId} disabled={loading} onClick={() => setOpen((current) => !current)}>
+        <TargetKocAvatar src={selected?.avatar_url} name={selected?.name || 'U'} />
+        <span><strong>{selected?.name || (loading ? loadingLabel : placeholder)}</strong>{selected?.email ? <small>{selected.email}</small> : null}</span>
+        <span className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" />
+      </button>
+      {open ? <div className="booking-koc-combobox__menu" id={menuId} role="listbox">
+        {users.map((user) => <button className={`booking-koc-combobox__option${String(user.id) === String(value) ? ' booking-koc-combobox__option--active' : ''}`} type="button" role="option" aria-selected={String(user.id) === String(value)} key={user.id} onClick={() => { onChange(String(user.id)); setOpen(false); }}><TargetKocAvatar src={user.avatar_url} name={user.name} /><span><strong>{user.name}</strong><small>{user.email || '—'}</small></span></button>)}
+      </div> : null}
+    </div>
+  );
 };
 
 const BookingVideoThumbnail = ({ shopId, video, snapshot, index }) => {
@@ -326,9 +372,12 @@ const TargetKocCombobox = ({
 const BookingManagement = ({ heroTitle }) => {
   const { t, language } = useI18n();
   const [bookings, setBookings] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(true);
   const [targetKocs, setTargetKocs] = useState([]);
   const [targetKocQuery, setTargetKocQuery] = useState('');
   const [performanceWindow, setPerformanceWindow] = useState(DEFAULT_PERFORMANCE_WINDOW);
+  const [customRange, setCustomRange] = useState(defaultCustomRange);
   const [targetKocPage, setTargetKocPage] = useState(1);
   const [targetKocPagination, setTargetKocPagination] = useState({ page: 1, total_pages: 1 });
   const [targetKocsLoading, setTargetKocsLoading] = useState(false);
@@ -428,14 +477,32 @@ const BookingManagement = ({ heroTitle }) => {
 
   useEffect(() => {
     const controller = new AbortController();
+    setUsersLoading(true);
+    fetchUsers(controller.signal)
+      .then((rows) => setUsers(Array.isArray(rows) ? rows : []))
+      .catch((err) => { if (err.name !== 'AbortError') setError(err.message || t('booking.errorLoad')); })
+      .finally(() => { if (!controller.signal.aborted) setUsersLoading(false); });
+    return () => controller.abort();
+  }, [t]);
+
+  useEffect(() => {
+    if (performanceWindow === 'CUSTOM' && (!customRange.start || !customRange.end || customRange.start > customRange.end)) {
+      setLoading(false);
+      setError(t('booking.invalidCustomRange'));
+      return undefined;
+    }
+    const controller = new AbortController();
     setLoading(true);
     setError('');
-    fetchBookings(controller.signal, { windowType: performanceWindow })
+    fetchBookings(controller.signal, {
+      windowType: performanceWindow,
+      ...(performanceWindow === 'CUSTOM' ? { startDate: customRange.start, endDate: customRange.end } : {}),
+    })
       .then((loadedBookings) => setBookings(loadedBookings))
       .catch((err) => { if (err.name !== 'AbortError') setError(err.message || t('booking.errorLoad')); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [performanceWindow, t]);
+  }, [customRange.end, customRange.start, performanceWindow, t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -489,15 +556,45 @@ const BookingManagement = ({ heroTitle }) => {
     return () => controller.abort();
   }, [form.creator_key, selectedKocSummary, t]);
   const stats = useMemo(() => bookings.reduce((result, booking) => {
-    const collaboration = collaborationOf(booking);
     const rawCost = finiteNumber(booking.total_cost ?? booking.booking_cost);
     const convertedCost = convertAmount(rawCost, booking.currency);
     result.total += 1;
     result.totalCost += convertedCost ?? rawCost;
-    if (ACTIVE_COLLABORATION_STATUSES.has(collaboration.status)) result.active += 1;
-    if (performanceOf(booking)) result.withPerformance += 1;
     return result;
-  }, { total: 0, active: 0, withPerformance: 0, totalCost: 0 }), [bookings, convertAmount]);
+  }, { total: 0, totalCost: 0 }), [bookings, convertAmount]);
+  const bookingGroups = useMemo(() => {
+    const usersById = new Map(users.map((user) => [String(user.id), user]));
+    const groups = new Map();
+    for (const booking of bookings) {
+      const staffId = booking.staff_id ? String(booking.staff_id) : '';
+      const staffName = String(booking.staff_name || booking.staff?.name || '').trim();
+      const key = staffId ? `id:${staffId}` : staffName ? `name:${staffName.toLocaleLowerCase()}` : 'unassigned';
+      if (!groups.has(key)) {
+        const user = usersById.get(staffId) || booking.staff || null;
+        groups.set(key, {
+          key,
+          manager: {
+            name: user?.name || staffName || t('booking.unassigned'),
+            email: user?.email || null,
+            avatar_url: user?.avatar_url || null,
+          },
+          bookings: [],
+          totalCost: 0,
+          videoCount: 0,
+        });
+      }
+      const group = groups.get(key);
+      const rawCost = finiteNumber(booking.total_cost ?? booking.booking_cost);
+      group.bookings.push(booking);
+      group.totalCost += convertAmount(rawCost, booking.currency) ?? rawCost;
+      group.videoCount += bookingVideosOf(booking).length || Number(booking.actual_performance?.video_count || 0);
+    }
+    return [...groups.values()].sort((left, right) => {
+      if (left.key === 'unassigned') return 1;
+      if (right.key === 'unassigned') return -1;
+      return left.manager.name.localeCompare(right.manager.name, locale);
+    });
+  }, [bookings, convertAmount, locale, t, users]);
 
   const costBenchmarks = (cost, performance) => {
     const videoViews = finiteNumber(performance?.video_views);
@@ -518,6 +615,7 @@ const BookingManagement = ({ heroTitle }) => {
       setSaving(true);
       setError('');
       const created = await createBooking({
+        staff_id: Number(form.staff_id),
         target_shop_id: selectedKoc.shop_id,
         target_collaboration_id: selectedKoc.collaboration_id || null,
         creator_open_id: selectedKoc.creator_open_id,
@@ -651,8 +749,6 @@ const BookingManagement = ({ heroTitle }) => {
         <div><h1 className="page__title">{t('booking.heroTitle') || heroTitle}</h1></div>
         <div className="page__stats booking-stats booking-stats--evaluation">
           <article className="stat-card"><p className="stat-card__label">{t('booking.evaluations')}</p><p className="stat-card__value">{stats.total}</p></article>
-          <article className="stat-card"><p className="stat-card__label">{t('booking.activeCollaborations')}</p><p className="stat-card__value">{stats.active}</p></article>
-          <article className="stat-card"><p className="stat-card__label">{t('booking.performanceCoverage')}</p><p className="stat-card__value">{stats.total ? Math.round(stats.withPerformance / stats.total * 100) : 0}%</p></article>
           <article className="stat-card"><p className="stat-card__label">{t('booking.totalCost')}</p><p className="stat-card__value">{formatMoney(stats.totalCost, selectedCurrency)}</p></article>
         </div>
       </section>
@@ -663,8 +759,9 @@ const BookingManagement = ({ heroTitle }) => {
         <div className="section-card__header"><div><h2 className="section-card__title">{t('booking.createEvaluation')}</h2></div></div>
         <form className="filter-panel booking-evaluation-form" onSubmit={handleSubmit}>
           <div className="field"><label>{t('booking.targetCreator')}</label><TargetKocCombobox creators={targetKocs} value={form.creator_key} onChange={(value) => setForm((current) => ({ ...current, creator_key: value }))} onSearch={(keyword) => { setTargetKocQuery(keyword); setTargetKocPage(1); }} onLoadMore={() => setTargetKocPage((current) => current + 1)} hasMore={targetKocPagination.page < targetKocPagination.total_pages} loading={targetKocsLoading} placeholder={t('booking.searchKoc')} noResults={t('booking.noSyncedCollaboration')} performanceSourceLabel={t('booking.creatorPerformance')} collaborationLabel={t('booking.collaboration')} loadMoreLabel={t('booking.loadMoreKocs')} loadingLabel={t('booking.loadingKocs')} /></div>
+          <div className="field"><label>{t('booking.bookingStaff')}</label><BookingStaffSelect users={users} value={form.staff_id} onChange={(value) => setForm((current) => ({ ...current, staff_id: value }))} placeholder={t('booking.selectStaff')} loading={usersLoading} loadingLabel={t('booking.loading')} /></div>
           <div className="field"><label htmlFor="total_cost">{t('booking.totalCost')} ({currencyLabel})</label><input id="total_cost" type="number" min="0" step={selectedCurrency === 'VND' ? '1' : '0.01'} inputMode="decimal" value={form.total_cost} onChange={(event) => setForm((current) => ({ ...current, total_cost: event.target.value }))} required /></div>
-          <div className="actions"><button className="button" type="submit" disabled={saving || !selectedKoc}>{saving ? t('booking.submitting') : t('booking.evaluate')}</button></div>
+          <div className="actions"><button className="button" type="submit" disabled={saving || !selectedKoc || !form.staff_id}>{saving ? t('booking.submitting') : t('booking.evaluate')}</button></div>
         </form>
         {selectedKoc ? (
           <div className="booking-source-preview">
@@ -675,24 +772,31 @@ const BookingManagement = ({ heroTitle }) => {
       </section>
 
       <section className="section-card">
-        <div className="section-card__header booking-evaluation-list-header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div><div className="field booking-performance-period"><label htmlFor="booking-performance-window">{t('booking.performancePeriod')}</label><select id="booking-performance-window" value={performanceWindow} onChange={(event) => setPerformanceWindow(event.target.value)}><option value="PAST_7_DAYS">{t('booking.period7Days')}</option><option value="PAST_30_DAYS">{t('booking.period30Days')}</option><option value="PAST_60_DAYS">{t('booking.period60Days')}</option><option value="PAST_90_DAYS">{t('booking.period90Days')}</option><option value="PAST_120_DAYS">{t('booking.period120Days')}</option><option value="PAST_150_DAYS">{t('booking.period150Days')}</option><option value="PAST_180_DAYS">{t('booking.period180Days')}</option></select></div></div>
+        <div className="section-card__header booking-evaluation-list-header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div><div className="booking-performance-controls"><div className="field booking-performance-period"><label htmlFor="booking-performance-window">{t('booking.performancePeriod')}</label><select id="booking-performance-window" value={performanceWindow} onChange={(event) => setPerformanceWindow(event.target.value)}><option value="PAST_7_DAYS">{t('booking.period7Days')}</option><option value="PAST_30_DAYS">{t('booking.period30Days')}</option><option value="CUSTOM">{t('booking.periodCustom')}</option></select></div>{performanceWindow === 'CUSTOM' ? <><div className="field booking-performance-date"><label htmlFor="booking-performance-start">{t('booking.startDate')}</label><input id="booking-performance-start" type="date" value={customRange.start} max={customRange.end || undefined} onChange={(event) => setCustomRange((current) => ({ ...current, start: event.target.value }))} /></div><div className="field booking-performance-date"><label htmlFor="booking-performance-end">{t('booking.endDate')}</label><input id="booking-performance-end" type="date" value={customRange.end} min={customRange.start || undefined} max={dateInputValue(new Date())} onChange={(event) => setCustomRange((current) => ({ ...current, end: event.target.value }))} /></div></> : null}</div></div>
+        {loading ? <div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div> : bookings.length ? <div className="content-performance__groups content-performance__groups--filtered booking-manager-groups">{bookingGroups.map((group) => <article className="content-performance__group booking-manager-group" key={group.key}>
+        <div className="content-performance__group-header"><div className="booking-manager-group__identity"><TargetKocAvatar src={group.manager.avatar_url} name={group.manager.name} /><span><h3>{group.manager.name}</h3>{group.manager.email ? <small>{group.manager.email}</small> : null}</span></div></div>
+        <div className="content-performance__metrics booking-manager-group__metrics">
+          <span><small>{t('booking.evaluations')}</small><strong>{formatNumber(group.bookings.length)}</strong></span>
+          <span><small>{t('booking.totalCost')}</small><strong>{formatMoney(group.totalCost, selectedCurrency)}</strong></span>
+          <span><small>{t('booking.matchedVideo')}</small><strong>{formatNumber(group.videoCount)}</strong></span>
+        </div>
         <div className="table-wrap"><table className="data-table booking-evaluation-table">
           <thead>
-            <tr><th>{t('booking.kocColumn')}</th><th>{t('booking.creatorPerformance')}</th><th className="cell-number">{t('booking.totalCost')}</th><th>{t('booking.matchedVideo')}</th><th className="cell-number">{t('booking.refunds')}</th><th className="cell-number">{t('booking.products')}</th><th className="cell-number booking-samples-column">{t('booking.samplesShipped')}</th><th className="cell-number">{t('booking.estimatedCommission')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr>
+            <tr><th className="booking-koc-column">{t('booking.kocColumn')}</th><th className="booking-creator-performance-column">{t('booking.creatorPerformance')}</th><th className="cell-number booking-total-cost-column">{t('booking.totalCost')}</th><th className="booking-video-column">{t('booking.matchedVideo')}</th><th className="cell-number booking-refunds-column">{t('booking.refunds')}</th><th className="cell-number">{t('booking.products')}</th><th className="cell-number booking-samples-column">{t('booking.samplesShipped')}</th><th className="cell-number">{t('booking.estimatedCommission')}</th><th className="cell-actions">{t('booking.actionsColumn')}</th></tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan={9}><div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div></td></tr> : bookings.length ? bookings.map((booking) => {
+            {group.bookings.map((booking) => {
               const performance = performanceOf(booking);
               const bookingVideos = bookingVideosOf(booking);
               const videoCount = bookingVideos.length || Number(booking.actual_performance?.video_count || 0);
               const expanded = String(expandedBookingId) === String(booking.id);
               return <React.Fragment key={booking.id}>
               <tr className={expanded ? 'booking-row booking-row--expanded' : 'booking-row'} onClick={(event) => toggleBookingRow(event, booking.id)}>
-                <td><div className="booking-koc-identity"><TargetKocAvatar src={booking.creator_avatar_url} name={booking.creator_name || booking.creator_username} /><span><strong>{booking.creator_name || booking.creator_username || 'KOC'}</strong><small>@{booking.creator_username}</small></span></div></td>
-                <td>{renderPerformance(performance)}</td>
-                <td className="cell-number"><strong>{formatMoney(booking.total_cost ?? booking.booking_cost, booking.currency)}</strong></td>
-                <td><span className="booking-video-count"><span className={`sidebar__chevron${expanded ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" /><strong>{t('booking.videosCount', { count: videoCount })}</strong></span></td>
-                <td className="cell-number">{creatorMetric(performance, 'refunded_gmv', { money: true })}</td>
+                <td className="booking-koc-column"><div className="booking-koc-identity"><TargetKocAvatar src={booking.creator_avatar_url} name={booking.creator_name || booking.creator_username} /><span><strong>{booking.creator_name || booking.creator_username || 'KOC'}</strong><small>@{booking.creator_username}</small></span></div></td>
+                <td className="booking-creator-performance-column">{renderPerformance(performance)}</td>
+                <td className="cell-number booking-total-cost-column"><strong>{formatMoney(booking.total_cost ?? booking.booking_cost, booking.currency)}</strong></td>
+                <td className="booking-video-column"><span className="booking-video-count"><span className={`sidebar__chevron${expanded ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" /><strong>{t('booking.videosCount', { count: videoCount })}</strong></span></td>
+                <td className="cell-number booking-refunds-column">{creatorMetric(performance, 'refunded_gmv', { money: true })}</td>
                 <td className="cell-number"><div className="booking-product-summary"><strong>{creatorMetric(performance, 'items_sold')} <span>{t('booking.itemsSold')}</span></strong><small>{creatorMetric(performance, 'items_refunded')} {t('booking.refundedShort')}</small></div></td>
                 <td className="cell-number booking-samples-column">{creatorMetric(performance, 'samples_shipped')}</td>
                 <td className="cell-number">{creatorMetric(performance, 'estimated_commission', { money: true })}</td>
@@ -782,9 +886,10 @@ const BookingManagement = ({ heroTitle }) => {
                 })}</div> : <div className="empty-state empty-state--compact">{t('booking.awaitingVideo')}</div>}
               </div></td></tr> : null}
               </React.Fragment>;
-            }) : <tr><td colSpan={9}><div className="empty-state">{t('booking.noEvaluations')}</div></td></tr>}
+            })}
           </tbody>
         </table></div>
+        </article>)}</div> : <div className="empty-state">{t('booking.noEvaluations')}</div>}
       </section>
 
       {videoMatchDialog ? (

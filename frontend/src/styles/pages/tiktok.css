@@ -2121,6 +2121,38 @@
   outline: none;
 }
 
+.booking-staff-select { min-width: 0; }
+
+.booking-staff-select__trigger {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 5px 11px 5px 7px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.booking-staff-select__trigger:hover,
+.booking-staff-select__trigger:focus-visible { border-color: var(--color-accent); outline: none; }
+
+.booking-staff-select__trigger:disabled { opacity: .62; cursor: wait; }
+
+.booking-staff-select__trigger .creator-identity__avatar { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; object-fit: cover; font-size: .72rem; font-weight: 800; }
+
+.booking-staff-select__trigger > span:nth-child(2) { display: grid; min-width: 0; }
+
+.booking-staff-select__trigger strong,
+.booking-staff-select__trigger small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.booking-staff-select__trigger small { color: var(--color-text-soft); font-size: .68rem; }
+
 .booking-koc-identity {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
@@ -2159,17 +2191,21 @@
 }
 
 .booking-stats--evaluation {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .booking-evaluation-form {
-  grid-template-columns: minmax(280px, 2fr) minmax(180px, .7fr) auto;
+  grid-template-columns: minmax(280px, 2fr) minmax(190px, 1fr) minmax(180px, .7fr) auto;
   align-items: end;
 }
 
 .booking-performance-period {
   min-width: 180px;
 }
+
+.booking-performance-controls { display: flex; align-items: end; gap: 10px; }
+
+.booking-performance-date { min-width: 145px; }
 
 .booking-source-preview {
   display: grid;
@@ -2263,19 +2299,62 @@
 }
 
 .booking-evaluation-table {
-  min-width: 1520px;
+  min-width: 100%;
 }
+
+.booking-manager-groups { margin-top: 4px; }
+
+.booking-manager-group__identity { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 10px; align-items: center; min-width: 0; }
+
+.booking-manager-group__identity .creator-identity__avatar { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 50%; object-fit: cover; font-weight: 800; }
+
+.booking-manager-group__identity > span { display: grid; min-width: 0; }
+
+.booking-manager-group__identity h3,
+.booking-manager-group__identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.booking-manager-group__identity small { color: var(--color-text-soft); font-size: .72rem; }
+
+.booking-manager-group__metrics { margin-bottom: 0; }
 
 .booking-evaluation-table th,
 .booking-evaluation-table td {
-  padding-inline: 9px;
+  padding-inline: 7px;
+}
+
+.booking-evaluation-table .booking-koc-identity {
+  min-width: 160px;
 }
 
 .booking-evaluation-table .booking-samples-column {
-  width: 108px;
-  min-width: 108px;
-  padding-inline: 7px;
+  width: 86px;
+  min-width: 86px;
+  padding-inline: 5px;
   white-space: normal;
+}
+
+.booking-evaluation-table .booking-creator-performance-column {
+  width: 132px;
+  min-width: 132px;
+  max-width: 132px;
+  padding-inline: 4px;
+  white-space: normal;
+}
+
+.booking-evaluation-table .booking-koc-column {
+  padding-right: 4px;
+}
+
+.booking-evaluation-table .booking-total-cost-column {
+  padding-left: 4px;
+}
+
+.booking-evaluation-table .booking-video-column {
+  padding-right: 4px;
+}
+
+.booking-evaluation-table .booking-refunds-column {
+  padding-left: 4px;
 }
 
 .booking-product-summary { display: grid; gap: 2px; justify-items: end; white-space: nowrap; }
@@ -2288,8 +2367,8 @@
 .booking-video-count {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 9px;
+  gap: 6px;
+  padding: 6px;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -2388,9 +2467,9 @@
 }
 
 .booking-evaluation-table .cell-actions {
-  width: 72px;
-  min-width: 72px;
-  padding-inline: 12px;
+  width: 58px;
+  min-width: 58px;
+  padding-inline: 6px;
   text-align: center;
   vertical-align: middle;
 }
@@ -2615,6 +2694,9 @@
   .booking-evaluation-form > .field:first-child {
     grid-column: 1 / -1;
   }
+  .booking-evaluation-form > .actions {
+    grid-column: 1 / -1;
+  }
   .booking-evaluation-form > .actions .button {
     width: 100%;
   }
@@ -2670,10 +2752,12 @@
     grid-column: auto;
   }
 
-.booking-performance-period {
+  .booking-performance-period {
     width: 100%;
     min-width: 0;
   }
+
+  .booking-performance-controls { width: 100%; align-items: stretch; flex-direction: column; }
 
 .booking-evaluation-list-header {
     align-items: stretch;

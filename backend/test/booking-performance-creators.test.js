@@ -406,6 +406,7 @@ test('booking can be created from Creator Performance using username only', asyn
   let autoLinkedBooking;
   const performanceQueries = [];
   const { createBooking } = loadController(t, {
+    User: { findByPk: async (id) => ({ id, name: 'Account manager' }) },
     TikTokTargetCollaborationSnapshot: { findOne: async () => null },
     TikTokCreatorPerformanceSnapshot: {
       findOne: async (options) => {
@@ -433,6 +434,7 @@ test('booking can be created from Creator Performance using username only', asyn
         target_collaboration_id: null,
         creator_open_id: null,
         creator_username: 'performance_only',
+        staff_id: 7,
         booking_cost: 80,
         performance_window_type: 'PAST_30_DAYS',
       },
@@ -448,6 +450,8 @@ test('booking can be created from Creator Performance using username only', asyn
   assert.equal(statusCode, 201);
   assert.equal(response.creator_username, 'performance_only');
   assert.equal(createdPayload.target_collaboration_id, null);
+  assert.equal(createdPayload.staff_id, 7);
+  assert.equal(createdPayload.staff_name, 'Account manager');
   assert.equal(createdPayload.deadline, null);
   assert.equal(createdPayload.evaluation_snapshot.collaboration, null);
   assert.deepEqual(createdPayload.evaluation_snapshot.performance, performanceData);

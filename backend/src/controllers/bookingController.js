@@ -40,7 +40,7 @@ const {
 const ALLOWED_STATUSES = new Set(['draft', 'booked', 'waiting_video', 'video_posted', 'done', 'cancelled']);
 const BOOKING_PERFORMANCE_WINDOWS = new Set([
   'PAST_7_DAYS', 'PAST_30_DAYS', 'PAST_60_DAYS', 'PAST_90_DAYS',
-  'PAST_120_DAYS', 'PAST_150_DAYS', 'PAST_180_DAYS',
+  'PAST_120_DAYS', 'PAST_150_DAYS', 'PAST_180_DAYS', 'CUSTOM',
 ]);
 const AGGREGATE_BOOKING_WINDOW_DAYS = new Set([60, 90, 120, 150]);
 
@@ -439,7 +439,7 @@ const enrichPerformanceViews = async (performance) => {
   };
 };
 
-const addReferencePerformance = async (bookings, performanceWindow) => {
+const addReferencePerformance = async (bookings, performanceWindow, customRange = {}) => {
   if (!BOOKING_PERFORMANCE_WINDOWS.has(performanceWindow) || !bookings.length) return bookings;
   const creatorConditions = bookings.map((booking) => ({
     shop_id: Number(booking.target_shop_id),
@@ -449,9 +449,10 @@ const addReferencePerformance = async (bookings, performanceWindow) => {
     ],
   })).filter((condition) => Number.isInteger(condition.shop_id) && condition[Op.or].length);
   const aggregateDays = Number(performanceWindow.match(/^PAST_(\d+)_DAYS$/)?.[1]);
+  const isCustomRange = performanceWindow === 'CUSTOM' && customRange.startDate && customRange.endDate;
   const snapshots = !creatorConditions.length
     ? []
-    : AGGREGATE_BOOKING_WINDOW_DAYS.has(aggregateDays)
+    : AGGREGATE_BOOKING_WINDOW_DAYS.has(aggregateDays) || isCustomRange
       ? await sequelize.query(`
         WITH export_versions AS (
           SELECT export_record.*,
@@ -464,6 +465,7 @@ const addReferencePerformance = async (bookings, performanceWindow) => {
             AND window_type = 'PAST_30_DAYS'
             AND plan_type = 'ALL'
             AND status = 'SUCCEEDED'
+            ${isCustomRange ? 'AND start_date >= :customStartDate AND end_date <= :customEndDate' : ''}
         ), ranked_periods AS (
           SELECT export_versions.*,
             DENSE_RANK() OVER (
@@ -476,7 +478,7 @@ const addReferencePerformance = async (bookings, performanceWindow) => {
           SELECT snapshot.*
           FROM tiktok_creator_performance_snapshots snapshot
           JOIN ranked_periods period ON period.id = snapshot.export_id
-          WHERE period.period_rank <= :periodCount
+          ${isCustomRange ? '' : 'WHERE period.period_rank <= :periodCount'}
         )
         SELECT
           source.shop_id,
@@ -509,8 +511,10 @@ const addReferencePerformance = async (bookings, performanceWindow) => {
       `, {
         replacements: {
           shopIds: [...new Set(bookings.map((booking) => Number(booking.target_shop_id)).filter(Number.isInteger))],
-          periodCount: aggregateDays / 30,
           performanceWindow,
+          ...(isCustomRange
+            ? { customStartDate: customRange.startDate, customEndDate: customRange.endDate }
+            : { periodCount: aggregateDays / 30 }),
         },
         type: QueryTypes.SELECT,
       })
@@ -824,7 +828,12 @@ const getBookings = async (req, res) => {
     });
     const serialized = await serializeBookingsWithFreshCreatorAvatars(bookings);
     const requestedWindow = String(req.query?.window_type || '').trim().toUpperCase();
-    res.json(await addReferencePerformance(serialized, requestedWindow));
+    const startDate = String(req.query?.start_date || '').trim();
+    const endDate = String(req.query?.end_date || '').trim();
+    if (requestedWindow === 'CUSTOM' && (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || startDate > endDate)) {
+      return res.status(400).json({ message: 'A valid custom start_date and end_date are required.' });
+    }
+    res.json(await addReferencePerformance(serialized, requestedWindow, { startDate, endDate }));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -847,6 +856,14 @@ const createBooking = async (req, res) => {
   try {
     const cost = Number(req.body.total_cost ?? req.body.booking_cost);
     if (!Number.isFinite(cost) || cost < 0) return res.status(400).json({ message: 'Total cost must be zero or greater.' });
+    const requestedStaffId = req.body.staff_id === undefined || req.body.staff_id === null || req.body.staff_id === ''
+      ? null
+      : Number(req.body.staff_id);
+    if (requestedStaffId !== null && !Number.isInteger(requestedStaffId)) {
+      return res.status(400).json({ message: 'Select a valid managing user.' });
+    }
+    const staff = requestedStaffId === null ? null : await User.findByPk(requestedStaffId, { attributes: ['id', 'name'] });
+    if (requestedStaffId !== null && !staff) return res.status(400).json({ message: 'Managing user not found.' });
     const targetCreator = await findTargetCreator(
       req.body.target_shop_id,
       req.body.target_collaboration_id,
@@ -870,8 +887,8 @@ const createBooking = async (req, res) => {
       performance,
     };
     const payload = compactPayload({
-      staff_id: null,
-      staff_name: null,
+      staff_id: staff?.id || null,
+      staff_name: staff?.name || null,
       creator_id: null,
       creator_open_id: profile.creator_open_id,
       creator_username: profile.username,
