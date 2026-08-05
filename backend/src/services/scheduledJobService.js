@@ -6,6 +6,7 @@ const {
   ScheduledJobRun,
   TikTokShop,
   TikTokShopAuthorization,
+  TikTokCreatorPerformanceSnapshot,
   sequelize,
 } = require('../models');
 const {
@@ -28,7 +29,6 @@ const { syncVideoPerformanceApi } = require('./tiktokVideoPerformanceService');
 
 const JOB_KEYS = new Set([
   'tiktok_creator_performance',
-  'tiktok_creator_performance_6_months',
   'tiktok_shop_analytics',
   'tiktok_channel_metrics',
   'booking_video_performance',
@@ -188,6 +188,19 @@ const syncBasePerformanceWindows = async (shop, creatorExports, signal) => {
   return exports;
 };
 
+const isoEndDay = (endDay) => {
+  const value = String(endDay);
+  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+};
+
+const sixMonthSnapshotIsFresh = (snapshotEndDate, effectiveEndDay) => {
+  const latest = Date.parse(`${snapshotEndDate}T00:00:00.000Z`);
+  const desired = Date.parse(`${isoEndDay(effectiveEndDay)}T00:00:00.000Z`);
+  if (!Number.isFinite(latest) || !Number.isFinite(desired)) return false;
+  const ageDays = Math.floor((desired - latest) / 86400000);
+  return ageDays >= 0 && ageDays < 30;
+};
+
 const aggregateSixMonthCreatorPerformance = async (shopId, exports) => {
   const exportIds = exports.map((item) => Number(item.export_id)).filter(Number.isInteger);
   if (exportIds.length !== 6) throw new Error('Six completed 30-day exports are required for the 180-day benchmark.');
@@ -239,7 +252,7 @@ const aggregateSixMonthCreatorPerformance = async (shopId, exports) => {
       SUM(source.open_gmv), SUM(source.open_estimated_commission),
       SUM(source.refunded_gmv), SUM(source.items_refunded), MAX(source.followers),
       jsonb_build_object(
-        'source', 'SIX_MONTH_SCHEDULE',
+        'source', 'ROLLING_180_AGGREGATE',
         'period_days', 180,
         'source_export_ids', to_jsonb(ARRAY_AGG(DISTINCT source.export_id ORDER BY source.export_id))
       ) || jsonb_strip_nulls(jsonb_build_object(
@@ -373,7 +386,7 @@ const aggregateSixMonthBasePerformance = async (shopId, exports) => {
       SUM(source.videos), SUM(source.live_streams), SUM(source.samples_shipped),
       SUM(source.items_refunded), COALESCE(MAX(creator_aov.value), 0),
       jsonb_build_object(
-        'source', 'SIX_MONTH_SCHEDULE',
+        'source', 'ROLLING_180_AGGREGATE',
         'period_days', 180,
         'source_export_ids', to_jsonb(ARRAY_AGG(DISTINCT source.export_id ORDER BY source.export_id))
       ),
@@ -401,6 +414,38 @@ const aggregateSixMonthBasePerformance = async (shopId, exports) => {
   `, { replacements: { shopId, exportIds } });
 };
 
+const refreshSixMonthPerformanceIfNeeded = async (shop, effectiveEndDay, signal) => {
+  const latest = await TikTokCreatorPerformanceSnapshot.findOne({
+    where: {
+      shop_id: shop.id,
+      window_type: 'PAST_180_DAYS',
+      plan_type: 'ALL',
+    },
+    attributes: ['end_date'],
+    order: [['end_date', 'DESC']],
+  });
+  if (latest && sixMonthSnapshotIsFresh(latest.end_date, effectiveEndDay)) {
+    return { refreshed: false, end_date: latest.end_date, period_days: 180 };
+  }
+  const windows = [];
+  let endDay = effectiveEndDay;
+  for (let index = 0; index < 6; index += 1) {
+    windows.push({ windowType: 'PAST_30_DAYS', endDay });
+    endDay = shiftEndDay(endDay, -30);
+  }
+  const exports = await syncCreatorPerformanceWindows(shop, windows, signal);
+  await aggregateSixMonthCreatorPerformance(shop.id, exports);
+  const baseExports = await syncBasePerformanceWindows(shop, exports, signal);
+  await aggregateSixMonthBasePerformance(shop.id, baseExports);
+  return {
+    refreshed: true,
+    period_days: 180,
+    window_count: exports.length,
+    exports,
+    base_exports: baseExports,
+  };
+};
+
 const jobHandlers = {
   tiktok_creator_performance: ({ signal } = {}) => runForShops(async (shop) => {
     const endDay = yesterdayEndDay(shop.region);
@@ -409,25 +454,12 @@ const jobHandlers = {
       { windowType: 'PAST_7_DAYS', endDay },
     ], signal);
     const baseExports = await syncBasePerformanceWindows(shop, exports, signal);
-    return { exports, base_exports: baseExports };
-  }, signal),
-  tiktok_creator_performance_6_months: ({ signal } = {}) => runForShops(async (shop) => {
-    const windows = [];
-    let endDay = yesterdayEndDay(shop.region);
-    for (let index = 0; index < 6; index += 1) {
-      windows.push({ windowType: 'PAST_30_DAYS', endDay });
-      endDay = shiftEndDay(endDay, -30);
-    }
-    const exports = await syncCreatorPerformanceWindows(shop, windows, signal);
-    await aggregateSixMonthCreatorPerformance(shop.id, exports);
-    const baseExports = await syncBasePerformanceWindows(shop, exports, signal);
-    await aggregateSixMonthBasePerformance(shop.id, baseExports);
-    return {
-      period_days: 180,
-      window_count: exports.length,
-      exports,
-      base_exports: baseExports,
-    };
+    const sixMonth = await refreshSixMonthPerformanceIfNeeded(
+      shop,
+      exports[0].effective_end_day,
+      signal,
+    );
+    return { exports, base_exports: baseExports, six_month: sixMonth };
   }, signal),
   tiktok_shop_analytics: ({ signal } = {}) => runForShops(async (shop) => {
     const range = scheduledAnalyticsRange(shop);
@@ -454,14 +486,17 @@ const jobHandlers = {
   ),
   tiktok_affiliate_video_performance: ({ signal } = {}) => runForShops(async (shop) => {
     const { endDate } = scheduledAnalyticsRange(shop);
-    const startDate = shiftLocalDate(endDate, -7);
-    const result = await syncVideoPerformanceApi(shop, {
-      startDate,
-      endDate,
-      currency: 'LOCAL',
-    });
-    throwIfAborted(signal);
-    return result;
+    const windows = [];
+    for (const days of [7, 30]) {
+      throwIfAborted(signal);
+      const result = await syncVideoPerformanceApi(shop, {
+        startDate: shiftLocalDate(endDate, -days),
+        endDate,
+        currency: 'LOCAL',
+      });
+      windows.push({ days, ...result });
+    }
+    return { windows };
   }, signal),
 };
 
@@ -623,6 +658,7 @@ module.exports = {
   assertTimezone,
   localScheduleParts,
   latestScheduledSlot,
+  sixMonthSnapshotIsFresh,
   executeScheduledJob,
   enqueueScheduledJob,
   stopScheduledJob,

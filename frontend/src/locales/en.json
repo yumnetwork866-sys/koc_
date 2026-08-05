@@ -1325,10 +1325,6 @@
         "name": "TikTok Creator Performance",
         "description": ""
       },
-      "tiktok_creator_performance_6_months": {
-        "name": "TikTok Creator Performance 6 Months",
-        "description": ""
-      },
       "tiktok_shop_analytics": {
         "name": "TikTok Shop Analytics",
         "description": ""
@@ -1347,7 +1343,7 @@
       },
       "tiktok_affiliate_video_performance": {
         "name": "Affiliate Video Performance",
-        "description": "Sync the latest seven days from Affiliate Center > Analytics > All videos."
+        "description": "Sync the latest seven-day and thirty-day periods from Affiliate Center > Analytics > All videos."
       }
     }
   }

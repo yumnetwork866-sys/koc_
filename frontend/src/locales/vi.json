@@ -1324,10 +1324,6 @@
         "name": "Hiệu suất TikTok Creator",
         "description": ""
       },
-      "tiktok_creator_performance_6_months": {
-        "name": "Hiệu suất TikTok Creator 6 tháng",
-        "description": ""
-      },
       "tiktok_shop_analytics": {
         "name": "TikTok Shop Analytics",
         "description": ""
@@ -1346,7 +1342,7 @@
       },
       "tiktok_affiliate_video_performance": {
         "name": "Hiệu suất video Affiliate",
-        "description": "Đồng bộ dữ liệu Affiliate Center > Analytics > Tất cả video trong 7 ngày gần nhất."
+        "description": ""
       }
     }
   }

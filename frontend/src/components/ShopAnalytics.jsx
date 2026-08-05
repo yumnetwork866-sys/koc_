@@ -20,7 +20,6 @@ import {
   fetchTikTokShops,
   startTikTokShopOauth,
   syncTikTokShopAnalytics,
-  syncTikTokShopVideoPerformance,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 import { useMoneyFormatter } from '../lib/currency';
@@ -813,24 +812,6 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
     }
   };
 
-  const syncVideoPerformance = async () => {
-    if (!selectedShopId || invalidRange || missingAnalyticsScope || tokenExpired || videoAnalyticsLoading) return;
-    try {
-      setVideoAnalyticsLoading(true);
-      setError('');
-      await syncTikTokShopVideoPerformance(selectedShopId, {
-        start_date: startDate,
-        end_date: endDate,
-        currency,
-      });
-      setToast({ type: 'info', message: t('shopAnalytics.videoSyncStarted') });
-      setVideoReloadKey((value) => value + 1);
-    } catch (requestError) {
-      setVideoAnalyticsLoading(false);
-      setToast({ type: 'error', message: requestError.message || t('shopAnalytics.videoSyncError') });
-    }
-  };
-
   const startConnect = async () => {
     if (disconnectingId !== null) return;
     try {
@@ -1409,20 +1390,18 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                   {t(videoExportOnly ? 'shopAnalytics.videoExportFiltersTitle' : 'shopAnalytics.videoFiltersTitle')}
                 </h2>
               </div>
-              <button
-                className="button shop-analytics__sync-button"
-                type="button"
-                disabled={!selectedShopId || videoAnalyticsLoading
-                  || invalidRange || missingAnalyticsScope || tokenExpired}
-                onClick={() => (videoExportOnly
-                  ? syncVideoPerformance()
-                  : setVideoReloadKey((value) => value + 1))}
-              >
-                <AnalyticsIcon name="sync" />
-                {videoAnalyticsLoading
-                  ? t(videoExportOnly ? 'shopAnalytics.syncingAffiliateVideos' : 'common.loading')
-                  : t(videoExportOnly ? 'shopAnalytics.syncAffiliateVideos' : 'shopAnalytics.refreshVideos')}
-              </button>
+              {!videoExportOnly ? (
+                <button
+                  className="button shop-analytics__sync-button"
+                  type="button"
+                  disabled={!selectedShopId || videoAnalyticsLoading
+                    || invalidRange || missingAnalyticsScope || tokenExpired}
+                  onClick={() => setVideoReloadKey((value) => value + 1)}
+                >
+                  <AnalyticsIcon name="sync" />
+                  {videoAnalyticsLoading ? t('common.loading') : t('shopAnalytics.refreshVideos')}
+                </button>
+              ) : null}
             </div>
             {!videoExportOnly ? (
               <div className="shop-video-analytics__account-tabs" role="tablist" aria-label={t('shopAnalytics.videoAccountType')}>

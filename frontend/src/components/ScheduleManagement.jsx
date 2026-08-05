@@ -253,7 +253,6 @@ const ScheduleManagement = () => {
 
                 <div className="schedule-card__body">
                   <div className="schedule-times">
-                    <span className="schedule-times__label">{t('schedule.runTimes')}</span>
                     <div className="schedule-time-list">
                       {schedule.run_times.map((time, index) => {
                         const inputId = `${schedule.job_key}-run-time-${index}`;

@@ -61,6 +61,8 @@ const migrations = [
   require('./051_cleanup_duplicate_video_indexes'),
   require('./052_create_tiktok_video_performance_exports'),
   require('./053_add_video_performance_schedule'),
+  require('./054_merge_creator_performance_schedules'),
+  require('./055_update_affiliate_video_schedule_periods'),
 ];
 
 const createMigrationRunner = ({

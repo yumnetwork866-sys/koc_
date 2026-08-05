@@ -6,8 +6,16 @@ const {
   assertTimezone,
   localScheduleParts,
   latestScheduledSlot,
+  sixMonthSnapshotIsFresh,
   catchUpScheduledJobs,
 } = require('../src/services/scheduledJobService');
+
+test('180-day creator aggregate refreshes only after 30 days', () => {
+  assert.equal(sixMonthSnapshotIsFresh('2026-07-31', 20260801), true);
+  assert.equal(sixMonthSnapshotIsFresh('2026-07-03', 20260801), true);
+  assert.equal(sixMonthSnapshotIsFresh('2026-07-02', 20260801), false);
+  assert.equal(sixMonthSnapshotIsFresh('', 20260801), false);
+});
 
 test('schedule run times are validated, deduplicated and sorted', () => {
   assert.deepEqual(normalizeRunTimes(['14:00', '02:00', '14:00']), ['02:00', '14:00']);

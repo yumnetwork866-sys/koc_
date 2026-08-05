@@ -60,6 +60,8 @@ const defaultMigrationNames = [
   '051_cleanup_duplicate_video_indexes',
   '052_create_tiktok_video_performance_exports',
   '053_add_video_performance_schedule',
+  '054_merge_creator_performance_schedules',
+  '055_update_affiliate_video_schedule_periods',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));
