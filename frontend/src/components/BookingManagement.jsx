@@ -43,7 +43,6 @@ const collaborationOf = (booking) => snapshotOf(booking).collaboration || {};
 const performanceOf = (booking) => Object.prototype.hasOwnProperty.call(booking || {}, 'reference_performance')
   ? booking.reference_performance
   : snapshotOf(booking).performance || null;
-const videoMatchOf = (booking) => snapshotOf(booking).video_match || null;
 const bookingVideosOf = (booking) => Array.isArray(booking?.booking_videos) ? booking.booking_videos : [];
 const latestBookingVideoSnapshot = (video) => [...(video?.performance_snapshots || [])]
   .sort((left, right) => (
@@ -245,6 +244,85 @@ const BookingVideoProduct = ({ product }) => {
         document.body,
       ) : null}
     </span>
+  );
+};
+
+const BookingDetailProduct = ({ product }) => {
+  const [imageFailed, setImageFailed] = useState(false);
+  const source = product?.product || product || {};
+  const name = source.title || source.name || source.product_name || source.id || source.product_id || '—';
+  const id = source.id || source.product_id || null;
+  const thumbnailUrl = source.main_image_url
+    || source.thumbnail_url
+    || source.thumbnailUrl
+    || source.image_url
+    || source.image?.url
+    || source.images?.[0]?.url
+    || null;
+  useEffect(() => setImageFailed(false), [thumbnailUrl]);
+  return (
+    <div className="booking-detail-product">
+      {thumbnailUrl && !imageFailed
+        ? <img src={thumbnailUrl} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setImageFailed(true)} />
+        : <span className="booking-detail-product__placeholder" aria-hidden="true">P</span>}
+      <span><strong title={name}>{name}</strong>{id && String(id) !== String(name) ? <small>{id}</small> : null}</span>
+    </div>
+  );
+};
+
+const BookingDetailProducts = ({ shopId, videos, label, formatNumber }) => {
+  const sourceProducts = useMemo(() => {
+    const byId = new Map();
+    for (const video of videos) {
+      const snapshot = latestBookingVideoSnapshot(video);
+      for (const product of productsOfBookingVideo(video, snapshot)) {
+        const existing = byId.get(product.id) || {};
+        byId.set(product.id, {
+          id: product.id,
+          name: product.name || existing.name || null,
+          thumbnailUrl: product.thumbnailUrl || existing.thumbnailUrl || null,
+        });
+      }
+    }
+    return [...byId.values()];
+  }, [videos]);
+  const [products, setProducts] = useState(sourceProducts);
+
+  useEffect(() => {
+    setProducts(sourceProducts);
+    if (!shopId || !sourceProducts.length) return undefined;
+    const missing = sourceProducts.filter((product) => !product.name || !product.thumbnailUrl);
+    if (!missing.length) return undefined;
+    const controller = new AbortController();
+    Promise.all(missing.map(async (product) => {
+      try {
+        const payload = await fetchTikTokSellerOpenCollaborations(shopId, {
+          signal: controller.signal,
+          pageSize: 20,
+          keyword: product.id,
+        });
+        const row = (payload?.open_collaborations || []).find((item) => String(item?.product?.id) === product.id);
+        return row?.product ? {
+          id: product.id,
+          name: row.product.title || product.name,
+          thumbnailUrl: row.product.main_image_url || product.thumbnailUrl,
+        } : product;
+      } catch {
+        return product;
+      }
+    })).then((resolved) => {
+      if (!controller.signal.aborted) setProducts(resolved);
+    });
+    return () => controller.abort();
+  }, [shopId, sourceProducts]);
+
+  return (
+    <>
+      <span>{label} ({formatNumber(products.length)})</span>
+      {products.length
+        ? <div className="booking-detail-products">{products.map((product) => <BookingDetailProduct product={product} key={product.id} />)}</div>
+        : <strong>—</strong>}
+    </>
   );
 };
 
@@ -558,10 +636,14 @@ const BookingManagement = ({ heroTitle }) => {
   const stats = useMemo(() => bookings.reduce((result, booking) => {
     const rawCost = finiteNumber(booking.total_cost ?? booking.booking_cost);
     const convertedCost = convertAmount(rawCost, booking.currency);
+    const rawRevenue = finiteNumber(booking.actual_performance?.gross_gmv);
+    const convertedRevenue = convertAmount(rawRevenue, booking.actual_performance?.currency);
     result.total += 1;
     result.totalCost += convertedCost ?? rawCost;
+    result.totalRevenue += convertedRevenue ?? rawRevenue;
+    result.videoCount += bookingVideosOf(booking).length || Number(booking.actual_performance?.video_count || 0);
     return result;
-  }, { total: 0, totalCost: 0 }), [bookings, convertAmount]);
+  }, { total: 0, totalCost: 0, totalRevenue: 0, videoCount: 0 }), [bookings, convertAmount]);
   const bookingGroups = useMemo(() => {
     const usersById = new Map(users.map((user) => [String(user.id), user]));
     const groups = new Map();
@@ -580,13 +662,18 @@ const BookingManagement = ({ heroTitle }) => {
           },
           bookings: [],
           totalCost: 0,
+          totalRevenue: 0,
           videoCount: 0,
         });
       }
       const group = groups.get(key);
       const rawCost = finiteNumber(booking.total_cost ?? booking.booking_cost);
+      const convertedCost = convertAmount(rawCost, booking.currency) ?? rawCost;
+      const rawRevenue = finiteNumber(booking.actual_performance?.gross_gmv);
+      const convertedRevenue = convertAmount(rawRevenue, booking.actual_performance?.currency) ?? rawRevenue;
       group.bookings.push(booking);
-      group.totalCost += convertAmount(rawCost, booking.currency) ?? rawCost;
+      group.totalCost += convertedCost;
+      group.totalRevenue += convertedRevenue;
       group.videoCount += bookingVideosOf(booking).length || Number(booking.actual_performance?.video_count || 0);
     }
     return [...groups.values()].sort((left, right) => {
@@ -595,18 +682,6 @@ const BookingManagement = ({ heroTitle }) => {
       return left.manager.name.localeCompare(right.manager.name, locale);
     });
   }, [bookings, convertAmount, locale, t, users]);
-
-  const costBenchmarks = (cost, performance) => {
-    const videoViews = finiteNumber(performance?.video_views);
-    const affiliateOrders = finiteNumber(performance?.affiliate_orders);
-    const rawAffiliateGmv = finiteNumber(performance?.affiliate_gmv);
-    const affiliateGmv = convertAmount(rawAffiliateGmv, performance?.currency) ?? rawAffiliateGmv;
-    return {
-      perThousandViews: videoViews > 0 ? finiteNumber(cost) / videoViews * 1000 : null,
-      perOrder: affiliateOrders > 0 ? finiteNumber(cost) / affiliateOrders : null,
-      gmvRatio: affiliateGmv > 0 ? finiteNumber(cost) / affiliateGmv * 100 : null,
-    };
-  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -723,20 +798,6 @@ const BookingManagement = ({ heroTitle }) => {
     );
   };
 
-  const renderActualPerformance = (booking) => {
-    const actual = booking.actual_performance || {};
-    if (!actual.video_count) return <span className="chip">{t('booking.awaitingVideo')}</span>;
-    if (!actual.snapshot_count) {
-      return <span className="chip">{t('booking.awaitingFirstSync')}</span>;
-    }
-    return (
-      <div className="booking-performance-cell">
-        <strong>{formatMoney(actual.gross_gmv, actual.currency)}</strong>
-        <small>{formatNumber(actual.views)} {t('booking.views')}</small>
-      </div>
-    );
-  };
-
   const creatorMetric = (performance, field, { money = false } = {}) => {
     const value = optionalNumber(performance?.[field]);
     if (value === null) return '—';
@@ -749,6 +810,8 @@ const BookingManagement = ({ heroTitle }) => {
         <div><h1 className="page__title">{t('booking.heroTitle') || heroTitle}</h1></div>
         <div className="page__stats booking-stats booking-stats--evaluation">
           <article className="stat-card"><p className="stat-card__label">{t('booking.evaluations')}</p><p className="stat-card__value">{stats.total}</p></article>
+          <article className="stat-card"><p className="stat-card__label">{t('booking.matchedVideo')}</p><p className="stat-card__value">{formatNumber(stats.videoCount)}</p></article>
+          <article className="stat-card"><p className="stat-card__label">{t('booking.costRevenueRatio')}</p><p className="stat-card__value">{stats.totalRevenue > 0 ? formatRate(stats.totalCost / stats.totalRevenue) : '—'}</p></article>
           <article className="stat-card"><p className="stat-card__label">{t('booking.totalCost')}</p><p className="stat-card__value">{formatMoney(stats.totalCost, selectedCurrency)}</p></article>
         </div>
       </section>
@@ -777,8 +840,9 @@ const BookingManagement = ({ heroTitle }) => {
         <div className="content-performance__group-header"><div className="booking-manager-group__identity"><TargetKocAvatar src={group.manager.avatar_url} name={group.manager.name} /><span><h3>{group.manager.name}</h3>{group.manager.email ? <small>{group.manager.email}</small> : null}</span></div></div>
         <div className="content-performance__metrics booking-manager-group__metrics">
           <span><small>{t('booking.evaluations')}</small><strong>{formatNumber(group.bookings.length)}</strong></span>
-          <span><small>{t('booking.totalCost')}</small><strong>{formatMoney(group.totalCost, selectedCurrency)}</strong></span>
           <span><small>{t('booking.matchedVideo')}</small><strong>{formatNumber(group.videoCount)}</strong></span>
+          <span><small>{t('booking.costRevenueRatio')}</small><strong>{group.totalRevenue > 0 ? formatRate(group.totalCost / group.totalRevenue) : '—'}</strong></span>
+          <span><small>{t('booking.totalCost')}</small><strong>{formatMoney(group.totalCost, selectedCurrency)}</strong></span>
         </div>
         <div className="table-wrap"><table className="data-table booking-evaluation-table">
           <thead>
@@ -909,22 +973,13 @@ const BookingManagement = ({ heroTitle }) => {
 
       {selectedBooking ? (() => {
         const collaboration = collaborationOf(selectedBooking);
-        const performance = performanceOf(selectedBooking);
-        const videoMatch = videoMatchOf(selectedBooking);
-        const benchmark = costBenchmarks(detailCost, performance);
         return <div className="koc-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedBooking(null); }}>
           <aside className="koc-drawer booking-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="booking-detail-title">
-            <div className="koc-drawer__header"><div><h2 id="booking-detail-title">{t('booking.detailTitle', { id: selectedBooking.id })}</h2><p>@{selectedBooking.creator_username}</p></div><button className="button button--ghost" type="button" aria-label={t('common.close')} onClick={() => setSelectedBooking(null)}>×</button></div>
+            <div className="koc-drawer__header"><div className="booking-detail-drawer__heading"><TargetKocAvatar src={selectedBooking.creator_avatar_url} name={selectedBooking.creator_name} /><div><h2 id="booking-detail-title">{t('booking.detailTitle', { id: selectedBooking.id })}</h2><p>{selectedBooking.creator_name || selectedBooking.creator_username} · @{selectedBooking.creator_username}</p></div></div><button className="button button--ghost" type="button" aria-label={t('common.close')} onClick={() => setSelectedBooking(null)}>×</button></div>
             <div className="koc-drawer__body">
-              <section className="drawer-section"><div className="drawer-profile"><TargetKocAvatar src={selectedBooking.creator_avatar_url} name={selectedBooking.creator_name} /><div><strong>{selectedBooking.creator_name || selectedBooking.creator_username}</strong><span>{collaboration.name || selectedBooking.target_collaboration_id || t('booking.creatorPerformance')}</span></div></div></section>
-              {collaboration.id ? <section className="drawer-section"><h3>{t('booking.collaboration')}</h3><div className="booking-detail-grid"><div><span>{t('booking.partnerStatus')}</span><strong>{formatCollaborationStatus(collaboration.status)}</strong></div><div><span>{t('booking.validUntil')}</span><strong>{formatDate(collaboration.end_at)}</strong></div><div className="booking-detail-grid__wide"><span>{t('booking.products')}</span><strong>{(collaboration.products || []).map((product) => product.title || product.name || product.id).filter(Boolean).join(', ') || '—'}</strong></div></div></section> : null}
-              <section className="drawer-section"><h3>{t('booking.creatorPerformance')}</h3>{renderPerformance(performance)}<p className="section-card__meta">{t('booking.performancePeriodDisclaimer')}</p></section>
-              <section className="drawer-section"><h3>{t('booking.matchedVideo')}</h3>{selectedBooking.video_platform_id ? <div className="booking-performance-cell"><strong>{videoMatch?.title || selectedBooking.video_platform_id}</strong>{selectedBooking.video_url ? <a href={selectedBooking.video_url} target="_blank" rel="noreferrer">{t('booking.openMatchedVideo')} ↗</a> : null}{videoMatch ? <small>{formatMoney(videoMatch.gmv?.amount, videoMatch.gmv?.currency)} · {formatNumber(videoMatch.views)} {t('booking.views')} · {formatNumber(videoMatch.orders)} {t('booking.orders')}</small> : null}<small>{formatDate(selectedBooking.posted_at)}</small><button className="button button--ghost" type="button" disabled={matchingVideoId === selectedBooking.id} onClick={() => findBookingVideo(selectedBooking)}>{matchingVideoId === selectedBooking.id ? t('booking.refreshingVideo') : t('booking.refreshVideo')}</button></div> : <button className="button button--ghost" type="button" disabled={matchingVideoId === selectedBooking.id} onClick={() => findBookingVideo(selectedBooking)}>{matchingVideoId === selectedBooking.id ? t('booking.findingVideo') : t('booking.findVideo')}</button>}</section>
-              <section className="drawer-section"><h3>{t('booking.actualResults')}</h3>{renderActualPerformance(selectedBooking)}</section>
+              <section className="drawer-section"><div className="booking-detail-grid">{collaboration.id ? <><div><span>{t('booking.partnerStatus')}</span><strong>{formatCollaborationStatus(collaboration.status)}</strong></div><div><span>{t('booking.validUntil')}</span><strong>{formatDate(collaboration.end_at)}</strong></div></> : null}<div className="booking-detail-grid__wide"><BookingDetailProducts shopId={selectedBooking.target_shop_id} videos={bookingVideosOf(selectedBooking)} label={t('booking.products')} formatNumber={formatNumber} /></div></div></section>
               <form className="booking-detail-form" onSubmit={saveCost}>
-                <label className="field booking-detail-form__wide"><span>{t('booking.totalCost')} ({currencyLabel})</span><input type="number" min="0" step={selectedCurrency === 'VND' ? '1' : '0.01'} value={detailCost} onChange={(event) => setDetailCost(event.target.value)} required /></label>
-                <div className="booking-detail-grid booking-detail-form__wide"><div><span>{t('booking.costPerThousandViews')}</span><strong>{benchmark.perThousandViews == null ? '—' : formatMoney(benchmark.perThousandViews, selectedCurrency)}</strong></div><div><span>{t('booking.costPerOrder')}</span><strong>{benchmark.perOrder == null ? '—' : formatMoney(benchmark.perOrder, selectedCurrency)}</strong></div><div><span>{t('booking.costGmvRatio')}</span><strong>{benchmark.gmvRatio == null ? '—' : `${formatNumber(benchmark.gmvRatio, { maximumFractionDigits: 2 })}%`}</strong></div></div>
-                <div className="actions booking-detail-form__wide"><button className="button" type="submit" disabled={updatingId === selectedBooking.id}>{updatingId === selectedBooking.id ? t('common.loading') : t('booking.saveCost')}</button></div>
+                <div className="booking-detail-form__cost-row"><label className="field"><span>{t('booking.totalCost')} ({currencyLabel})</span><input type="number" min="0" step={selectedCurrency === 'VND' ? '1' : '0.01'} value={detailCost} onChange={(event) => setDetailCost(event.target.value)} required /></label><button className="button" type="submit" disabled={updatingId === selectedBooking.id}>{updatingId === selectedBooking.id ? t('common.loading') : t('booking.saveCost')}</button></div>
               </form>
             </div>
           </aside>

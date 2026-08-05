@@ -536,6 +536,7 @@
       "FINALIZED": "Finalized"
     },
     "matchedVideo": "Booking video",
+    "costRevenueRatio": "Cost / Revenue",
     "videosCount": "{{count}} videos",
     "videoGmv": "GMV",
     "videoItemsSold": "Sold",
