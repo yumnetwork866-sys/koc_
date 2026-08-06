@@ -15,6 +15,7 @@ import {
   updateUser,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import AppAvatar from './AppAvatar';
 import '../styles/pages/admin.css';
 
 const initialForm = {
@@ -617,9 +618,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                   <tr key={user.id}>
                     <td>
                       <div className="employee-table__account-cell">
-                        <span className="employee-table__avatar" aria-hidden="true">
-                          {(user.name || user.email || '?').trim().charAt(0).toUpperCase()}
-                        </span>
+                        <AppAvatar src={user.avatar_url} name={user.name} seed={user.id} className="employee-table__avatar" />
                         <div className="employee-table__account">
                           <span className="row-title">{user.name}</span>
                           <span className="row-subtitle">{user.email}</span>
@@ -879,7 +878,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         </section>
       ) : null}
 
-      {isEditorOpen ? (
+      {isEditorOpen ? createPortal(
         <div className="modal-backdrop" role="presentation" onClick={handleBackdropClick}>
           <div
             className="modal-card employee-table__modal"
@@ -893,11 +892,11 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                 <h2 id="user-editor-title" className="section-card__title">
                   {editingUser ? t('users.editorEdit') : t('users.editorCreate')}
                 </h2>
-                <p className="section-card__meta">
-                  {editingUser
-                    ? t('users.editMeta', { name: editingUser.name })
-                    : t('users.createMeta')}
-                </p>
+                {!editingUser ? (
+                  <p className="section-card__meta">
+                    {t('users.createMeta')}
+                  </p>
+                ) : null}
               </div>
               <button
                 className="employee-table__modal-close"
@@ -921,31 +920,29 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                 <label htmlFor="name">{t('users.fullName')}</label>
                 <input id="name" name="name" value={form.name} onChange={handleChange} required placeholder="Nguyễn Văn A" />
               </div>
-              {!editingUser ? (
-                <>
-                  <div className="field">
-                    <label htmlFor="email">Email</label>
-                    <input id="email" name="email" type="email" value={form.email} onChange={handleChange} required placeholder="name@company.com" />
-                  </div>
-                  <div className="field">
-                    <label htmlFor="password">{t('users.password')}</label>
-                    <input
-                      id="password"
-                      name="password"
-                      type="password"
-                      value={form.password}
-                      onChange={handleChange}
-                      autoComplete="new-password"
-                      minLength="8"
-                      required
-                      placeholder={t('users.passwordPlaceholder')}
-                    />
-                    <p className="employee-table__field-hint">
-                      {t('users.passwordHint')}
-                    </p>
-                  </div>
-                </>
-              ) : null}
+              <div className="field">
+                <label htmlFor="email">{t('users.email')}</label>
+                <input id="email" name="email" type="email" value={form.email} onChange={handleChange} required placeholder="name@company.com" />
+              </div>
+              <div className="field">
+                <label htmlFor="password">{t('users.password')}</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={form.password}
+                  onChange={handleChange}
+                  autoComplete="new-password"
+                  minLength="8"
+                  required={!editingUser}
+                  placeholder={editingUser ? t('users.passwordEditPlaceholder') : t('users.passwordPlaceholder')}
+                />
+                {!editingUser ? (
+                  <p className="employee-table__field-hint">
+                    {t('users.passwordHint')}
+                  </p>
+                ) : null}
+              </div>
               <div className="field">
                 <label htmlFor="role">{t('users.role')}</label>
                 <select id="role" name="role" value={form.role} onChange={handleChange}>
@@ -964,7 +961,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
 
     </div>
