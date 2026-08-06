@@ -28,6 +28,11 @@ const User = sequelize.define('User', {
     allowNull: false,
     defaultValue: 'member',
   },
+  is_active: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true,
+  },
   avatar_url: {
     type: DataTypes.TEXT,
     allowNull: true,

@@ -63,6 +63,7 @@ const migrations = [
   require('./053_add_video_performance_schedule'),
   require('./054_merge_creator_performance_schedules'),
   require('./055_update_affiliate_video_schedule_periods'),
+  require('./056_add_users_is_active'),
 ];
 
 const createMigrationRunner = ({

@@ -111,56 +111,6 @@
 }
 
 
-.employee-table__summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-xs);
-}
-
-
-.employee-table__summary-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 38px;
-  padding: 7px 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-muted);
-  font: inherit;
-  font-size: 0.88rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-
-.employee-table__summary-item strong {
-  display: inline-grid;
-  place-items: center;
-  min-width: 26px;
-  height: 24px;
-  padding: 0 7px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-subtle);
-  color: var(--color-text);
-  font-size: 0.8rem;
-}
-
-
-.employee-table__summary-item:hover,
-.employee-table__summary-item.is-active {
-  border-color: rgba(37, 99, 235, 0.18);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-strong);
-}
-
-
 .employee-table__toolbar {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) minmax(150px, 200px) minmax(160px, 220px) auto;
@@ -1158,25 +1108,9 @@
 }
 
 
-.employee-table__summary-item:hover,
-.employee-table__summary-item.is-active {
-  border-color: rgba(0, 127, 123, 0.24);
-  background: var(--color-accent-soft);
-  color: var(--color-social-cyan-strong);
-}
-
-
 .employee-table__role-item,
 .employee-table__avatar {
   border-radius: var(--radius-default);
-}
-
-
-.employee-table__summary-item:hover,
-.employee-table__summary-item.is-active {
-  border-color: #bcd2f3;
-  background: #edf4ff;
-  animation: none;
 }
 
 
@@ -1482,4 +1416,122 @@
 
 @media (prefers-reduced-motion: reduce) {
 .schedule-switch__track, .schedule-switch__track i, .schedule-time-add, .schedule-time-delete { transition: none; }
+}
+
+
+/* ==== Employee table UX: bulk actions, paging, confirm modal, toast ==== */
+.employee-table__select-cell {
+  width: 40px;
+  text-align: center;
+}
+
+.employee-table__select-cell input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-accent-strong);
+  cursor: pointer;
+}
+
+.employee-table__bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-soft);
+}
+
+.employee-table__bulk-count {
+  color: var(--color-accent-strong);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.employee-table__bulk-action select {
+  min-width: 150px;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.employee-table__pagination {
+  display: flex;
+  justify-content: center;
+  padding: 16px 16px 4px;
+}
+
+.confirm-modal {
+  width: min(420px, 100%);
+  padding: 24px;
+  text-align: center;
+}
+
+.confirm-modal__message {
+  margin: 10px 0 22px;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.confirm-modal__actions {
+  justify-content: center;
+}
+
+.employee-table__toast {
+  z-index: 40000;
+  animation: toast-enter var(--motion-duration-base) var(--motion-ease-out) both;
+}
+
+.employee-table__data-table tr.is-disabled {
+  opacity: 0.55;
+}
+
+.employee-table__data-table tr.is-disabled .row-title {
+  color: var(--color-muted);
+}
+
+.employee-table__role-chip {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.employee-table__attribution-view {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.employee-table__team-name {
+  color: var(--color-text);
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.employee-table__hashtag-list {
+  max-width: 280px;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .employee-table__bulk-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .employee-table__bulk-action select {
+    width: 100%;
+  }
 }

@@ -16,7 +16,10 @@ import {
 } from '../lib/api';
 import { useI18n } from '../lib/language';
 import AppAvatar from './AppAvatar';
+import Pagination from './Pagination';
 import '../styles/pages/admin.css';
+
+const PAGE_SIZE = 20;
 
 const initialForm = {
   name: '',
@@ -63,17 +66,19 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [teamFilter, setTeamFilter] = useState('all');
-  const [attributionDrafts, setAttributionDrafts] = useState({});
-  const [savingAttributionId, setSavingAttributionId] = useState(null);
-  const [pendingAttributionIds, setPendingAttributionIds] = useState({});
-  const [attributionErrorId, setAttributionErrorId] = useState(null);
-  const attributionSaveTimers = useRef(new Map());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [updatingRoleId, setUpdatingRoleId] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
   const [openActions, setOpenActions] = useState({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
   const [error, setError] = useState('');
+  const [queryInput, setQueryInput] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [confirm, setConfirm] = useState(null);
+  const [confirmPending, setConfirmPending] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const loadData = async (signal) => {
     const [loadedUsers, loadedRoles, loadedTeams] = await Promise.all([
@@ -82,13 +87,6 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       fetchContentTeams(signal),
     ]);
     setUsers(loadedUsers);
-    setAttributionDrafts(Object.fromEntries(loadedUsers.map((user) => [
-      user.id,
-      {
-        teamId: String(user.content_attribution?.team_id || ''),
-        hashtags: (user.content_attribution?.hashtags || []).join(', '),
-      },
-    ])));
     setRoles(loadedRoles);
     setTeams(loadedTeams);
   };
@@ -156,21 +154,30 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
     };
   }, []);
 
-  useEffect(() => () => {
-    attributionSaveTimers.current.forEach((timer) => window.clearTimeout(timer));
-    attributionSaveTimers.current.clear();
-  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setQuery(queryInput.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [queryInput]);
 
-  const rows = useMemo(() => users, [users]);
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [query, roleFilter, teamFilter]);
 
-  const stats = useMemo(() => rows.reduce((accumulator, user) => {
-    accumulator.total += 1;
-    accumulator.byRole[user.role] = (accumulator.byRole[user.role] || 0) + 1;
-    return accumulator;
-  }, {
-    total: 0,
-    byRole: {},
-  }), [rows]);
+  useEffect(() => {
+    if (!confirm) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setConfirm(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [confirm]);
+
+  const activeUsers = useMemo(() => users.filter((user) => user.is_active !== false), [users]);
+  const disabledUsers = useMemo(() => users.filter((user) => user.is_active === false), [users]);
+  const rows = useMemo(
+    () => (activeTab === 'disabled' ? disabledUsers : activeUsers),
+    [activeTab, activeUsers, disabledUsers],
+  );
 
   const filteredRows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -197,6 +204,108 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const activeFilters = Number(Boolean(query.trim()))
     + Number(roleFilter !== 'all')
     + Number(teamFilter !== 'all');
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const pageRows = useMemo(() => {
+    const page = Math.min(currentPage, totalPages);
+    return filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  }, [currentPage, filteredRows, totalPages]);
+
+  const pageSelectedCount = pageRows.filter((user) => selectedIds.has(user.id)).length;
+  const allPageSelected = pageRows.length > 0 && pageSelectedCount === pageRows.length;
+  const selectAllRef = useRef(null);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = pageSelectedCount > 0 && !allPageSelected;
+    }
+  }, [allPageSelected, pageSelectedCount]);
+
+  const toggleSelect = (userId) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allPageSelected) pageRows.forEach((user) => next.delete(user.id));
+      else pageRows.forEach((user) => next.add(user.id));
+      return next;
+    });
+  };
+
+  const showToast = (message, status = 'success') => {
+    const id = Date.now();
+    setToast({ message, status, id });
+    window.setTimeout(() => {
+      setToast((current) => (current?.id === id ? null : current));
+    }, 3200);
+  };
+
+  const runBulk = async (apply, successMessage) => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    setBulkBusy(true);
+    try {
+      await Promise.all(ids.map((id) => apply(id)));
+      await loadData();
+      setSelectedIds(new Set());
+      showToast(successMessage);
+    } catch (err) {
+      const message = err.message || 'Thao tác hàng loạt thất bại.';
+      setError(message);
+      showToast(message, 'error');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const bulkChangeRole = (role) => {
+    if (!role) return;
+    runBulk((userId) => updateUser(userId, { role }), t('users.bulkRoleDone', { count: selectedIds.size }));
+  };
+
+  const bulkAssignTeam = (teamId) => {
+    if (!teamId) return;
+    runBulk((userId) => {
+      const user = users.find((item) => item.id === userId);
+      return updateUser(userId, {
+        content_team_id: teamId === 'unassigned' ? null : teamId,
+        content_hashtags: (user?.content_attribution?.hashtags || []).join(', '),
+      });
+    }, t('users.bulkTeamDone', { count: selectedIds.size }));
+  };
+
+  const confirmBulkDelete = () => {
+    const count = selectedIds.size;
+    setConfirm({
+      title: t('users.bulkDeleteTitle', { count }),
+      message: t('users.bulkDeleteMessage', { count }),
+      confirmLabel: t('users.delete'),
+      onConfirm: () => runBulk((userId) => deleteUser(userId), t('users.bulkDeleteDone', { count })),
+    });
+  };
+
+  const runConfirm = async () => {
+    const action = confirm?.onConfirm;
+    if (!action) return;
+    setConfirmPending(true);
+    try {
+      await action();
+    } finally {
+      setConfirmPending(false);
+      setConfirm(null);
+    }
+  };
 
   const toggleActionsMenu = (userId, triggerElement) => {
     setOpenActions((current) => {
@@ -254,24 +363,36 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       else await createContentTeam(payload);
       await loadData();
       resetTeamForm();
+      showToast(editingTeamId ? 'Đã cập nhật team' : 'Đã tạo team');
     } catch (err) {
-      setTeamError(err.message || 'Không lưu được team.');
+      const message = err.message || 'Không lưu được team.';
+      setTeamError(message);
+      showToast(message, 'error');
     } finally {
       setTeamSaving(false);
     }
   };
 
-  const handleDeleteTeam = async (team) => {
-    if (!window.confirm(`Xóa team ${team.name}? Nhân viên trong team sẽ chuyển về Chưa phân team.`)) return;
-    try {
-      setTeamError('');
-      await deleteContentTeam(team.id);
-      await loadData();
-      if (teamFilter === String(team.id)) setTeamFilter('all');
-      resetTeamForm();
-    } catch (err) {
-      setTeamError(err.message || 'Không xóa được team.');
-    }
+  const handleDeleteTeam = (team) => {
+    setConfirm({
+      title: 'Xóa team?',
+      message: `Xóa team ${team.name}? Nhân viên trong team sẽ chuyển về Chưa phân team.`,
+      confirmLabel: t('users.delete'),
+      onConfirm: async () => {
+        try {
+          setTeamError('');
+          await deleteContentTeam(team.id);
+          await loadData();
+          if (teamFilter === String(team.id)) setTeamFilter('all');
+          resetTeamForm();
+          showToast(`Đã xóa team ${team.name}`);
+        } catch (err) {
+          const message = err.message || 'Không xóa được team.';
+          setTeamError(message);
+          showToast(message, 'error');
+        }
+      },
+    });
   };
 
   const editRole = (role) => {
@@ -290,24 +411,36 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
       else await createRole({ ...payload, key: roleForm.key.trim().toLowerCase() });
       setRoles(await fetchRoles());
       resetRoleForm();
+      showToast(t('users.roleSavedToast'));
     } catch (err) {
-      setRoleError(err.message || t('users.roleSaveError'));
+      const message = err.message || t('users.roleSaveError');
+      setRoleError(message);
+      showToast(message, 'error');
     } finally {
       setRoleSaving(false);
     }
   };
 
-  const handleDeleteRole = async (role) => {
-    if (!window.confirm(t('users.roleDeleteConfirm', { name: role.label }))) return;
-    try {
-      setRoleError('');
-      await deleteRole(role.key);
-      setRoles(await fetchRoles());
-      if (roleFilter === role.key) setRoleFilter('all');
-      resetRoleForm();
-    } catch (err) {
-      setRoleError(err.message || t('users.roleDeleteError'));
-    }
+  const handleDeleteRole = (role) => {
+    setConfirm({
+      title: t('users.deleteTitle'),
+      message: t('users.roleDeleteConfirm', { name: role.label }),
+      confirmLabel: t('users.delete'),
+      onConfirm: async () => {
+        try {
+          setRoleError('');
+          await deleteRole(role.key);
+          setRoles(await fetchRoles());
+          if (roleFilter === role.key) setRoleFilter('all');
+          resetRoleForm();
+          showToast(t('users.roleDeletedToast', { name: role.label }));
+        } catch (err) {
+          const message = err.message || t('users.roleDeleteError');
+          setRoleError(message);
+          showToast(message, 'error');
+        }
+      },
+    });
   };
 
   const openEditModal = (user) => {
@@ -365,6 +498,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
 
       closeEditor();
       await loadData();
+      showToast(editingUser ? t('users.updatedToast') : t('users.createdToast'));
     } catch (err) {
       setError(err.message || t(editingUser ? 'users.updateError' : 'users.createError'));
     } finally {
@@ -372,95 +506,50 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
     }
   };
 
-  const handleDelete = async (user) => {
-    const confirmed = window.confirm(t('users.deleteConfirm', { name: user.name, email: user.email }));
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setDeletingId(user.id);
-      setError('');
-      await deleteUser(user.id);
-      await loadData();
-    } catch (err) {
-      setError(err.message || t('users.deleteError'));
-    } finally {
-      setDeletingId(null);
-    }
+  const handleDelete = (user) => {
+    setConfirm({
+      title: t('users.deleteTitle'),
+      message: t('users.deleteConfirm', { name: user.name, email: user.email }),
+      confirmLabel: t('users.delete'),
+      onConfirm: async () => {
+        try {
+          setDeletingId(user.id);
+          setError('');
+          await deleteUser(user.id);
+          await loadData();
+          showToast(t('users.deleteDone', { name: user.name }));
+        } catch (err) {
+          const message = err.message || t('users.deleteError');
+          setError(message);
+          showToast(message, 'error');
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
-  const handleRoleChange = async (user, role) => {
+  const handleToggleActive = async (user) => {
+    const nextActive = user.is_active === false;
     try {
-      setUpdatingRoleId(user.id);
+      setTogglingId(user.id);
       setError('');
-      const updatedUser = await updateUser(user.id, { role });
-      setUsers((current) =>
-        current.map((item) => (item.id === user.id ? { ...item, role: updatedUser.role } : item))
-      );
-    } catch (err) {
-      setError(err.message || t('users.roleUpdateError'));
-    } finally {
-      setUpdatingRoleId(null);
-    }
-  };
-
-  const updateAttributionDraft = (user, field, value, delay) => {
-    const draft = {
-      teamId: attributionDrafts[user.id]?.teamId || '',
-      hashtags: attributionDrafts[user.id]?.hashtags || '',
-      [field]: value,
-    };
-    setAttributionErrorId(null);
-    setAttributionDrafts((current) => ({
-      ...current,
-      [user.id]: draft,
-    }));
-    scheduleAttributionSave(user, draft, delay);
-  };
-
-  const saveAttribution = async (user, draft) => {
-    if (!draft) return;
-    try {
-      setSavingAttributionId(user.id);
-      setAttributionErrorId(null);
-      setError('');
-      const updatedUser = await updateUser(user.id, {
-        content_team_id: draft.teamId || null,
-        content_hashtags: draft.hashtags,
-      });
+      const updatedUser = await updateUser(user.id, { is_active: nextActive });
       setUsers((current) => current.map((item) => (item.id === user.id ? updatedUser : item)));
-      setAttributionDrafts((current) => {
-        const latestDraft = current[user.id];
-        if (!latestDraft
-          || latestDraft.teamId !== draft.teamId
-          || latestDraft.hashtags !== draft.hashtags) return current;
-        return {
-          ...current,
-          [user.id]: {
-            teamId: String(updatedUser.content_attribution?.team_id || ''),
-            hashtags: (updatedUser.content_attribution?.hashtags || []).join(', '),
-          },
-        };
+      setSelectedIds((current) => {
+        if (!current.has(user.id)) return current;
+        const next = new Set(current);
+        next.delete(user.id);
+        return next;
       });
+      showToast(nextActive ? t('users.enabledToast', { name: user.name }) : t('users.disabledToast', { name: user.name }));
     } catch (err) {
-      setAttributionErrorId(user.id);
-      setError(err.message || 'Không lưu được team và hashtag.');
+      const message = err.message || 'Không cập nhật được trạng thái.';
+      setError(message);
+      showToast(message, 'error');
     } finally {
-      setSavingAttributionId(null);
+      setTogglingId(null);
     }
-  };
-
-  const scheduleAttributionSave = (user, draft, delay = 650) => {
-    const currentTimer = attributionSaveTimers.current.get(user.id);
-    if (currentTimer) window.clearTimeout(currentTimer);
-    setPendingAttributionIds((current) => ({ ...current, [user.id]: true }));
-    const timer = window.setTimeout(() => {
-      attributionSaveTimers.current.delete(user.id);
-      setPendingAttributionIds((current) => ({ ...current, [user.id]: false }));
-      saveAttribution(user, draft);
-    }, delay);
-    attributionSaveTimers.current.set(user.id, timer);
   };
 
   const handleBackdropClick = (event) => {
@@ -476,7 +565,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           {heroSubtitle ? <p className="page__subtitle">{heroSubtitle}</p> : null}
         </div>
 
-        {activeTab === 'users' ? (
+        {activeTab === 'users' || activeTab === 'disabled' ? (
           <div className="employee-table__hero-actions">
           <button className="button" type="button" onClick={openCreateModal}>
             {t('users.create')}
@@ -487,7 +576,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
 
       <nav className="employee-table__tabs" aria-label="Quản lý hệ thống">
         {[
-          { key: 'users', label: 'Người dùng', count: users.length },
+          { key: 'users', label: 'Người dùng', count: activeUsers.length },
+          { key: 'disabled', label: 'Đã khóa', count: disabledUsers.length },
           { key: 'teams', label: 'Team', count: teams.length },
           { key: 'roles', label: 'Vai trò', count: roles.length },
         ].map((tab) => (
@@ -498,6 +588,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
             onClick={() => {
               setActiveTab(tab.key);
               setOpenActions({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
+              setSelectedIds(new Set());
+              setCurrentPage(1);
             }}
             aria-current={activeTab === tab.key ? 'page' : undefined}
           >
@@ -507,23 +599,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
         ))}
       </nav>
 
-      {activeTab === 'users' ? (
+      {activeTab === 'users' || activeTab === 'disabled' ? (
         <>
-          <section className="employee-table__summary" aria-label={t('users.summaryLabel')}>
-        {[{ key: 'all', label: t('users.all') }, ...roles].map((role) => (
-          <button
-            key={role.key}
-            className={`employee-table__summary-item${roleFilter === role.key ? ' is-active' : ''}`}
-            type="button"
-            onClick={() => setRoleFilter(role.key)}
-            aria-pressed={roleFilter === role.key}
-          >
-            <span>{role.label}</span>
-            <strong>{role.key === 'all' ? stats.total : (stats.byRole[role.key] || 0)}</strong>
-          </button>
-        ))}
-          </section>
-
           {error && !isEditorOpen ? (
             <section className="section-card empty-state empty-state--compact">
               <div>{error}</div>
@@ -535,7 +612,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           <div>
             <h2 className="section-card__title">{t('users.list')}</h2>
             <p className="section-card__meta">
-
+              {t('users.showing', { visible: pageRows.length, total: filteredRows.length })}
             </p>
           </div>
         </div>
@@ -545,8 +622,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
             <label className="sr-only" htmlFor="user-search">{t('users.search')}</label>
             <input
               id="user-search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              value={queryInput}
+              onChange={(event) => setQueryInput(event.target.value)}
               placeholder={t('users.searchPlaceholder')}
             />
           </div>
@@ -582,7 +659,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               className="button button--ghost button--small"
               type="button"
               onClick={() => {
-                setQuery('');
+                setQueryInput('');
                 setRoleFilter('all');
                 setTeamFilter('all');
               }}
@@ -593,29 +670,77 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           ) : null}
         </div>
 
-        <div className="table-wrap">
+          {selectedIds.size > 0 ? (
+            <div className="employee-table__bulk-bar">
+              <span className="employee-table__bulk-count">{t('users.bulkSelected', { count: selectedIds.size })}</span>
+              <label className="employee-table__bulk-action">
+                <span className="sr-only">{t('users.bulkRolePlaceholder')}</span>
+                <select value="" onChange={(event) => bulkChangeRole(event.target.value)} disabled={bulkBusy}>
+                  <option value="" disabled>{t('users.bulkRolePlaceholder')}</option>
+                  {roleOptions.map((role) => (
+                    <option key={role} value={role}>{getRoleLabel(role)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="employee-table__bulk-action">
+                <span className="sr-only">{t('users.bulkTeamPlaceholder')}</span>
+                <select value="" onChange={(event) => bulkAssignTeam(event.target.value)} disabled={bulkBusy}>
+                  <option value="" disabled>{t('users.bulkTeamPlaceholder')}</option>
+                  <option value="unassigned">{t('users.bulkUnassigned')}</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={String(team.id)}>{team.name}</option>
+                  ))}
+                </select>
+              </label>
+              <button className="button button--ghost button--small button--danger" type="button" onClick={confirmBulkDelete} disabled={bulkBusy}>
+                {t('users.delete')}
+              </button>
+              <button className="button button--ghost button--small" type="button" onClick={() => setSelectedIds(new Set())} disabled={bulkBusy}>
+                {t('users.bulkClear')}
+              </button>
+            </div>
+          ) : null}
+
+          <div className="table-wrap">
           <table className="data-table employee-table__data-table">
             <thead>
               <tr>
+                <th className="employee-table__select-cell">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    aria-label={t('users.selectAll')}
+                    checked={allPageSelected}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
                 <th>{t('users.account')}</th>
                 <th>{t('users.role')}</th>
-                 <th>Team</th>
+                <th>Team</th>
                 <th className="cell-actions">{t('users.actions')}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={4}>
+                  <td className="table-state-cell" colSpan={5}>
                     <div className="empty-state table-empty-state">
                       <div className="loading-dot" />
                       <div>{t('users.loading')}</div>
                     </div>
                   </td>
                 </tr>
-              ) : filteredRows.length ? (
-                filteredRows.map((user) => (
-                  <tr key={user.id}>
+              ) : pageRows.length ? (
+                pageRows.map((user) => (
+                  <tr key={user.id} className={user.is_active === false ? 'is-disabled' : undefined}>
+                    <td className="employee-table__select-cell">
+                      <input
+                        type="checkbox"
+                        aria-label={t('users.selectUser', { name: user.name })}
+                        checked={selectedIds.has(user.id)}
+                        onChange={() => toggleSelect(user.id)}
+                      />
+                    </td>
                     <td>
                       <div className="employee-table__account-cell">
                         <AppAvatar src={user.avatar_url} name={user.name} seed={user.id} className="employee-table__avatar" />
@@ -626,65 +751,19 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                       </div>
                     </td>
                     <td>
-                      <select
-                        className="table-select employee-table__role-select"
-                        value={user.role}
-                        onChange={(event) => handleRoleChange(user, event.target.value)}
-                        disabled={updatingRoleId === user.id}
-                        aria-label={t('users.changeRole', { name: user.name })}
-                      >
-                        {roleOptions.map((role) => (
-                          <option key={role} value={role}>{getRoleLabel(role)}</option>
-                        ))}
-                      </select>
+                      <span className="chip employee-table__role-chip">{getRoleLabel(user.role)}</span>
                     </td>
                     <td className="employee-table__attribution-cell">
-                      <div className="employee-table__attribution-editor">
-                        <label>
-                          <span className="sr-only">Team của {user.name}</span>
-                          <select
-                            value={attributionDrafts[user.id]?.teamId || ''}
-                            onChange={(event) => updateAttributionDraft(user, 'teamId', event.target.value, 0)}
-                            disabled={savingAttributionId === user.id}
-                            aria-label={`Team của ${user.name}`}
-                          >
-                            <option value="">Chưa phân team</option>
-                            {teams.map((team) => (
-                              <option value={String(team.id)} key={team.id}>{team.name}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="employee-table__hashtag-input">
-                          <span className="sr-only">Hashtag của {user.name}</span>
-                          <input
-                            value={attributionDrafts[user.id]?.hashtags || ''}
-                            onChange={(event) => updateAttributionDraft(user, 'hashtags', event.target.value, 650)}
-                            onBlur={(event) => updateAttributionDraft(user, 'hashtags', event.target.value, 0)}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault();
-                                updateAttributionDraft(user, 'hashtags', event.currentTarget.value, 0);
-                                event.currentTarget.blur();
-                              }
-                            }}
-                             placeholder="#hashtag1, #hashtag2"
-                            aria-label={`Hashtag của ${user.name}`}
-                          />
-                        </label>
-                        <span
-                          className={`employee-table__attribution-status${savingAttributionId === user.id || pendingAttributionIds[user.id] ? ' is-saving' : ''}${attributionErrorId === user.id ? ' is-error' : ''}`}
-                          aria-live="polite"
-                        >
-                          {savingAttributionId === user.id
-                            ? 'Đang lưu…'
-                            : pendingAttributionIds[user.id]
-                              ? 'Chờ lưu…'
-                              : attributionErrorId === user.id ? 'Lỗi' : '✓'}
+                      <div className="employee-table__attribution-view">
+                        <span className="employee-table__team-name">
+                          {user.content_attribution?.team?.name || 'Chưa phân team'}
                         </span>
+                        {(user.content_attribution?.hashtags || []).length ? (
+                          <span className="employee-table__hashtag-list">
+                            {(user.content_attribution?.hashtags || []).join(', ')}
+                          </span>
+                        ) : null}
                       </div>
-                      {attributionErrorId === user.id ? (
-                        <span className="employee-table__attribution-error">Không lưu được. Hãy thử lại.</span>
-                      ) : null}
                     </td>
                     <td className="cell-actions">
                       <div className="action-menu employee-table__action-menu">
@@ -724,6 +803,18 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                           </button>
                           <button
                             type="button"
+                            className="action-menu__item"
+                            role="menuitem"
+                            onClick={() => {
+                              setOpenActions({ id: null, direction: 'down', top: 0, bottom: 0, right: 0 });
+                              handleToggleActive(user);
+                            }}
+                            disabled={togglingId === user.id}
+                          >
+                            {togglingId === user.id ? t('users.saving') : (user.is_active === false ? t('users.enable') : t('users.disable'))}
+                          </button>
+                          <button
+                            type="button"
                             className="action-menu__item action-menu__item--danger"
                             role="menuitem"
                             onClick={() => {
@@ -742,7 +833,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                 ))
               ) : (
                 <tr className="table-state-row">
-                  <td className="table-state-cell" colSpan={4}>
+                  <td className="table-state-cell" colSpan={5}>
                     <div className="empty-state empty-state--compact table-empty-state">
                       <div>{t('users.noMatch')}</div>
                     </div>
@@ -751,6 +842,16 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="employee-table__pagination">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            previousLabel={t('common.previous')}
+            nextLabel={t('common.next')}
+            ariaLabel={t('users.pageOf', { page: currentPage, total: totalPages })}
+          />
         </div>
           </section>
         </>
@@ -961,6 +1062,31 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               </div>
             </form>
           </div>
+        </div>,
+        document.body,
+      ) : null}
+
+      {confirm ? createPortal(
+        <div className="modal-backdrop" role="presentation" onClick={(event) => { if (event.target === event.currentTarget && !confirmPending) setConfirm(null); }}>
+          <div className="modal-card confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+            <h2 id="confirm-modal-title" className="section-card__title">{confirm.title}</h2>
+            <p className="confirm-modal__message">{confirm.message}</p>
+            <div className="actions confirm-modal__actions">
+              <button className="button button--ghost" type="button" onClick={() => setConfirm(null)} disabled={confirmPending}>
+                {t('users.cancel')}
+              </button>
+              <button className="button button--danger" type="button" onClick={runConfirm} disabled={confirmPending}>
+                {confirmPending ? t('users.deleting') : confirm.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+
+      {toast ? createPortal(
+        <div className={`toast employee-table__toast toast--${toast.status}`} role="status">
+          {toast.message}
         </div>,
         document.body,
       ) : null}

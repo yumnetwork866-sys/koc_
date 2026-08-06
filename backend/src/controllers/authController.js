@@ -30,6 +30,10 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    if (user.is_active === false) {
+      return res.status(403).json({ message: 'Tài khoản đã bị vô hiệu hóa' });
+    }
+
     const safeUser = user.get({ plain: true });
     delete safeUser.password_hash;
 
