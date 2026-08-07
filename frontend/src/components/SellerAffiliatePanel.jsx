@@ -27,6 +27,7 @@ import {
 import ShopDropdown from './ShopDropdown';
 import Pagination from './Pagination';
 import AppAvatar from './AppAvatar';
+import DatePickerInput from './DatePickerInput';
 
 const REQUIRED_SCOPE = 'seller.affiliate_collaboration.read';
 const MARKETPLACE_SCOPE = 'seller.creator_marketplace.read';
@@ -316,7 +317,7 @@ const InviteCreatorModal = ({
               </div>
               <aside className="seller-affiliate__invite-notes seller-affiliate__invite-grid--wide"><strong>{t('sellerAffiliate.notes')}</strong><ul><li>{t('sellerAffiliate.invitationNameNote')}</li><li>{t('sellerAffiliate.invitationExpiryNote')}</li></ul></aside>
               <div className="field"><label htmlFor="affiliate-invite-name">{t('sellerAffiliate.invitationName')}</label><input id="affiliate-invite-name" value={form.name} maxLength={100} required onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></div>
-              <div className="field"><label htmlFor="affiliate-invite-end">{t('sellerAffiliate.validity')}</label><input id="affiliate-invite-end" type="date" min={new Date().toISOString().slice(0, 10)} value={form.endDate} required onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></div>
+              <div className="field"><label htmlFor="affiliate-invite-end">{t('sellerAffiliate.validity')}</label><DatePickerInput id="affiliate-invite-end" label={t('sellerAffiliate.validity')} min={new Date().toISOString().slice(0, 10)} value={form.endDate} required onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} /></div>
               <details className="seller-affiliate__invite-compact seller-affiliate__invite-grid--wide">
                 <summary><span><strong>{t('sellerAffiliate.contactInfo')}</strong><small>{t('sellerAffiliate.contactInfoDescription')}</small></span><em>{[form.whatsapp, form.facebook, form.telegram].filter(Boolean).length}/3</em></summary>
                 <div className="seller-affiliate__invite-compact-body seller-affiliate__invite-compact-body--grid">

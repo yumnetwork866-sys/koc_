@@ -13,6 +13,7 @@ import { UserRound, UsersRound } from 'lucide-react';
 import { fetchDashboard } from '../lib/api';
 import { useI18n } from '../lib/language';
 import VideoTable, { ChannelPicker } from './VideoTable';
+import DatePickerInput from './DatePickerInput';
 
 const chartTick = { fill: 'var(--color-muted)', fontSize: 12 };
 const dateInputValue = (date) => [
@@ -373,23 +374,23 @@ const Dashboard = ({ heroTitle }) => {
               <>
                 <div className="field dashboard-date-filter">
                   <label htmlFor="dashboard-start-date">{t('dashboard.startDate')}</label>
-                  <input
+                  <DatePickerInput
                     id="dashboard-start-date"
-                    type="date"
+                    label={t('dashboard.startDate')}
                     value={startDate}
                     max={endDate || dateInputValue(new Date())}
-                    onChange={(event) => setStartDate(event.target.value)}
+                    onChange={setStartDate}
                   />
                 </div>
                 <div className="field dashboard-date-filter">
                   <label htmlFor="dashboard-end-date">{t('dashboard.endDate')}</label>
-                  <input
+                  <DatePickerInput
                     id="dashboard-end-date"
-                    type="date"
+                    label={t('dashboard.endDate')}
                     value={endDate}
                     min={startDate || undefined}
                     max={dateInputValue(new Date())}
-                    onChange={(event) => setEndDate(event.target.value)}
+                    onChange={setEndDate}
                   />
                 </div>
               </>

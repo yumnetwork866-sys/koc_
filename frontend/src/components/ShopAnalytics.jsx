@@ -26,6 +26,7 @@ import { useMoneyFormatter } from '../lib/currency';
 import ShopDropdown from './ShopDropdown';
 import Pagination from './Pagination';
 import AppAvatar from './AppAvatar';
+import DatePickerInput from './DatePickerInput';
 
 const REQUIRED_SCOPE = 'data.shop_analytics.public.read';
 const SOURCE_COLORS = [
@@ -1263,9 +1264,9 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                 <>
                   <div className="field">
                     <label htmlFor="analytics-start-date">{t('shopAnalytics.startDate')}</label>
-                    <input
+                    <DatePickerInput
                       id="analytics-start-date"
-                      type="date"
+                      label={t('shopAnalytics.startDate')}
                       value={startDate}
                       max={endDate ? shiftDate(endDate, -1) : undefined}
                       onChange={changeCustomDate(setStartDate, startDate)}
@@ -1273,13 +1274,13 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                   </div>
                   <div className="field">
                     <label htmlFor="analytics-end-date">{t('shopAnalytics.endDate')}</label>
-                    <input
+                    <DatePickerInput
                       id="analytics-end-date"
-                      type="date"
+                      label={t('shopAnalytics.endDate')}
                       value={endDate}
                       min={startDate ? shiftDate(startDate, 1) : undefined}
                       max={dateOnly(new Date())}
-                      aria-invalid={invalidRange}
+                      invalid={invalidRange}
                       onChange={changeCustomDate(setEndDate, endDate)}
                     />
                   </div>
@@ -1696,11 +1697,11 @@ const ShopAnalytics = ({ managementOnly = false, videoOnly = false, videoExportO
                 <>
                   <div className="field">
                     <label htmlFor="video-start-date">{t('shopAnalytics.startDate')}</label>
-                    <input id="video-start-date" type="date" value={startDate} max={endDate ? shiftDate(endDate, -1) : undefined} onChange={changeCustomDate(setStartDate, startDate)} />
+                    <DatePickerInput id="video-start-date" label={t('shopAnalytics.startDate')} value={startDate} max={endDate ? shiftDate(endDate, -1) : undefined} onChange={changeCustomDate(setStartDate, startDate)} />
                   </div>
                   <div className="field">
                     <label htmlFor="video-end-date">{t('shopAnalytics.endDate')}</label>
-                    <input id="video-end-date" type="date" value={endDate} min={startDate ? shiftDate(startDate, 1) : undefined} max={dateOnly(new Date())} onChange={changeCustomDate(setEndDate, endDate)} />
+                    <DatePickerInput id="video-end-date" label={t('shopAnalytics.endDate')} value={endDate} min={startDate ? shiftDate(startDate, 1) : undefined} max={dateOnly(new Date())} onChange={changeCustomDate(setEndDate, endDate)} />
                   </div>
                 </>
               ) : null}

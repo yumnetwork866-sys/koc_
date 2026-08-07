@@ -15,6 +15,7 @@ import { useI18n } from '../lib/language';
 import { useMoneyFormatter } from '../lib/currency';
 import Pagination from './Pagination';
 import AppAvatar from './AppAvatar';
+import DatePickerInput from './DatePickerInput';
 
 const REQUIRED_CREATOR_SCOPES = ['creator.affiliate.info', 'creator.affiliate_collaboration.read', 'creator.showcase.read'];
 const PAGE_SIZE = 10;
@@ -392,7 +393,7 @@ const KOCPerformance = ({ heroTitle }) => {
           <div className="field"><label htmlFor="showcase-status">{t('koc.showcaseFilter')}</label><select id="showcase-status" value={showcaseFilter} onChange={(event) => setShowcaseFilter(event.target.value)}><option value="all">{t('koc.showcaseAll')}</option><option value="with">{t('koc.hasShowcase')}</option><option value="without">{t('koc.noShowcase')}</option></select></div>
           <div className="field"><label htmlFor="creator-region">{t('koc.partnerRegion')}</label><select id="creator-region" value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}><option value="all">{t('koc.regionAll')}</option>{regionOptions.map((region) => <option value={region} key={region}>{region}</option>)}</select></div>
           <div className="field"><label htmlFor="min-views">{t('koc.minViews')}</label><input id="min-views" type="number" min="0" step="1000" value={minViews} placeholder="10000" onChange={(event) => setMinViews(event.target.value)} /></div>
-          {periodPreset === 'custom' ? <><div className="field"><label htmlFor="koc-start-date">{t('koc.startDate')}</label><input id="koc-start-date" type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} /></div><div className="field"><label htmlFor="koc-end-date">{t('koc.endDate')}</label><input id="koc-end-date" type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} /></div></> : null}
+          {periodPreset === 'custom' ? <><div className="field"><label htmlFor="koc-start-date">{t('koc.startDate')}</label><DatePickerInput id="koc-start-date" label={t('koc.startDate')} value={startDate} max={endDate || undefined} onChange={setStartDate} /></div><div className="field"><label htmlFor="koc-end-date">{t('koc.endDate')}</label><DatePickerInput id="koc-end-date" label={t('koc.endDate')} value={endDate} min={startDate || undefined} onChange={setEndDate} /></div></> : null}
         </div>
         {activeFilters.length ? <div className="active-filter-row" aria-label={t('koc.activeFilters')}>{activeFilters.map((filter) => <button className="filter-chip" type="button" key={filter.key} onClick={() => clearFilter(filter.key)} aria-label={`${t('koc.removeFilter')} ${filter.label}`}>{filter.label}<span aria-hidden="true">×</span></button>)}</div> : null}
       </section>

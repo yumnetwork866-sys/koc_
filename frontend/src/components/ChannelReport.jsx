@@ -12,6 +12,7 @@ import {
 import { fetchChannelReport, fetchChannelReportMemberDetail } from '../lib/api';
 import { useI18n } from '../lib/language';
 import { useMoneyFormatter } from '../lib/currency';
+import DatePickerInput from './DatePickerInput';
 
 const chartTick = { fill: 'var(--color-muted)', fontSize: 12 };
 
@@ -47,37 +48,6 @@ const formatMonth = (value) => {
   return year && month ? `${month}/${year}` : '';
 };
 
-const formatDate = (value) => {
-  const [year, month, day] = String(value || '').split('-');
-  return year && month && day ? `${day}/${month}/${year}` : '';
-};
-
-const DatePickerInput = ({ id, value, onChange, min, max }) => {
-  const inputRef = useRef(null);
-  const openPicker = () => {
-    if (typeof inputRef.current?.showPicker === 'function') inputRef.current.showPicker();
-    else inputRef.current?.click();
-  };
-
-  return (
-    <span className="channel-report-date-picker">
-      <button className="channel-report-date-picker__value" type="button" onClick={openPicker}>
-        {formatDate(value) || 'dd/mm/yyyy'}
-      </button>
-      <input
-        ref={inputRef}
-        id={id}
-        type="date"
-        lang="en-GB"
-        value={value}
-        min={min}
-        max={max}
-        aria-label="Chọn ngày"
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </span>
-  );
-};
 
 const compactProductName = (value) => {
   const name = String(value || '').trim();
@@ -569,11 +539,11 @@ const ChannelReport = () => {
               <>
                 <div className="field channel-report-date">
                   <label htmlFor="channel-report-start-date">Từ ngày</label>
-                  <DatePickerInput id="channel-report-start-date" value={startDate} min="" max={endDate || todayValue()} onChange={setStartDate} />
+                  <DatePickerInput id="channel-report-start-date" label="Chọn ngày bắt đầu" value={startDate} min="" max={endDate || todayValue()} onChange={setStartDate} />
                 </div>
                 <div className="field channel-report-date">
                   <label htmlFor="channel-report-end-date">Đến ngày</label>
-                  <DatePickerInput id="channel-report-end-date" value={endDate} min={startDate || undefined} max={todayValue()} onChange={setEndDate} />
+                  <DatePickerInput id="channel-report-end-date" label="Chọn ngày kết thúc" value={endDate} min={startDate || undefined} max={todayValue()} onChange={setEndDate} />
                 </div>
               </>
             )}

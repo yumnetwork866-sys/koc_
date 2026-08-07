@@ -1000,6 +1000,8 @@
 .channel-report-date-picker__value {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
   min-height: 42px;
   padding: 0 12px;
@@ -1012,6 +1014,23 @@
   text-align: left;
   cursor: pointer;
   pointer-events: auto;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.channel-report-date-picker__value:hover {
+  border-color: var(--color-accent);
+  background: var(--color-surface-subtle, #f7f9fb);
+}
+
+.channel-report-date-picker__value:focus-visible {
+  border-color: var(--color-accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+
+.channel-report-date-picker__icon {
+  flex: 0 0 auto;
+  color: var(--color-muted);
 }
 
 .channel-report-date-picker > input {
@@ -2308,6 +2327,8 @@
 }
 
 .booking-performance-date { min-width: 145px; }
+
+
 
 .booking-performance-cell {
   display: grid;
