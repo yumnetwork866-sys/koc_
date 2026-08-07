@@ -12,8 +12,13 @@ const getSessionSecret = () => {
 
 const sign = (value) => crypto.createHmac('sha256', getSessionSecret()).update(value).digest('base64url');
 
-const createSessionToken = (user) => {
-  const payload = Buffer.from(JSON.stringify({ sub: user.id, role: user.role, exp: Date.now() + SESSION_TTL_MS })).toString('base64url');
+const createSessionToken = (user, permissions = []) => {
+  const payload = Buffer.from(JSON.stringify({
+    sub: user.id,
+    role: user.role,
+    permissions: Array.isArray(permissions) ? permissions : [],
+    exp: Date.now() + SESSION_TTL_MS,
+  })).toString('base64url');
   return `${payload}.${sign(payload)}`;
 };
 
@@ -37,4 +42,18 @@ const requireAdmin = (req, res, next) => {
   }
 };
 
-module.exports = { createSessionToken, requireAdmin };
+const requirePermission = (permission) => (req, res, next) => {
+  const session = req.session;
+  if (!session) {
+    return res.status(401).json({ message: 'Authentication is required' });
+  }
+  if (session.role === 'admin') {
+    return next();
+  }
+  if (Array.isArray(session.permissions) && session.permissions.includes(permission)) {
+    return next();
+  }
+  return res.status(403).json({ message: 'Không có quyền truy cập' });
+};
+
+module.exports = { createSessionToken, requireAdmin, requirePermission };

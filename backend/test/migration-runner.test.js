@@ -62,6 +62,9 @@ const defaultMigrationNames = [
   '053_add_video_performance_schedule',
   '054_merge_creator_performance_schedules',
   '055_update_affiliate_video_schedule_periods',
+  '056_add_users_is_active',
+  '057_add_role_permissions',
+  '058_remove_chatbots_permission',
 ];
 const migrationPaths = defaultMigrationNames
   .map((name) => require.resolve(`../src/migrations/${name}`));

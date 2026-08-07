@@ -1,6 +1,6 @@
 export const topNavItems = [
-  { to: '/manage/shop-analytics', label: 'TikTok' },
-  { to: '/manage/users', label: 'Admin', adminOnly: true },
+  { to: '/manage/shop-analytics', label: 'TikTok', permission: 'tiktok' },
+  { to: '/manage/users', label: 'Admin', permission: 'users' },
 ];
 
 export const sidebarSections = [
@@ -11,23 +11,25 @@ export const sidebarSections = [
         id: 'tiktok-shop',
         labelKey: 'navigation.tiktokShop',
         icon: 'shop',
+        permission: 'tiktok',
         children: [
-          { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics' },
-          { to: '/videos', labelKey: 'navigation.videos' },
-           { to: '/manage/video-analytics', labelKey: 'navigation.videoAnalytics' },
-           { to: '/manage/affiliate', labelKey: 'navigation.affiliate' },
-           { to: '/manage/creator-chat', labelKey: 'navigation.creatorChat' },
-           { to: '/bookings', labelKey: 'navigation.bookings' },
+          { to: '/manage/shop-analytics', labelKey: 'navigation.shopAnalytics', permission: 'tiktok' },
+          { to: '/videos', labelKey: 'navigation.videos', permission: 'tiktok' },
+           { to: '/manage/video-analytics', labelKey: 'navigation.videoAnalytics', permission: 'tiktok' },
+           { to: '/manage/affiliate', labelKey: 'navigation.affiliate', permission: 'tiktok' },
+           { to: '/manage/creator-chat', labelKey: 'navigation.creatorChat', permission: 'tiktok' },
+           { to: '/bookings', labelKey: 'navigation.bookings', permission: 'tiktok' },
          ],
       },
       {
         id: 'tiktok-channel',
         labelKey: 'navigation.tiktokChannel',
         icon: 'channels',
+        permission: 'reports',
         children: [
-          { to: '/dashboard', labelKey: 'navigation.channelOverview' },
-          { to: '/channel-reports', labelKey: 'navigation.reports' },
-          { to: '/manage/channels', labelKey: 'navigation.channels' },
+          { to: '/dashboard', labelKey: 'navigation.channelOverview', permission: 'reports' },
+          { to: '/channel-reports', labelKey: 'navigation.reports', permission: 'reports' },
+          { to: '/manage/channels', labelKey: 'navigation.channels', permission: 'reports' },
         ],
       },
     ],
@@ -35,26 +37,26 @@ export const sidebarSections = [
   {
     title: 'Facebook',
     items: [
-      { to: '/chatbot/dashboard', labelKey: 'navigation.dashboard' },
-      { to: '/chatbot/chat', labelKey: 'navigation.chat' },
-      { to: '/chatbot/orders', labelKey: 'navigation.orders' },
+      { to: '/chatbot/dashboard', labelKey: 'navigation.dashboard', permission: 'chatbots' },
+      { to: '/chatbot/chat', labelKey: 'navigation.chat', permission: 'chatbots' },
+      { to: '/chatbot/orders', labelKey: 'navigation.orders', permission: 'chatbots' },
     ],
   },
   {
     title: 'WhatsApp',
     items: [
-      { to: '/whatsapp/dashboard', labelKey: 'navigation.dashboard' },
-      { to: '/whatsapp/chat', labelKey: 'navigation.chat' },
-      { to: '/whatsapp/orders', labelKey: 'navigation.orders' },
+      { to: '/whatsapp/dashboard', labelKey: 'navigation.dashboard', permission: 'chatbots' },
+      { to: '/whatsapp/chat', labelKey: 'navigation.chat', permission: 'chatbots' },
+      { to: '/whatsapp/orders', labelKey: 'navigation.orders', permission: 'chatbots' },
     ],
   },
   {
     title: 'Admin',
     items: [
-      { to: '/manage/users', labelKey: 'navigation.users', adminOnly: true },
-      { to: '/manage/shops', labelKey: 'navigation.manageShops', adminOnly: true },
-      { to: '/manage/schedules', labelKey: 'navigation.schedule', adminOnly: true },
-      { to: '/chatbot/chat-setting', labelKey: 'navigation.chatSettings', adminOnly: true },
+      { to: '/manage/users', labelKey: 'navigation.users', permission: 'users' },
+      { to: '/manage/shops', labelKey: 'navigation.manageShops', permission: 'tiktok' },
+      { to: '/manage/schedules', labelKey: 'navigation.schedule', permission: 'users' },
+      { to: '/chatbot/chat-setting', labelKey: 'navigation.chatSettings', permission: 'chatbots' },
     ],
   },
 ];
@@ -63,6 +65,7 @@ export const protectedRouteCards = [
   {
     path: '/dashboard',
     component: 'Dashboard',
+    permission: 'reports',
     props: {
       heroTitle: 'Content performance dashboard',
       heroSubtitle: '',
@@ -71,12 +74,13 @@ export const protectedRouteCards = [
   {
     path: '/channel-reports',
     component: 'ChannelReport',
+    permission: 'reports',
     props: {},
   },
   {
     path: '/manage/users',
     component: 'EmployeeTable',
-    adminOnly: true,
+    permission: 'users',
     props: {
       heroTitle: 'User management',
       heroSubtitle: '',
@@ -85,7 +89,7 @@ export const protectedRouteCards = [
   {
     path: '/manage/schedules',
     component: 'ScheduleManagement',
-    adminOnly: true,
+    permission: 'users',
     props: {
       heroTitle: 'Schedule management',
       heroSubtitle: 'Manage automated data synchronization jobs.',
@@ -94,22 +98,25 @@ export const protectedRouteCards = [
   {
     path: '/manage/shops',
     component: 'ShopAnalytics',
-    adminOnly: true,
+    permission: 'tiktok',
     props: { managementOnly: true },
   },
   {
     path: '/manage/affiliate',
     component: 'SellerAffiliatePanel',
+    permission: 'tiktok',
     props: {},
   },
   {
     path: '/manage/creator-chat',
     component: 'CreatorChatPage',
+    permission: 'tiktok',
     props: {},
   },
   {
     path: '/manage/koc-performance',
     component: 'KOCPerformance',
+    permission: 'tiktok',
     props: {
       heroTitle: 'KOC performance',
       heroSubtitle: '',
@@ -118,21 +125,25 @@ export const protectedRouteCards = [
   {
     path: '/manage/shop-analytics',
     component: 'ShopAnalytics',
+    permission: 'tiktok',
     props: { heroTitle: 'Shop analytics' },
   },
   {
     path: '/videos',
     component: 'ShopAnalytics',
+    permission: 'tiktok',
     props: { videoOnly: true, videoExportOnly: true },
   },
   {
     path: '/manage/video-analytics',
     component: 'ShopAnalytics',
+    permission: 'tiktok',
     props: { videoOnly: true },
   },
   {
     path: '/bookings',
     component: 'BookingManagement',
+    permission: 'tiktok',
     props: {
       heroTitle: 'Booking management',
       heroSubtitle: '',
@@ -141,6 +152,7 @@ export const protectedRouteCards = [
   {
     path: '/manage/channels',
     component: 'ChannelManagement',
+    permission: 'reports',
     props: {
       heroTitle: 'Channel management',
       heroSubtitle: '',
@@ -149,6 +161,7 @@ export const protectedRouteCards = [
   {
     path: '/chatbot/dashboard',
     component: 'ChatbotManagement',
+    permission: 'chatbots',
     props: {
       heroTitle: 'Facebook',
       heroSubtitle: '',
@@ -157,21 +170,25 @@ export const protectedRouteCards = [
   {
     path: '/whatsapp/dashboard',
     component: 'WhatsAppManagement',
+    permission: 'chatbots',
     props: {},
   },
   {
     path: '/whatsapp/chat',
     component: 'WhatsAppManagement',
+    permission: 'chatbots',
     props: {},
   },
   {
     path: '/whatsapp/orders',
     component: 'WhatsAppManagement',
+    permission: 'chatbots',
     props: {},
   },
   {
     path: '/chatbot/chat',
     component: 'ChatbotManagement',
+    permission: 'chatbots',
     props: {
       heroTitle: 'Chat',
       heroSubtitle: '',
@@ -180,6 +197,7 @@ export const protectedRouteCards = [
   {
     path: '/chatbot/chat-setting',
     component: 'ChatbotManagement',
+    permission: 'chatbots',
     props: {
       heroTitle: 'Chat setting',
       heroSubtitle: '',
@@ -188,6 +206,7 @@ export const protectedRouteCards = [
   {
     path: '/chatbot/orders',
     component: 'ChatbotManagement',
+    permission: 'chatbots',
     props: {
       heroTitle: 'Orders',
       heroSubtitle: '',

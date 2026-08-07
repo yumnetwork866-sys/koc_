@@ -198,6 +198,12 @@
     "moreThan": ">",
     "level": "Level"
   },
+  "permissions": {
+    "all": "Full access",
+    "reports": "Access TikTok Channel",
+    "tiktok": "Access TikTok Shop",
+    "users": "Manage users"
+  },
   "shell": {
     "loadingContent": "Loading content...",
     "legal": "Legal",
@@ -361,11 +367,23 @@
     "roleDeleteConfirm": "Delete role “{{name}}” ?",
     "roleList": "Role list",
     "roleCount": "{{count}} roles",
-    "addRole": "+ Add role",
-    "customRole": "Custom",
+
+    "addRole": "Create role",
+
+
+    "noRolePermissions": "No permissions assigned",
+
+    "systemRoleLocked": "System roles cannot be deleted",
+
+    "rolePermissions": "Permissions",
+
+    "roleInUse": "Role is used by {{count}} accounts",
+    "roleKeyHint": "Key: {{key}}",
     "userCount": "{{count}} users",
     "roleName": "Role name",
-    "rolePlaceholder": "For example: Editor",
+    "rolePlaceholder": "Example: Editor",
+
+
     "cancelEdit": "Cancel editing",
     "createRole": "Create role"
   },

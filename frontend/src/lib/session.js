@@ -166,6 +166,17 @@ export function isAdminSession(session) {
   return getSessionRole(session) === 'admin';
 }
 
+export function getSessionPermissions(session) {
+  return Array.isArray(session?.user?.permissions) ? session.user.permissions : [];
+}
+
+export function hasPermission(session, permission) {
+  if (!session) return false;
+  if (!permission) return true;
+  if (isAdminSession(session)) return true;
+  return getSessionPermissions(session).includes(permission);
+}
+
 export function getStoredFacebookChatbotToken() {
   return readStorage(FB_CHATBOT_TOKEN_STORAGE_KEY) || null;
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { CheckCheck, Lock, Trash2, X } from 'lucide-react';
 import {
   createContentTeam,
   createRole,
@@ -15,6 +16,7 @@ import {
   updateUser,
 } from '../lib/api';
 import { useI18n } from '../lib/language';
+import { ALL_PERMISSIONS, DEFAULT_PERMISSIONS, PERMISSIONS, permissionLabelKey } from '../lib/permissions';
 import AppAvatar from './AppAvatar';
 import Pagination from './Pagination';
 import '../styles/pages/admin.css';
@@ -29,10 +31,10 @@ const initialForm = {
 };
 
 const fallbackRoles = [
-  { key: 'member', label: 'Member' },
-  { key: 'leader', label: 'Leader' },
-  { key: 'koc', label: 'KOC' },
-  { key: 'admin', label: 'Admin' },
+  { key: 'member', label: 'Member', permissions: DEFAULT_PERMISSIONS },
+  { key: 'leader', label: 'Leader', permissions: DEFAULT_PERMISSIONS },
+  { key: 'koc', label: 'KOC', permissions: DEFAULT_PERMISSIONS },
+  { key: 'admin', label: 'Admin', is_system: true, permissions: ALL_PERMISSIONS },
 ];
 
 const createInitialForm = () => ({ ...initialForm });
@@ -59,7 +61,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
   const [editingTeamId, setEditingTeamId] = useState(null);
   const [teamSaving, setTeamSaving] = useState(false);
   const [teamError, setTeamError] = useState('');
-  const [roleForm, setRoleForm] = useState({ key: '', label: '', description: '' });
+  const [roleForm, setRoleForm] = useState({ key: '', label: '', description: '', permissions: [], isSystem: false });
   const [editingRoleKey, setEditingRoleKey] = useState(null);
   const [roleSaving, setRoleSaving] = useState(false);
   const [roleError, setRoleError] = useState('');
@@ -337,7 +339,7 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
 
   const resetRoleForm = () => {
     setEditingRoleKey(null);
-    setRoleForm({ key: '', label: '', description: '' });
+    setRoleForm({ key: '', label: '', description: '', permissions: [], isSystem: false });
     setRoleError('');
   };
 
@@ -397,8 +399,24 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
 
   const editRole = (role) => {
     setEditingRoleKey(role.key);
-    setRoleForm({ key: role.key, label: role.label, description: role.description || '' });
+    setRoleForm({
+      key: role.key,
+      label: role.label,
+      description: role.description || '',
+      permissions: role.permissions || [],
+      isSystem: Boolean(role.is_system),
+    });
     setRoleError('');
+  };
+
+  const toggleRolePermission = (key, checked) => {
+    if (roleForm.isSystem) return;
+    setRoleForm((current) => ({
+      ...current,
+      permissions: checked
+        ? [...new Set([...current.permissions, key])]
+        : current.permissions.filter((permission) => permission !== key),
+    }));
   };
 
   const handleRoleSubmit = async (event) => {
@@ -406,7 +424,13 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
     try {
       setRoleSaving(true);
       setRoleError('');
-      const payload = { label: roleForm.label.trim(), description: roleForm.description.trim() };
+      const payload = {
+        label: roleForm.label.trim(),
+        description: roleForm.description.trim(),
+        permissions: roleForm.isSystem || editingRoleKey === 'admin'
+          ? [...ALL_PERMISSIONS]
+          : (roleForm.permissions.length ? [...roleForm.permissions] : [...DEFAULT_PERMISSIONS]),
+      };
       if (editingRoleKey) await updateRole(editingRoleKey, payload);
       else await createRole({ ...payload, key: roleForm.key.trim().toLowerCase() });
       setRoles(await fetchRoles());
@@ -672,32 +696,39 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
 
           {selectedIds.size > 0 ? (
             <div className="employee-table__bulk-bar">
-              <span className="employee-table__bulk-count">{t('users.bulkSelected', { count: selectedIds.size })}</span>
-              <label className="employee-table__bulk-action">
-                <span className="sr-only">{t('users.bulkRolePlaceholder')}</span>
-                <select value="" onChange={(event) => bulkChangeRole(event.target.value)} disabled={bulkBusy}>
-                  <option value="" disabled>{t('users.bulkRolePlaceholder')}</option>
-                  {roleOptions.map((role) => (
-                    <option key={role} value={role}>{getRoleLabel(role)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="employee-table__bulk-action">
-                <span className="sr-only">{t('users.bulkTeamPlaceholder')}</span>
-                <select value="" onChange={(event) => bulkAssignTeam(event.target.value)} disabled={bulkBusy}>
-                  <option value="" disabled>{t('users.bulkTeamPlaceholder')}</option>
-                  <option value="unassigned">{t('users.bulkUnassigned')}</option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={String(team.id)}>{team.name}</option>
-                  ))}
-                </select>
-              </label>
-              <button className="button button--ghost button--small button--danger" type="button" onClick={confirmBulkDelete} disabled={bulkBusy}>
-                {t('users.delete')}
-              </button>
-              <button className="button button--ghost button--small" type="button" onClick={() => setSelectedIds(new Set())} disabled={bulkBusy}>
-                {t('users.bulkClear')}
-              </button>
+              <span className="employee-table__bulk-count">
+                <span className="employee-table__bulk-count-badge" aria-hidden="true"><CheckCheck size={14} /></span>
+                {t('users.bulkSelected', { count: selectedIds.size })}
+              </span>
+              <div className="employee-table__bulk-tools">
+                <label className="employee-table__bulk-action">
+                  <span className="sr-only">{t('users.bulkRolePlaceholder')}</span>
+                  <select value="" onChange={(event) => bulkChangeRole(event.target.value)} disabled={bulkBusy}>
+                    <option value="" disabled>{t('users.bulkRolePlaceholder')}</option>
+                    {roleOptions.map((role) => (
+                      <option key={role} value={role}>{getRoleLabel(role)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="employee-table__bulk-action">
+                  <span className="sr-only">{t('users.bulkTeamPlaceholder')}</span>
+                  <select value="" onChange={(event) => bulkAssignTeam(event.target.value)} disabled={bulkBusy}>
+                    <option value="" disabled>{t('users.bulkTeamPlaceholder')}</option>
+                    <option value="unassigned">{t('users.bulkUnassigned')}</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={String(team.id)}>{team.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <button className="button button--small button--danger employee-table__bulk-delete" type="button" onClick={confirmBulkDelete} disabled={bulkBusy}>
+                  <Trash2 size={14} aria-hidden="true" />
+                  {t('users.delete')}
+                </button>
+                <button className="button button--ghost button--small employee-table__bulk-clear" type="button" onClick={() => setSelectedIds(new Set())} disabled={bulkBusy}>
+                  <X size={14} aria-hidden="true" />
+                  {t('users.bulkClear')}
+                </button>
+              </div>
             </div>
           ) : null}
 
@@ -919,9 +950,8 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
           <div className="section-card__header">
             <div>
               <h2 id="role-manager-title" className="section-card__title">{t('users.manageRoles')}</h2>
-
             </div>
-            <button className="button button--ghost button--small" type="button" onClick={resetRoleForm}>{t('users.addRole')}</button>
+            <button className="button button--small" type="button" onClick={resetRoleForm}>{t('users.addRole')}</button>
           </div>
 
           {roleError ? <div className="employee-table__inline-error empty-state empty-state--compact">{roleError}</div> : null}
@@ -931,30 +961,66 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
               <div className="employee-table__role-panel-heading">
                 <div><strong>{t('users.roleList')}</strong><span>{t('users.roleCount', { count: roles.length })}</span></div>
               </div>
-              <div className="employee-table__role-list">
-                {roles.map((role) => (
-                  <div className={`employee-table__role-item${editingRoleKey === role.key ? ' is-active' : ''}`} key={role.key}>
-                    <button type="button" className="employee-table__role-edit" onClick={() => editRole(role)}>
-                      <span>
-                        <span className="employee-table__role-name">
-                          <strong>{role.label}</strong>
-                          {!role.is_system ? <em>{t('users.customRole')}</em> : null}
+              {roles.length ? (
+                <div className="employee-table__role-list">
+                  {roles.map((role) => (
+                    <div className={`employee-table__role-item${editingRoleKey === role.key ? ' is-active' : ''}`} key={role.key}>
+                      <button
+                        type="button"
+                        className="employee-table__role-edit"
+                        onClick={() => editRole(role)}
+                        disabled={role.is_system}
+                        aria-label={role.is_system ? t('users.systemRoleNotEditable') : `Sửa vai trò ${role.label}`}
+                        title={role.is_system ? t('users.systemRoleNotEditable') : undefined}
+                      >
+                        <span>
+                          <span className="employee-table__role-name">
+                            <strong>{role.label}</strong>
+
+                          </span>
+                          {role.is_system ? null : role.permissions?.length ? (
+                            <span className="employee-table__role-permissions">
+                              {role.permissions.map((permission) => {
+                                const labelKey = permissionLabelKey(permission);
+                                return labelKey ? (
+                                  <span className={`employee-table__permission-badge employee-table__permission-badge--${permission}`} key={permission}>{t(labelKey)}</span>
+                                ) : null;
+                              })}
+                            </span>
+                          ) : (
+                            <span className="employee-table__role-permissions">
+                              <span className="employee-table__role-permission-labels">{t('users.noRolePermissions')}</span>
+                            </span>
+                          )}
                         </span>
-                      </span>
-                      <span>{t('users.userCount', { count: role.user_count || 0 })}</span>
-                    </button>
-                    {!role.is_system ? (
-                      <button className="button button--ghost button--small button--danger" type="button" onClick={() => handleDeleteRole(role)}>{t('users.delete')}</button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
+                        <span>{t('users.userCount', { count: role.user_count || 0 })}</span>
+                      </button>
+                      {role.is_system ? (
+                        <span className="employee-table__role-lock" title={t('users.systemRoleLocked')} aria-label={t('users.systemRoleLocked')}>
+                          <Lock size={14} aria-hidden="true" />
+                        </span>
+                      ) : (
+                        <button
+                          className="employee-table__role-delete"
+                          type="button"
+                          onClick={() => handleDeleteRole(role)}
+                          disabled={(role.user_count || 0) > 0}
+                          aria-label={(role.user_count || 0) > 0 ? t('users.roleInUse', { count: role.user_count }) : `Xóa vai trò ${role.label}`}
+                          title={(role.user_count || 0) > 0 ? t('users.roleInUse', { count: role.user_count }) : t('users.delete')}
+                        >
+                          <Trash2 size={14} aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="empty-state empty-state--compact">Chưa có vai trò nào.</div>}
             </section>
 
             <form className="employee-table__role-form" onSubmit={handleRoleSubmit}>
               <div className="employee-table__manager-form-heading">
                 <strong>{editingRoleKey ? 'Sửa vai trò' : 'Tạo vai trò mới'}</strong>
-
+                {editingRoleKey ? <span>{t('users.roleKeyHint', { key: editingRoleKey })}</span> : null}
               </div>
               <div className="field">
                 <label htmlFor="role-label">{t('users.roleName')}</label>
@@ -969,6 +1035,23 @@ const EmployeeTable = ({ heroTitle, heroSubtitle }) => {
                   }))}
                   placeholder={t('users.rolePlaceholder')}
                 />
+              </div>
+              <div className="field">
+                <span className="employee-table__role-permissions-label">{t('users.rolePermissions')}</span>
+                <div className="employee-table__permission-grid">
+                  {PERMISSIONS.map((permission) => (
+                    <label className={`employee-table__permission-item employee-table__permission-item--${permission.key}${roleForm.permissions.includes(permission.key) ? ' is-checked' : ''}`} key={permission.key}>
+                      <input
+                        type="checkbox"
+                        checked={roleForm.permissions.includes(permission.key)}
+                        disabled={roleForm.isSystem}
+                        onChange={(event) => toggleRolePermission(permission.key, event.target.checked)}
+                      />
+                      <span>{t(permission.labelKey)}</span>
+                    </label>
+                  ))}
+                </div>
+
               </div>
               <div className="actions">
                 {editingRoleKey ? <button className="button button--ghost" type="button" onClick={resetRoleForm}>{t('users.cancelEdit')}</button> : null}

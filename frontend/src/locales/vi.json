@@ -198,6 +198,12 @@
     "moreThan": ">",
     "level": "Mức"
   },
+  "permissions": {
+    "all": "Toàn quyền",
+    "reports": "Truy cập TikTok Channel",
+    "tiktok": "Truy cập TikTok Shop",
+    "users": "Quản lý người dùng"
+  },
   "shell": {
     "loadingContent": "Đang tải nội dung...",
     "legal": "Pháp lý",
@@ -356,11 +362,23 @@
     "roleDeleteConfirm": "Xóa vai trò “{{name}}” ?",
     "roleList": "Danh sách vai trò",
     "roleCount": "{{count}} vai trò",
-    "addRole": "+ Thêm mới",
-    "customRole": "Tùy chỉnh",
+
+    "addRole": "Tạo vai trò",
+
+
+    "noRolePermissions": "Chưa cấp quyền",
+
+    "systemRoleLocked": "Vai trò hệ thống không thể xóa",
+
+    "rolePermissions": "Quyền truy cập",
+
+    "roleInUse": "Role đang dùng bởi {{count}} tài khoản",
+    "roleKeyHint": "Mã: {{key}}",
     "userCount": "{{count}} người",
     "roleName": "Tên vai trò",
     "rolePlaceholder": "Ví dụ: Biên tập viên",
+
+
     "cancelEdit": "Hủy sửa",
     "createRole": "Tạo vai trò"
   },

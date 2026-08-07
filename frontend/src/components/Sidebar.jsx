@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { isAdminSession } from '../lib/session';
+import { hasPermission } from '../lib/session';
 import { useSession } from '../lib/useSession';
 import { sidebarSections } from '../routes/navigation';
 import { useI18n } from '../lib/language';
@@ -172,7 +172,7 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
     '/bookings',
     '/reports',
   ].some((prefix) => location.pathname.startsWith(prefix));
-  const adminVisible = isAdminSession(session);
+  const can = (permission) => hasPermission(session, permission);
   const activeSectionTitle = isAdminArea ? 'Admin' : isFacebookArea ? 'Facebook' : isWhatsAppArea ? 'WhatsApp' : 'TikTok';
   const visibleSections = sidebarSections.filter((section) => section.title === activeSectionTitle);
   const activeTikTokGroup = isTikTokShopArea ? 'tiktok-shop' : 'tiktok-channel';
@@ -217,10 +217,10 @@ const Sidebar = ({ isCollapsed, onToggle }) => {
           <div className="sidebar__section" key={section.title}>
             <div className="sidebar__section-links">
               {section.items
-                .filter((item) => adminVisible || !item.adminOnly)
+                .filter((item) => can(item.permission))
                 .map((item) => {
                   if (item.children) {
-                    const visibleChildren = item.children.filter((child) => adminVisible || !child.adminOnly);
+                    const visibleChildren = item.children.filter((child) => can(child.permission));
                     const isGroupActive = visibleChildren.some((child) => location.pathname.startsWith(child.to));
                     const isOpen = Boolean(openGroups[item.id]);
                     return (

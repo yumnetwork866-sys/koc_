@@ -1,7 +1,8 @@
 const { Op } = require('sequelize');
-const { User } = require('../models');
+const { User, Role } = require('../models');
 const { verifyPassword } = require('../lib/password');
 const { createSessionToken } = require('../lib/session');
+const { ALL_PERMISSIONS, DEFAULT_PERMISSIONS, normalizePermissions } = require('../lib/permissions');
 
 const login = async (req, res) => {
   try {
@@ -34,11 +35,20 @@ const login = async (req, res) => {
       return res.status(403).json({ message: 'Tài khoản đã bị vô hiệu hóa' });
     }
 
+    const roleRecord = typeof Role?.findByPk === 'function' ? await Role.findByPk(user.role) : null;
+    // Normalize so removed permissions (e.g. 'chatbots') are no longer served to existing roles.
+    const permissions = Array.isArray(roleRecord?.permissions)
+      ? normalizePermissions(roleRecord.permissions)
+      : user.role === 'admin'
+        ? ALL_PERMISSIONS
+        : DEFAULT_PERMISSIONS;
+
     const safeUser = user.get({ plain: true });
     delete safeUser.password_hash;
+    safeUser.permissions = permissions;
 
     res.json({
-      token: createSessionToken(user),
+      token: createSessionToken(user, permissions),
       user: safeUser,
     });
   } catch (error) {

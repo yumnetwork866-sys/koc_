@@ -1,4 +1,5 @@
 const { Role, User } = require('../models');
+const { ALL_PERMISSIONS, normalizePermissions } = require('../lib/permissions');
 
 const ROLE_KEY_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/;
 
@@ -28,8 +29,16 @@ const createRole = async (req, res) => {
     if (!ROLE_KEY_PATTERN.test(key)) return res.status(400).json({ message: 'Mã role không hợp lệ' });
     if (!label) return res.status(400).json({ message: 'Tên role là bắt buộc' });
 
-    const role = await Role.create({ key, label, description, is_system: false });
-    res.status(201).json(await serializeRole(role));
+    if (ROLE_KEY_PATTERN.test(key) && label) {
+      const role = await Role.create({
+        key,
+        label,
+        description,
+        is_system: false,
+        permissions: normalizePermissions(req.body.permissions),
+      });
+      res.status(201).json(await serializeRole(role));
+    }
   } catch (error) {
     res.status(400).json({ message: error.name === 'SequelizeUniqueConstraintError' ? 'Mã role đã tồn tại' : error.message });
   }
@@ -43,7 +52,9 @@ const updateRole = async (req, res) => {
     const label = String(req.body.label || '').trim();
     if (!label) return res.status(400).json({ message: 'Tên role là bắt buộc' });
 
-    await role.update({ label, description: String(req.body.description || '').trim() || null, updated_at: new Date() });
+    const permissions = role.is_system ? ALL_PERMISSIONS : normalizePermissions(req.body.permissions);
+
+    await role.update({ label, description: String(req.body.description || '').trim() || null, permissions, updated_at: new Date() });
     res.json(await serializeRole(role));
   } catch (error) {
     res.status(400).json({ message: error.message });

@@ -64,6 +64,8 @@ const migrations = [
   require('./054_merge_creator_performance_schedules'),
   require('./055_update_affiliate_video_schedule_periods'),
   require('./056_add_users_is_active'),
+  require('./057_add_role_permissions'),
+  require('./058_remove_chatbots_permission'),
 ];
 
 const createMigrationRunner = ({

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { LoginRoute, RequireAdmin } from './guards';
+import { LoginRoute, RequirePermission } from './guards';
 import {
   BookingManagement,
   ChannelManagement,
@@ -54,13 +54,13 @@ export const publicRouteConfig = [
   { path: '/shared/reports/:token', element: <PublicReport /> },
 ];
 
-export const protectedRouteConfig = protectedRouteCards.map(({ path, component, props, adminOnly }) => ({
+export const protectedRouteConfig = protectedRouteCards.map(({ path, component, props, permission }) => ({
   path,
-  element: adminOnly
+  element: permission
     ? (
-      <RequireAdmin>
+      <RequirePermission permission={permission}>
         {React.createElement(componentMap[component], props)}
-      </RequireAdmin>
+      </RequirePermission>
     )
     : React.createElement(componentMap[component], props),
 }));

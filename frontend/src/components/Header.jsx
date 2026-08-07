@@ -9,7 +9,7 @@ import {
   startTikTokShopOauth,
   updateUser,
 } from '../lib/api';
-import { clearStoredSession, isAdminSession, saveStoredSession } from '../lib/session';
+import { clearStoredSession, hasPermission, isAdminSession, saveStoredSession } from '../lib/session';
 import { useSession } from '../lib/useSession';
 import { useI18n } from '../lib/language';
 import { setStoredCurrency, useCurrency } from '../lib/currency';
@@ -336,7 +336,7 @@ const Header = () => {
 
         <nav className="topbar__nav" aria-label="Primary">
           <div className="topbar__tabs">
-            {topNavItems.filter((item) => !item.adminOnly || isAdmin).map((item) => (
+            {topNavItems.filter((item) => hasPermission(session, item.permission)).map((item) => (
               <Link
                 key={item.to}
                 to={item.to}

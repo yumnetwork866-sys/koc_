@@ -12,11 +12,11 @@ const {
   revokeChannelAuthorization,
   deleteChannel,
 } = require('../controllers/channelController');
-const { requireAdmin } = require('../lib/session');
+const { requireAdmin, requirePermission } = require('../lib/session');
 
 router.get('/oauth/tiktok/callback', handleTiktokOauthCallback);
 router.post('/webhook/tiktok', handleTiktokWebhook);
-router.use(requireAdmin);
+router.use(requireAdmin, requirePermission('reports'));
 router.get('/oauth/tiktok/start', startTiktokOauth);
 router.get('/', getChannels);
 router.get('/:id', getChannelById);

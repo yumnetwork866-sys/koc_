@@ -31,7 +31,7 @@ const tiktokShopRoutes = require('./routes/tiktokShopRoutes');
 const scheduleRoutes = require('./routes/scheduleRoutes');
 const { TikTokChannel, User } = require('./models');
 const { encryptToken, isEncryptedToken } = require('./lib/tokenEncryption');
-const { requireAdmin } = require('./lib/session');
+const { requireAdmin, requirePermission } = require('./lib/session');
 const { getAdminAccount } = require('./lib/adminAccount');
 const { startDatabaseScheduler } = require('./services/scheduledJobService');
 const { startMarketplaceCreatorDiscoveryJob } = require('./jobs/scheduleMarketplaceCreatorDiscovery');
@@ -67,22 +67,23 @@ const createApp = () => {
     res.json({ message: 'Content Performance Reporting API' });
   });
 
-  app.use('/api/users', requireAdmin, userRoutes);
-  app.use('/api/roles', requireAdmin, roleRoutes);
-  app.use('/api/content-teams', requireAdmin, contentTeamRoutes);
-  app.use('/api/bookings', requireAdmin, bookingRoutes);
-  app.use('/api/videos', requireAdmin, videoRoutes);
-  app.use('/api/reports', requireAdmin, reportRoutes);
+  app.use('/api/users', requireAdmin, requirePermission('users'), userRoutes);
+  app.use('/api/roles', requireAdmin, requirePermission('users'), roleRoutes);
+  app.use('/api/content-teams', requireAdmin, requirePermission('users'), contentTeamRoutes);
+  app.use('/api/bookings', requireAdmin, requirePermission('tiktok'), bookingRoutes);
+  app.use('/api/videos', requireAdmin, requirePermission('tiktok'), videoRoutes);
+  app.use('/api/reports', requireAdmin, requirePermission('reports'), reportRoutes);
   app.use('/api/channels', channelRoutes);
-  app.use('/api/products', requireAdmin, productRoutes);
-  app.use('/api/assignments', requireAdmin, assignmentRoutes);
-  app.use('/api/import', requireAdmin, importRoutes);
+  app.use('/api/products', requireAdmin, requirePermission('tiktok'), productRoutes);
+  app.use('/api/assignments', requireAdmin, requirePermission('tiktok'), assignmentRoutes);
+  app.use('/api/import', requireAdmin, requirePermission('tiktok'), importRoutes);
   app.use('/api/auth', authRoutes);
-  app.use('/api/assistant', assistantRoutes);
+  app.use('/api/assistant', requireAdmin, requirePermission('reports'), assistantRoutes);
+  // Messenger (chatbot) & WhatsApp are admin-only since the 'chatbots' permission was removed.
   app.use('/api/chatbot', requireAdmin, chatbotRoutes.adminRouter);
   app.use('/api/whatsapp', requireAdmin, whatsappRoutes.adminRouter);
-  app.use('/api/tiktok-shop', requireAdmin, tiktokShopRoutes.adminRouter);
-  app.use('/api/schedules', requireAdmin, scheduleRoutes);
+  app.use('/api/tiktok-shop', requireAdmin, requirePermission('tiktok'), tiktokShopRoutes.adminRouter);
+  app.use('/api/schedules', requireAdmin, requirePermission('users'), scheduleRoutes);
 
   return app;
 };

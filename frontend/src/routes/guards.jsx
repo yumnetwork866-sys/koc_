@@ -1,7 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSession } from '../lib/useSession';
-import { isAdminSession } from '../lib/session';
+import { hasPermission } from '../lib/session';
 
 export function RequireSession({ children }) {
   const location = useLocation();
@@ -24,7 +24,7 @@ export function LoginRoute({ children }) {
   return children;
 }
 
-export function RequireAdmin({ children, fallback = '/dashboard' }) {
+export function RequirePermission({ permission, children, fallback = '/dashboard' }) {
   const location = useLocation();
   const session = useSession();
 
@@ -32,7 +32,7 @@ export function RequireAdmin({ children, fallback = '/dashboard' }) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  if (!isAdminSession(session)) {
+  if (!hasPermission(session, permission)) {
     return <Navigate to={fallback} replace />;
   }
 
