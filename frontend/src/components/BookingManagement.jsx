@@ -30,6 +30,24 @@ const defaultCustomRange = () => {
   return { start: dateInputValue(start), end: dateInputValue(end) };
 };
 
+const displayDateValue = (value) => {
+  const [year, month, day] = String(value || '').split('-');
+  return year && month && day ? `${day}/${month}/${year}` : '';
+};
+
+const parseDisplayDate = (value) => {
+  const match = String(value || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const candidate = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  if (
+    candidate.getUTCFullYear() !== Number(year)
+    || candidate.getUTCMonth() !== Number(month) - 1
+    || candidate.getUTCDate() !== Number(day)
+  ) return null;
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+};
+
 const targetKocKey = (creator) => {
   const identity = creator.creator_open_id || `username:${String(creator.username || '').toLocaleLowerCase()}`;
   return `${creator.shop_id}:${identity}`;
@@ -521,6 +539,10 @@ const BookingManagement = ({ heroTitle }) => {
   const [performanceWindow, setPerformanceWindow] = useState(DEFAULT_PERFORMANCE_WINDOW);
   const [selectedManagerKey, setSelectedManagerKey] = useState('');
   const [customRange, setCustomRange] = useState(defaultCustomRange);
+  const [customRangeInput, setCustomRangeInput] = useState(() => {
+    const range = defaultCustomRange();
+    return { start: displayDateValue(range.start), end: displayDateValue(range.end) };
+  });
   const [targetKocPage, setTargetKocPage] = useState(1);
   const [targetKocPagination, setTargetKocPagination] = useState({ page: 1, total_pages: 1 });
   const [targetKocsLoading, setTargetKocsLoading] = useState(false);
@@ -565,6 +587,13 @@ const BookingManagement = ({ heroTitle }) => {
   const formatCollaborationStatus = (value) => value
     ? t(`booking.collaborationStatuses.${String(value).toUpperCase()}`)
     : '—';
+  const updateCustomDate = (field, value) => {
+    setCustomRangeInput((current) => ({ ...current, [field]: value }));
+    const parsed = parseDisplayDate(value);
+    if (parsed || value === '') {
+      setCustomRange((current) => ({ ...current, [field]: parsed || '' }));
+    }
+  };
 
   useEffect(() => {
     const previousCurrency = costInputCurrencyRef.current;
@@ -897,7 +926,7 @@ const BookingManagement = ({ heroTitle }) => {
       </section>
 
       <section className="section-card">
-        <div className="section-card__header booking-evaluation-list-header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div><div className="booking-performance-controls">{bookingGroups.length ? <div className="field booking-manager-filter"><label>{t('booking.bookingStaff')}</label><BookingStaffSelect users={bookingGroups.map((group) => ({ id: group.key, ...group.manager }))} value={activeBookingGroup?.key || ''} onChange={(value) => { setSelectedManagerKey(value); setExpandedBookingId(null); }} placeholder={t('booking.selectStaff')} loading={false} loadingLabel={t('booking.loading')} /></div> : null}<div className="field booking-performance-period"><label htmlFor="booking-performance-window">{t('booking.performancePeriod')}</label><select id="booking-performance-window" value={performanceWindow} onChange={(event) => setPerformanceWindow(event.target.value)}><option value="PAST_7_DAYS">{t('booking.period7Days')}</option><option value="PAST_30_DAYS">{t('booking.period30Days')}</option><option value="CUSTOM">{t('booking.periodCustom')}</option></select></div>{performanceWindow === 'CUSTOM' ? <><div className="field booking-performance-date"><label htmlFor="booking-performance-start">{t('booking.startDate')}</label><input id="booking-performance-start" type="date" value={customRange.start} max={customRange.end || undefined} onChange={(event) => setCustomRange((current) => ({ ...current, start: event.target.value }))} /></div><div className="field booking-performance-date"><label htmlFor="booking-performance-end">{t('booking.endDate')}</label><input id="booking-performance-end" type="date" value={customRange.end} min={customRange.start || undefined} max={dateInputValue(new Date())} onChange={(event) => setCustomRange((current) => ({ ...current, end: event.target.value }))} /></div></> : null}</div></div>
+        <div className="section-card__header booking-evaluation-list-header"><div><h2 className="section-card__title">{t('booking.evaluationList')}</h2></div><div className="booking-performance-controls">{bookingGroups.length ? <div className="field booking-manager-filter"><label>{t('booking.bookingStaff')}</label><BookingStaffSelect users={bookingGroups.map((group) => ({ id: group.key, ...group.manager }))} value={activeBookingGroup?.key || ''} onChange={(value) => { setSelectedManagerKey(value); setExpandedBookingId(null); }} placeholder={t('booking.selectStaff')} loading={false} loadingLabel={t('booking.loading')} /></div> : null}<div className="field booking-performance-period"><label htmlFor="booking-performance-window">{t('booking.performancePeriod')}</label><select id="booking-performance-window" value={performanceWindow} onChange={(event) => setPerformanceWindow(event.target.value)}><option value="PAST_7_DAYS">{t('booking.period7Days')}</option><option value="PAST_30_DAYS">{t('booking.period30Days')}</option><option value="CUSTOM">{t('booking.periodCustom')}</option></select></div>{performanceWindow === 'CUSTOM' ? <><div className="field booking-performance-date"><label htmlFor="booking-performance-start">{t('booking.startDate')}</label><input id="booking-performance-start" type="text" inputMode="numeric" placeholder="dd/mm/yyyy" autoComplete="off" value={customRangeInput.start} onChange={(event) => updateCustomDate('start', event.target.value)} /></div><div className="field booking-performance-date"><label htmlFor="booking-performance-end">{t('booking.endDate')}</label><input id="booking-performance-end" type="text" inputMode="numeric" placeholder="dd/mm/yyyy" autoComplete="off" value={customRangeInput.end} onChange={(event) => updateCustomDate('end', event.target.value)} /></div></> : null}</div></div>
         {loading ? <div className="empty-state"><span className="loading-dot" />{t('booking.loading')}</div> : activeBookingGroup ? <div className="content-performance__groups content-performance__groups--filtered booking-manager-groups">{[activeBookingGroup].map((group) => <article className="content-performance__group booking-manager-group" key={group.key}>
         <div className="content-performance__group-header"><div className="booking-manager-group__identity"><TargetKocAvatar src={group.manager.avatar_url} name={group.manager.name} /><span><h3>{group.manager.name}</h3>{group.manager.email ? <small>{group.manager.email}</small> : null}</span></div></div>
         <div className="content-performance__metrics booking-manager-group__metrics">
